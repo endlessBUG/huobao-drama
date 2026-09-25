@@ -13,6 +13,8 @@ backend/workspace/skills/ — Agent SKILL.md definitions（设置页可在线编
 frontend/  — Nuxt 3 + Vue 3 + TypeScript，ssr:false（纯 CSS，无 UI 框架）
 desktop/   — Electron 桌面版：主进程 + esbuild 打包脚本 + electron-builder 配置
 data/      — SQLite 数据库（huobao.sqlite3）+ 生成的静态文件（static/）
+data/generated/ — 调试/产出物暂存区（未提交 git）：自启脚本 Start-Huobao.ps1、
+  各类 .check_*.mjs / .dbq.cjs / .rerun_faces.cjs 调试脚本、test_frames/ 抽帧、autostart 日志与 pid
 configs/   — 遗留死配置，代码零引用
 ```
 
@@ -43,7 +45,7 @@ configs/   — 遗留死配置，代码零引用
 - **Database**: SQLite（better-sqlite3 + WAL），`SQLITE_PATH` 覆盖库文件位置；DDL 在 `src/db/sqlite-schema.ts`，启动时幂等重放；Drizzle 表定义 `src/db/schema.ts`（sqlite-core）
 - **路径锚点**: `src/utils/paths.ts` 统一解析 DATA_ROOT/STORAGE_ROOT；桌面版由 Electron 主进程注入 env（`HUOBAO_DATA_DIR`/`SQLITE_PATH`/`WORKSPACE_PATH`/`FRONTEND_DIST`/`FFMPEG_BIN`/`FFPROBE_BIN`），dev 走仓库相对路径默认值
 - **AI Agents**: Mastra，4 个 agent（script_rewriter / extractor / storyboard_breaker / prompt_generator），instructions 从 `workspace/prompts/*.md` + skills 动态拼接，模型按请求解析；fetch 补丁链适配国内中转站（关思考/温度/max_tokens）
-- **媒体生成**: `services/generation.ts` 统一任务生命周期（sys_task 表），适配器模式：图片 openai/gemini/volcengine，视频 volcengine/minimax
+- **媒体生成**: `services/generation.ts` 统一任务生命周期（sys_task 表），适配器模式：图片 openai/gemini/volcengine，视频 volcengine/minimax/comfyui（本机 ComfyUI，见下文）；adapter `buildGenerateRequest` 可返回 Promise（comfyui 需先落盘参考图）
 - **视频拼接**: `services/ffmpeg-merge.ts`，FFmpeg 二进制内置（ffmpeg-static），可用 `FFMPEG_BIN`/`FFPROBE_BIN` 覆盖
 
 ### Frontend
@@ -55,6 +57,20 @@ configs/   — 遗留死配置，代码零引用
 - 主进程 `desktop/src/main.ts`：单实例锁 → 空闲端口 → userData 准备（workspace 模板 copy-once + `.template-version` 版本标记）→ `utilityProcess.fork` 后端 → 轮询 health → BrowserWindow
 - userData：打包版 `~/Library/Application Support/HuobaoDrama/`，dev 版 `HuobaoDrama-Dev/`（互不干扰）
 - 后端 bundle 在 asar 内（externals 经 asar node_modules 解析，.node 自动重定向 unpacked）
+
+## 本机 ComfyUI（视频 ref2v，E:\AI\ComfyUI，仓库外）
+
+本地 ComfyUI + 自研 `ComfyUI-OpenAI-Bridge` 扩展（OpenAI 兼容 HTTP 桥），**不在本 git 仓库**，改桥代码必须重启 ComfyUI 才生效。接口文档（引用式，差异项已标注）：[docs/comfyui-api.md](docs/comfyui-api.md)。
+
+- **平台**: ComfyUI（端口 6006，`python main.py --port 6006`）+ `custom_nodes/ComfyUI-OpenAI-Bridge`。模型：视频 `minimax-h3-ref2v`（JZL ref2v，576x320，默认 124 帧 ≈ 5.2s@24fps，支持 9 张参考位 `ref_image_0~8`，Autogrow max=9）；图片 `krea2-turbo`
+- **端点**（OpenAI 兼容）: `POST /v1/videos/generations` 返回 202 + job id（body: `prompt`/`model`/`size`/`length`/`images`[文件名列表，落在 ComfyUI `input/`]）；`GET /v1/videos/generations/{id}` 轮询 `status`=processing/succeeded/failed；`GET /v1/files/{rel-path}` 取 mp4。作业状态存桥进程内存 dict，**进程重启丢作业状态，mp4 仍在 `output/openai/`**
+- **后端接入**: adapter `backend/src/services/adapters/comfyui-video.ts`（provider=`comfyui`，注册在 `adapters/registry.ts`）；参考图**先下载/读入 ComfyUI `input/` 目录再传文件名**（桥要文件名不是 URL），`MAX_IMAGES=9`；settings 页已暴露 `comfyui` provider 预设（baseUrl `http://127.0.0.1:6006`，model `minimax-h3-ref2v`）
+- **坑（必读）**:
+  - **参考位顺序 = 谁占脸**：`episode.vue` 的 `getShotReferenceIndexMap`/`getShotReferenceImages` 顺序为**角色 → 场景 → 道具**。若场景排前、又只有 2 个槽位，场景图会吃掉一张人脸、第二个角色被截掉 → 生成视频一人演两角色（本平台的真实 bug，已修）
+  - 桥只在 ComfyUI `/history/{prompt_id}` 返回 `success` 时才翻 `succeeded`：**mp4 已在 output 下但桥仍报 processing 属正常延迟**，别当失败重跑；DB 里最终结果由 `generation.ts` 再下载回 `static/videos/`（result_url 指 6006 的 `/v1/files/...`，video_url 指 `static/videos/...`）
+  - ComfyUI 已加**单实例锁**（`start_clean.ps1` 等启动脚本）。多实例并发会 OOM 并互相抢输出
+  - `tsx watch` 在 5679 上跑：改后端源码会**杀掉正在跑的视频任务**，报"服务重启，生成任务中断，请重试"。改代码前先等任务跑完，或改完重启 6006
+- **启动与自启**: 开发服务用 `data/generated/Start-Huobao.ps1`（后台无窗口，自动探测 5679/3013 是否已监听跳过，日志/`pid` 写 `data/generated/`）。`data/generated/` 下各脚本已改为**路径无关**（以仓库根解析），可任意目录直接 `node` 跑（如 `node data/generated/.dbq.cjs`）
 
 ## Database
 SQLite 单文件（默认 `data/huobao.sqlite3`，桌面版在 userData）。启动时 `initSqliteSchema` 幂等建表 + 风格预设种子。MySQL→SQLite 一次性迁移：`cd backend && npx tsx scripts/import-mysql-to-sqlite.ts [--force]`（逐表行数校验、写前备份）。

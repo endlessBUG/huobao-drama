@@ -98,6 +98,7 @@ export const sqliteSchemaStatements = [
     atmosphere TEXT,
     image_prompt TEXT,
     video_prompt TEXT,
+    video_prompt_full_ref TEXT,
     bgm_prompt TEXT,
     sound_effect TEXT,
     description TEXT,
@@ -374,10 +375,21 @@ const UPGRADE_SQL = 'UPDATE style_presets SET "name" = ?, "prompt" = ?, "descrip
 // 内容寻址下架：命中下架种子原文才删除
 const REMOVE_SQL = 'DELETE FROM style_presets WHERE "value" = ? AND "prompt" = ?'
 
+// 幂等加列：新库走 CREATE TABLE 已带列，旧库走 ALTER 补列；已存在则忽略（无 IF NOT EXISTS）
+function addColumnIfMissing(sqlite: Database.Database, table: string, column: string) {
+  try {
+    sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT;`)
+  } catch {
+    // 列已存在 → 忽略
+  }
+}
+
 export function initSqliteSchema(sqlite: Database.Database) {
   for (const statement of sqliteSchemaStatements) {
     sqlite.exec(statement)
   }
+  // 幂等补列（新库 CREATE TABLE 已含列，此处 no-op；旧库补列）
+  addColumnIfMissing(sqlite, 'storyboards', 'video_prompt_full_ref')
   const insertSeed = sqlite.prepare(SEED_SQL)
   const upgradeSeed = sqlite.prepare(UPGRADE_SQL)
   const removeSeed = sqlite.prepare(REMOVE_SQL)

@@ -208,14 +208,15 @@ async function processTask(id: number, config: AIConfig) {
     if (type === 'image') {
       const adapter = getImageAdapter(config.provider)
       const resolvedReferenceImages = await normalizeReferenceImages(params.referenceImages)
-      ;({ url, method, headers, body } = adapter.buildGenerateRequest(config, {
+      const req = await adapter.buildGenerateRequest(config, {
         id: record.id,
         model: record.model,
         prompt: record.prompt,
         size: params.size,
         frameType: params.frameType,
         referenceImages: resolvedReferenceImages.length ? JSON.stringify(resolvedReferenceImages) : null,
-      }))
+      })
+      ;({ url, method, headers, body } = req)
     } else {
       const adapter = getVideoAdapter(config.provider)
       const resolvedImageUrl = await normalizeVideoReferenceUrl(params.imageUrl)
@@ -226,7 +227,7 @@ async function processTask(id: number, config: AIConfig) {
       const resolvedReferenceVideoUrls = resolvePublicMediaUrls(params.referenceVideoUrls, 'video')
       const resolvedReferenceAudioUrls = resolvePublicMediaUrls(params.referenceAudioUrls, 'audio')
       const resolvedReferenceFileUrl = resolvePublicMediaUrl(params.referenceFileUrl, 'file')
-      ;({ url, method, headers, body } = adapter.buildGenerateRequest(config, {
+      const req = await adapter.buildGenerateRequest(config, {
         id: record.id,
         model: record.model,
         prompt: record.prompt,
@@ -246,7 +247,8 @@ async function processTask(id: number, config: AIConfig) {
         seed: params.seed,
         promptExtend: params.promptExtend,
         watermark: params.watermark,
-      }))
+      })
+      ;({ url, method, headers, body } = req)
     }
 
     logTaskProgress(label, 'request', {

@@ -48,7 +48,8 @@ export interface ImageProviderAdapter {
 export interface VideoProviderAdapter {
   provider: string
 
-  buildGenerateRequest(config: AIConfig, record: VideoGenerationRecord): ProviderRequest
+  /** 允许返回 Promise（ComfyUI 桥需先把参考图落盘），同步返回则 await 后无副作用 */
+  buildGenerateRequest(config: AIConfig, record: VideoGenerationRecord): ProviderRequest | Promise<ProviderRequest>
 
   parseGenerateResponse(result: any): VideoGenResponse
 

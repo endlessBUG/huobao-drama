@@ -66,9 +66,11 @@ app.post('/:type/chat', async (c) => {
   const startTime = performance.now()
 
   try {
+    // maxSteps 从 20 抬高：分镜拆解等长任务模型会探索 workspace，20 步打满就 DONE 没存内容；
+    // 60 步给足"探索+多批保存"余量（script_rewriter/extractor/prompt_generator 步骤少，不受影响）
     const result = await agent.generate(
       [{ role: 'user', content: message }],
-      { maxSteps: 20, requestContext },
+      { maxSteps: 60, requestContext },
     )
 
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1)

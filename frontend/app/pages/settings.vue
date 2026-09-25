@@ -734,7 +734,7 @@ const serviceTypes = computed(() => [
   { type: 'image', label: t('common.serviceType.image') },
   { type: 'video', label: t('common.serviceType.video') },
 ])
-const providers = ['gemini', 'openai', 'volcengine', 'minimax', 'aliyun']
+const providers = ['gemini', 'openai', 'volcengine', 'minimax', 'aliyun', 'comfyui']
 const providerSelectOptions = computed(() => providers.map(p => ({ label: p, value: p })))
 const serviceMeta = computed(() => ({
   text: { label: t('common.serviceType.text'), desc: t('settings.ai.meta.text') },
@@ -754,6 +754,7 @@ const providerPresets = {
     aliyun: { label: '阿里云百炼 Wan 3.0', baseUrl: 'https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com', models: ['wan3.0-video', 'wan3.0-video-prime'] },
     volcengine: { label: 'Seedance 2.0 官方', baseUrl: 'https://ark.cn-beijing.volces.com', models: ['doubao-seedance-2-0-mini-260615', 'doubao-seedance-2-0-fast-260128', 'doubao-seedance-2-0-260128'] },
     minimax: { label: 'MiniMax H3 官方', baseUrl: 'https://api.minimaxi.com', models: ['MiniMax-H3'] },
+    comfyui: { label: '本机 ComfyUI', baseUrl: 'http://127.0.0.1:6006', models: ['minimax-h3-ref2v'] },
   },
 }
 const huobaoQuickConfigs = [
@@ -764,6 +765,7 @@ const huobaoQuickConfigs = [
   { service_type: 'video', provider: 'aliyun', name: '火宝视频服务 · Wan 3.0', base_url: 'https://api.firemux.com/qwen', model: ['wan3.0-video', 'wan3.0-video-prime'], priority: 98 },
   { service_type: 'video', provider: 'volcengine', name: '火宝视频服务 · Seedance', base_url: 'https://api.firemux.com/volcengine', model: ['doubao-seedance-2-0-mini-260615', 'doubao-seedance-2-0-fast-260128', 'doubao-seedance-2-0-260128'], priority: 97 },
   { service_type: 'video', provider: 'minimax', name: '火宝视频服务 · MiniMax', base_url: 'https://api.firemux.com/minimax', model: ['MiniMax-H3'], priority: 96 },
+  { service_type: 'video', provider: 'comfyui', name: '本机 ComfyUI · MiniMax H3 ref2v', base_url: 'http://127.0.0.1:6006', model: ['minimax-h3-ref2v'], priority: 95 },
 ]
 
 function byType(t) { return cfgs.value.filter(c => c.service_type === t) }

@@ -3039,11 +3039,13 @@ function getShotReferenceImages(sb) {
     if (!value || refs.includes(value) || refs.length >= refImageLimit.value) return
     refs.push(value)
   }
-  const scene = getStoryboardScene(sb)
-  pushRef(scene?.image_url || scene?.imageUrl)
+  // 角色排最前：ComfyUI ref2v 参考位仅 2 张，必须保住每个角色的脸，
+  // 场景/道具让位（单角色分镜也能同时容纳角色+场景两张）
   for (const char of getStoryboardCharacters(sb)) {
     pushRef(char?.image_url || char?.imageUrl)
   }
+  const scene = getStoryboardScene(sb)
+  pushRef(scene?.image_url || scene?.imageUrl)
   for (const prop of getStoryboardProps(sb)) {
     pushRef(prop?.image_url || prop?.imageUrl)
   }
@@ -3161,7 +3163,7 @@ const mentionOptions = computed(() => {
   ]
 })
 
-// 按参考图顺序（场景图在前、角色图居中、道具图在后）为 @名字 建立索引映射，供视频提示词引用替换
+// 按参考图顺序（角色→场景→道具，与 getShotReferenceImages 一致）为 @名字 建立索引映射，供视频提示词引用替换
 function getShotReferenceIndexMap(sb) {
   const ordered = []
   const seen = new Set()
@@ -3170,11 +3172,11 @@ function getShotReferenceIndexMap(sb) {
     seen.add(url)
     ordered.push({ name, imageUrl: url })
   }
-  const scene = getStoryboardScene(sb)
-  push(scene?.location || '', scene?.image_url || scene?.imageUrl)
   for (const char of getStoryboardCharacters(sb)) {
     push(char.name || '', char?.image_url || char?.imageUrl)
   }
+  const scene = getStoryboardScene(sb)
+  push(scene?.location || '', scene?.image_url || scene?.imageUrl)
   for (const prop of getStoryboardProps(sb)) {
     push(prop.name || '', prop?.image_url || prop?.imageUrl)
   }

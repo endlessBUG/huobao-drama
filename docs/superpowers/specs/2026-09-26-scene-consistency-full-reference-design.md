@@ -105,7 +105,7 @@ non_diegetic_music:
 **方案**：桥新增 `mode` 分支。`_wf_video` 保持 ref2v；新增 `_wf_fl2va(first_frame, ...)`：
 - 条件节点换成**首帧生视频节点**（`JZL_MiniMaxH3ImageToVideo`，first_frame = 场景宽镜头图），其余 KSampler 链（`BasicGuider / RandomNoise / KSamplerSelect / BasicScheduler(res_multistep,4steps) / SamplerCustomAdvanced`）与现有 ref2v 链**一致**。
 - `first_frame` 图由 `genVid` 传进：分镜绑定场景且场景**宽镜头图**（`scenes.imageUrl`）存在时，作为 `first_frame_url` 传入视频任务；**staging 是后端适配层的事**（现有 `stageReferenceImages` 下载 `referenceImageUrls` 到 input/）——新增一条：把宽镜头图也 stage 成一个文件，body 加 `first_frame: <fname>`。桥不下载 URL，只收文件名。
-- **开关**：设置/视频参数区加一个布尔"首帧锚定 (fl2va)"（仅当 provider=comfyui 时显示）。开启且场景有宽镜头图 → fl2va；否则回退 ref2v（默认关闭，保持现状稳定）。
+- **开关**：视频生成参数区（`episode.vue` 生成视频处）加一个 checkbox"首帧锚定 (fl2va)"（仅当 provider=comfyui 时显示）。开启且场景有宽镜头图（`scenes.imageUrl`）→ fl2va；否则回退 ref2v。默认关闭。
 - 六段式复用同一份 full_ref（`summary` 里加/改 task type 为 `keyframe completion`，场景 `<Picture k+1>` 行可写 "is the actual first frame of [Shot 1]"）。**注意**：fl2va 节点没有 ref_image 插槽，`<Picture N>` 在 fl2va 模式下是纯文本（不映射任何参考图），无害。agent 生成时不需要感知 P3 开关，同一条 full_ref 两档通用；要精确 fl2v 版本再手动重生成。
 
 **风险**：fl2va 官方偏好**单镜头**（"FL2VA generally favors a single shot so the model can interpolate continuously"）。多镜头切镜的分镜下效果可能弱于 ref2v。故做成**可选开关**，用户按场景挑。验证：拿一个单镜头分镜开/关对比。
@@ -118,6 +118,8 @@ non_diegetic_music:
 
 ### 7.2 内容
 九宫格 = **同一场景 3x3 网格，9 个固定视角，无人物**。视角集合（固定 9 张，按序）：正面、左45°、右45°、背面、鸟瞰俯视图、地面平视、左墙视角、右墙视角、主道具/出入口特写。全部：同一地点、同一光照、**画面中没有任何人物**、风格跟随项目。
+
+**分辨率**：生成尺寸固定 **1536x1536**（3x3 每格 ~512px，首帧 fl2va 的 `_resize` 到 576x320 损失可控）——用户确认。
 
 ### 7.3 产出链路
 - **新增** `save_scene_grid_prompt` 工具（`image-prompt-tools.ts`），仿 `save_scene_final_prompt`，存 `scenes.grid_prompt`。

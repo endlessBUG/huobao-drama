@@ -60,7 +60,7 @@ configs/   — 遗留死配置，代码零引用
 
 ## 本机 ComfyUI（视频 ref2v，E:\AI\ComfyUI，仓库外）
 
-本地 ComfyUI + 自研 `ComfyUI-OpenAI-Bridge` 扩展（OpenAI 兼容 HTTP 桥），**不在本 git 仓库**，改桥代码必须重启 ComfyUI 才生效。接口文档（引用式，差异项已标注）：[docs/comfyui-api.md](docs/comfyui-api.md)。
+本地 ComfyUI + 自研 `ComfyUI-OpenAI-Bridge` 扩展（OpenAI 兼容 HTTP 桥），**不在本 git 仓库**，改桥代码必须重启 ComfyUI 才生效。接口文档（引用式，差异项已标注）：[docs/api/comfyui-api.md](docs/api/comfyui-api.md)。
 
 - **平台**: ComfyUI（端口 6006，`python main.py --port 6006`）+ `custom_nodes/ComfyUI-OpenAI-Bridge`。模型：视频 `minimax-h3-ref2v`（JZL ref2v，576x320，默认 124 帧 ≈ 5.2s@24fps，支持 9 张参考位 `ref_image_0~8`，Autogrow max=9）；图片 `krea2-turbo`
 - **端点**（OpenAI 兼容）: `POST /v1/videos/generations` 返回 202 + job id（body: `prompt`/`model`/`size`/`length`/`images`[文件名列表，落在 ComfyUI `input/`]）；`GET /v1/videos/generations/{id}` 轮询 `status`=processing/succeeded/failed；`GET /v1/files/{rel-path}` 取 mp4。作业状态存桥进程内存 dict，**进程重启丢作业状态，mp4 仍在 `output/openai/`**

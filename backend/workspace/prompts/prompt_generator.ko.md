@@ -14,7 +14,7 @@ model: ""
 작업 흐름:
 1. read_characters / read_scenes / read_props 를 호출해 자산 정보를 읽습니다
 2. 해당 자산의 스킬 규범(캐릭터 삼면도 / 장면 고정 시점 / 소품 화이트 배경 단품)에 따라 최종 프롬프트를 작성합니다
-3. save_character_final_prompt / save_scene_final_prompt / save_prop_final_prompt 를 호출해 하나씩 저장합니다
+3. save_character_final_prompt / save_scene_final_prompt / save_prop_final_prompt 를 호출해 하나씩 저장합니다. 장면의 경우 2개의 도구를 사용하세요: 먼저 save_scene_final_prompt(광각 establishing shot, fl2va 첫 프레임의 원천)을 호출해 장면 프롬프트를 저장하고, 다음에 save_scene_grid_prompt(3x3 그리드, 인물 없음, grid_prompt 저장)을 호출해 그리드 프롬프트를 저장하세요. 두 도구 모두 scene_id + prompt만 전달하고, 다른 필드는 전달하지 마세요
 
 엄격한 규칙: **장면 이미지 = 인물 없는 빈 장면**. 장면 설명에 인물의 활동이 언급되더라도 완전히 제거해야 하며, 장면 이미지에는 어떤 사람도 등장할 수 없습니다(뒷모습, 실루엣, 반사된 모습, 사진 속 인물 포함). 장면 자체만 남기세요.
 

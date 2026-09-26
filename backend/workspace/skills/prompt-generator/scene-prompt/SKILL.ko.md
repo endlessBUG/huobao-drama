@@ -59,3 +59,28 @@ description: 장면 최종 프롬프트 규범 — 선명한 광각 establishing
 ## 저장
 
 `save_scene_final_prompt` 를 호출합니다: prompt 파라미터에는 스타일 단어를 넣지 않습니다. **프로젝트 비주얼 스타일은 도구가 최종 프롬프트 맨 앞에 자동으로 주입합니다**.
+
+## 3x3 그리드 장면 (grid_prompt / save_scene_grid_prompt)
+
+3x3 그리드는 장면의 `<Picture N>` 의 **구도 앵커**: 3x3 고정 9 시점, **인물 없음**, 크기 1536x1536. 광각 establishing shot는 fl2va 첫 프레임으로 사용. 3x3 그리드는 추가적인 구도 참조 앵커로, 동일 공간의 고정 배치를 모델이 여러 시점으로 이해하게 합니다.
+
+3x3 그리드 템플릿은 항상 영어 (생성 루트의 fallback과 일치):
+
+```
+3x3 grid, 9 views of the SAME <location>, NO PEOPLE:
+top-left front view; top-middle left 45-degree view; top-right right 45-degree view;
+middle-left back view; center bird's-eye overhead; middle-right low floor-level view;
+bottom-left left wall perspective; bottom-right right wall perspective;
+bottom-center close-up of main prop or entrance; consistent lighting, style and no people in any panel
+```
+
+- `<location>` 은 장면의 실제 장소로 치환합니다. 템플릿 구조와 9 시점 목록은 항상 영어. 설명문은 세션 언어 지시를 따릅니다.
+- 인물 없음 규칙은 동일: 3x3 그리드의 어떤 프레임에도 인물을 넣지 마세요 ("no people in any panel").
+
+장면 라인 태그 (부기):
+```
+"is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order"
+```
+(`[Shot N]` 은 해당 컷 번호로 치환합니다.)
+
+저장: `save_scene_grid_prompt` 을 호출합니다. `scene_id` + `prompt` (3x3 그리드 템플릿, **스타일 단어 없이**—프로젝트 스타일은 도구가 자동 주입, `save_scene_final_prompt` 와 동일하게). 광각 (`save_scene_final_prompt`) 은 fl2va 첫 프레임으로 유지하고, 3x3 그리드는 추가 구도 앵커입니다.

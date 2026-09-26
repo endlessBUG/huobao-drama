@@ -125,6 +125,36 @@ const saveSceneFinalPrompt = createTool({
   },
 })
 
+const saveSceneGridPrompt = createTool({
+  id: 'save_scene_grid_prompt',
+  description: '保存为场景创作的九宫格（3x3 多角度）最终提示词。项目视觉风格会由工具自动拼接，prompt 参数中不要包含风格词。',
+  inputSchema: z.object({
+    scene_id: z.number(),
+    prompt: z.string().describe('场景九宫格最终提示词（3x3 固定 9 视角，无人物；模板结构/标签恒英文，语言跟随会话指令，不含风格词）'),
+  }),
+  execute: async ({ scene_id, prompt }, context) => {
+    const dramaId = getDramaId(context?.requestContext)
+    if (!dramaId) return { error: 'Missing dramaId in request context' }
+    const [s] = await db.select().from(schema.scenes)
+      .where(eq(schema.scenes.id, scene_id))
+    if (!s) return { error: 'Scene not found' }
+
+    const stylePrompt = await getDramaStylePrompt(dramaId)
+    const finalPrompt = stylePrompt ? `${stylePrompt}, ${prompt}` : prompt
+    await db.update(schema.scenes).set({
+      gridPrompt: finalPrompt,
+      updatedAt: now(),
+    }).where(eq(schema.scenes.id, scene_id))
+
+    return {
+      scene_id: s.id,
+      location: s.location,
+      saved: true,
+      grid_prompt: finalPrompt,
+    }
+  },
+})
+
 // ─── 道具提示词 ───────────────────────────────────────
 
 const readProps = createTool({
@@ -183,6 +213,7 @@ export const imagePromptTools = {
   saveCharacterFinalPrompt,
   readScenes,
   saveSceneFinalPrompt,
+  saveSceneGridPrompt,
   readProps,
   savePropFinalPrompt,
 }

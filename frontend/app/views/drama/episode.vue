@@ -385,12 +385,12 @@
                 <button class="asset-del-btn" :title="t('episode.asset.delScene')" @click.stop="askDeleteAsset('scene', s)"><X :size="11" /></button>
                 <div class="asset-cover wide">
                   <img
-                    v-if="s.image_url || s.imageUrl"
-                    :src="thumbOf(assetImageSrc(s))"
+                    v-if="sceneImageSrc(s)"
+                    :src="thumbOf(sceneImageSrc(s))"
                     class="previewable-image"
                     loading="lazy"
-                    @error="thumbFallback($event, assetImageSrc(s))"
-                    @click.stop="openImageViewer(assetImageSrc(s), t('episode.asset.sceneImageTitle', { name: s.location }))"
+                    @error="thumbFallback($event, sceneImageSrc(s))"
+                    @click.stop="openImageViewer(sceneImageSrc(s), t('episode.asset.sceneImageTitle', { name: s.location }))"
                   />
                   <div v-else class="asset-cover-empty">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -1120,22 +1120,22 @@
               <aside class="asset-detail-preview-panel">
                 <div class="asset-detail-section-title">
                   <span>{{ t('episode.asset.visualPreview') }}</span>
-                  <span :class="['asset-detail-state', assetImageSrc(assetDetail.item) ? 'is-ready' : '']">
-                    {{ assetImageSrc(assetDetail.item) ? t('episode.asset.ready') : t('episode.asset.todo') }}
+                  <span :class="['asset-detail-state', sceneImageSrc(assetDetail.item) ? 'is-ready' : '']">
+                    {{ sceneImageSrc(assetDetail.item) ? t('episode.asset.ready') : t('episode.asset.todo') }}
                   </span>
                 </div>
 
                 <button
                   type="button"
                   class="asset-detail-media-frame"
-                  :disabled="!assetImageSrc(assetDetail.item)"
-                  @click.stop="openImageViewer(assetImageSrc(assetDetail.item), assetDetailImageTitle(assetDetail))"
+                  :disabled="!sceneImageSrc(assetDetail.item)"
+                  @click.stop="openImageViewer(sceneImageSrc(assetDetail.item), assetDetailImageTitle(assetDetail))"
                 >
                   <img
-                    v-if="assetImageSrc(assetDetail.item)"
-                    :src="thumbOf(assetImageSrc(assetDetail.item))"
+                    v-if="sceneImageSrc(assetDetail.item)"
+                    :src="thumbOf(sceneImageSrc(assetDetail.item))"
                     class="previewable-image"
-                    @error="thumbFallback($event, assetImageSrc(assetDetail.item))"
+                    @error="thumbFallback($event, sceneImageSrc(assetDetail.item))"
                   />
                   <span v-else class="asset-detail-media-empty">
                     <svg v-if="assetDetail.type === 'character'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -1283,7 +1283,7 @@
                 :disabled="isPendingCharImage(assetDetail.item.id)"
                 @click="genCharImg(assetDetail.item.id)"
               >
-                {{ assetImageSrc(assetDetail.item) ? t('episode.asset.regenPortrait') : (isPendingCharImage(assetDetail.item.id) ? t('episode.asset.generating') : t('episode.asset.genPortrait')) }}
+                {{ sceneImageSrc(assetDetail.item) ? t('episode.asset.regenPortrait') : (isPendingCharImage(assetDetail.item.id) ? t('episode.asset.generating') : t('episode.asset.genPortrait')) }}
               </button>
               <button
                 v-else-if="assetDetail.type === 'scene'"
@@ -1291,15 +1291,26 @@
                 :disabled="isPendingSceneImage(assetDetail.item.id)"
                 @click="genSceneImg(assetDetail.item.id)"
               >
-                {{ assetImageSrc(assetDetail.item) ? t('episode.asset.regenScene') : (isPendingSceneImage(assetDetail.item.id) ? t('episode.asset.generating') : t('episode.asset.genScene')) }}
+                {{ sceneImageSrc(assetDetail.item) ? t('episode.asset.regenScene') : (isPendingSceneImage(assetDetail.item.id) ? t('episode.asset.generating') : t('episode.asset.genScene')) }}
               </button>
               <button
-                v-else-if="assetDetail.type === 'prop'"
+                v-if="assetDetail.type === 'prop'"
                 class="btn"
                 :disabled="isPendingPropImage(assetDetail.item.id)"
                 @click="genPropImg(assetDetail.item.id)"
               >
-                {{ assetImageSrc(assetDetail.item) ? t('episode.asset.regenProp') : (isPendingPropImage(assetDetail.item.id) ? t('episode.asset.generating') : t('episode.asset.genProp')) }}
+                {{ sceneImageSrc(assetDetail.item) ? t('episode.asset.regenProp') : (isPendingPropImage(assetDetail.item.id) ? t('episode.asset.generating') : t('episode.asset.genProp')) }}
+              </button>
+              <button
+                v-if="assetDetail.type === 'scene'"
+                class="btn btn-sm"
+                :disabled="isPendingSceneGridImage(assetDetail.item.id)"
+                @click.stop="genSceneGridImg(assetDetail.item.id)"
+              >
+                <Loader2 v-if="isPendingSceneGridImage(assetDetail.item.id)" :size="11" class="animate-spin" />
+                {{ (assetDetail.item.gridImageUrl || assetDetail.item.grid_image_url)
+                   ? t('episode.asset.regenScene') + ' · 九宫格'
+                   : t('episode.asset.genScene') + ' · 九宫格' }}
               </button>
               <button class="btn btn-primary" :disabled="savingAssetDetail" @click="saveAssetDetail">
                 <Loader2 v-if="savingAssetDetail" :size="12" class="animate-spin" />
@@ -1617,6 +1628,7 @@ function chatModelOverride() { return bareModelName(chatModel.value) || undefine
 function chatConfigId() { return ownerConfigId(textModelOptions.value, chatModel.value) }
 const pendingCharImageIds = ref([])
 const pendingSceneImageIds = ref([])
+const pendingSceneGridImageIds = ref([])
 const pendingPropImageIds = ref([])
 const pendingVideoIds = ref([])
 const failedVideoMessages = ref({})
@@ -1904,6 +1916,14 @@ async function saveAssetDetail() {
 
 function assetImageSrc(item) {
   const raw = item?.image_url || item?.imageUrl || ''
+  if (!raw) return ''
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) return raw
+  return `/${raw}`
+}
+
+// ponytail: 场景卡/详情主预览九宫格优先（3x3 构图锚点），无则回退宽镜头；角色/道具不动
+function sceneImageSrc(item) {
+  const raw = item?.gridImageUrl || item?.grid_image_url || item?.image_url || item?.imageUrl || ''
   if (!raw) return ''
   if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) return raw
   return `/${raw}`
@@ -2957,6 +2977,28 @@ async function genSceneImg(id) {
     toastError(e)
   }
 }
+
+function isPendingSceneGridImage(id) {
+  return pendingSceneGridImageIds.value.includes(id)
+}
+async function genSceneGridImg(id) {
+  try {
+    if (!isPendingSceneGridImage(id)) pendingSceneGridImageIds.value.push(id)
+    await sceneAPI.generateGridImage(id, epId.value, bareModelName(imageModel.value) || undefined,
+      ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId())
+    toast.success(t('episode.asset.gridGenerating') || '九宫格场景图生成中')
+    await refresh()
+    watchAsyncResult(() => {
+      const sc = scenes.value.find(s => s.id === id)
+      const done = !!((sc?.gridImageUrl || sc?.grid_image_url) && sc?.status !== 'processing')
+      if (done) pendingSceneGridImageIds.value = pendingSceneGridImageIds.value.filter(x => x !== id)
+      return done
+    })
+  } catch (e) {
+    pendingSceneGridImageIds.value = pendingSceneGridImageIds.value.filter(x => x !== id)
+    toastError(e)
+  }
+}
 function isPendingPropImage(id) {
   return pendingPropImageIds.value.includes(id)
 }
@@ -3079,7 +3121,8 @@ function getShotReferenceImages(sb) {
     pushRef(char?.image_url || char?.imageUrl)
   }
   const scene = getStoryboardScene(sb)
-  pushRef(scene?.image_url || scene?.imageUrl)
+  // 场景槽：九宫格优先（3x3 构图锚点），无则回退宽镜头；双空时 pushRef 内 !value 丢弃
+  pushRef(scene?.gridImageUrl || scene?.grid_image_url || scene?.image_url || scene?.imageUrl)
   for (const prop of getStoryboardProps(sb)) {
     pushRef(prop?.image_url || prop?.imageUrl)
   }
@@ -3185,7 +3228,7 @@ const mentionOptions = computed(() => {
       value: scene.location,
       kind: 'scene',
       group: t('common.scene'),
-      image: thumbOf(assetImageSrc(scene)),
+      image: thumbOf(sceneImageSrc(scene)),
     }] : []),
     ...getStoryboardProps(sb).map(p => ({
       label: p.name,

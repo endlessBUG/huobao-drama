@@ -34,6 +34,7 @@ interface GenerateImageParams {
   referenceImages?: string[]
   frameType?: string
   configId?: number
+  sceneGrid?: boolean
 }
 
 interface GenerateVideoParams {
@@ -79,6 +80,7 @@ export async function generateImage(params: GenerateImageParams): Promise<number
     size: params.size || '1920x1080',
     frameType: params.frameType,
     referenceImages: params.referenceImages,
+    sceneGrid: params.sceneGrid,
   })
 
   logTaskStart('ImageTask', 'enqueue', {
@@ -453,7 +455,10 @@ async function writeBackImageAssets(record: SysTaskRecord, localPath: string) {
     await db.update(schema.characters).set({ imageUrl: localPath, updatedAt: now() }).where(eq(schema.characters.id, record.characterId))
   }
   if (record.sceneId) {
-    await db.update(schema.scenes).set({ imageUrl: localPath, status: 'completed', updatedAt: now() }).where(eq(schema.scenes.id, record.sceneId))
+    await db.update(schema.scenes).set({
+      ...(params.sceneGrid ? { gridImageUrl: localPath } : { imageUrl: localPath }),
+      status: 'completed', updatedAt: now(),
+    }).where(eq(schema.scenes.id, record.sceneId))
   }
   if (record.propId) {
     await db.update(schema.props).set({ imageUrl: localPath, updatedAt: now() }).where(eq(schema.props.id, record.propId))

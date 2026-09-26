@@ -59,3 +59,28 @@ description: シーン最終プロンプト仕様 — 明瞭な広角エスタ�
 ## 保存
 
 `save_scene_final_prompt` を呼び出す：prompt パラメータにスタイル語を含めない。**プロジェクトのビジュアルスタイルはツールが最終プロンプトの先頭へ自動注入する**。
+
+## 九宮格シーン（grid_prompt / save_scene_grid_prompt）
+
+九宮格はシーンの `<Picture N>` の**構図アンカー**：3x3 固定 9 視点、**人物なし**、サイズ 1536x1536。広角エスタブリッシングショットは fl2va 的第一フレームとして使用。九宮格は補足的な構図参照アンカーとして、同一空間の固定レイアウトをモデルが複数視点から理解するのに使う。
+
+九宮格テンプレートは常に英語（生成ルートの fallback と一致）：
+
+```
+3x3 grid, 9 views of the SAME <location>, NO PEOPLE:
+top-left front view; top-middle left 45-degree view; top-right right 45-degree view;
+middle-left back view; center bird's-eye overhead; middle-right low floor-level view;
+bottom-left left wall perspective; bottom-right right wall perspective;
+bottom-center close-up of main prop or entrance; consistent lighting, style and no people in any panel
+```
+
+- `<location>` はシーンの実在地名に置き換える。テンプレート構造と 9 視点リストは常に英語。説明文はセッションの言語指令に従う。
+- 人物なしループは同様に：九宮格のいかなる格子にも人物を出さない（"no people in any panel"）。
+
+シーン行のタグ（付記）：
+```
+"is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order"
+```
+（`[Shot N]` は該当カット番号に置き換える。）
+
+保存：`save_scene_grid_prompt` を呼び出す。`scene_id` + `prompt`（九宮格テンプレート、**スタイル語を含めない**——プロジェクトのスタイルはツールが自動注入、`save_scene_final_prompt` と同様に）。広角（`save_scene_final_prompt`）は fl2va 的第一フレームとして維持し、九宮格は追加の構図アンカー。

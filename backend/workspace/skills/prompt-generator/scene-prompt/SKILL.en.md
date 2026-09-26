@@ -61,3 +61,28 @@ All set dressing, period texture, and key visual elements in `prompt` (scene des
 ## Saving
 
 Call `save_scene_final_prompt`: the prompt parameter contains no style words — **the project's visual style is automatically injected by the tool at the very front of the final prompt**.
+
+## Nine-Grid Scene (grid_prompt / save_scene_grid_prompt)
+
+The nine-grid is the **composition anchor** for the scene `<Picture N>`: a 3x3 fixed 9-viewpoint grid, **no people**, size 1536x1536. The wide establishing shot serves as the fl2va first frame; the nine-grid is an additional composition reference anchor so the model understands the fixed layout of the same space from multiple viewpoints.
+
+The nine-grid template is always English (matching the generation route's fallback):
+
+```
+3x3 grid, 9 views of the SAME <location>, NO PEOPLE:
+top-left front view; top-middle left 45-degree view; top-right right 45-degree view;
+middle-left back view; center bird's-eye overhead; middle-right low floor-level view;
+bottom-left left wall perspective; bottom-right right wall perspective;
+bottom-center close-up of main prop or entrance; consistent lighting, style and no people in any panel
+```
+
+- Replace `<location>` with the scene's actual location; the template structure and the 9-viewpoint list are always English — explanatory text follows the session language directive.
+- The no-people rule applies the same: no people in any grid cell ("no people in any panel").
+
+Scene-line tag (append):
+```
+"is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order"
+```
+(Replace `[Shot N]` with the corresponding storyboard number.)
+
+Saving: call `save_scene_grid_prompt`, passing only `scene_id` + `prompt` (the nine-grid template, **no style words** — the project style is auto-injected by the tool, just like `save_scene_final_prompt`). The wide shot (`save_scene_final_prompt`) is kept as the fl2va first frame; the nine-grid is the extra composition anchor.

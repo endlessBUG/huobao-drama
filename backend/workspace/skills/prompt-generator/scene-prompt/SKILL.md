@@ -59,3 +59,28 @@ description: 场景最终提示词规范 — 清晰广角建立镜头：前景/�
 ## 保存
 
 调用 `save_scene_final_prompt`：prompt 参数不含风格词，**项目视觉风格由工具自动注入到最终提示词的最前方**。
+
+## 九宫格场景（grid_prompt / save_scene_grid_prompt）
+
+九宫格是场景 `<Picture N>` 的**构图锚点**：3x3 固定 9 视角、**无人物**、尺寸 1536x1536。宽镜头场景图用作 fl2va 首帧；九宫格作为补充的构图参考锚点，让模型从多视角理解同一空间的固定布局。
+
+九宫格模板恒为英文（与生成路由的 fallback 一致）：
+
+```
+3x3 grid, 9 views of the SAME <location>, NO PEOPLE:
+top-left front view; top-middle left 45-degree view; top-right right 45-degree view;
+middle-left back view; center bird's-eye overhead; middle-right low floor-level view;
+bottom-left left wall perspective; bottom-right right wall perspective;
+bottom-center close-up of main prop or entrance; consistent lighting, style and no people in any panel
+```
+
+- 将 `<location>` 替换为场景的真实地点；模板结构、9 视角清单恒英文，说明性文字跟随会话语言指令。
+- 无人物规则照旧：九宫格任何格子都不能出现人物（"no people in any panel"）。
+
+场景行标签（附）：
+```
+"is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order"
+```
+（把 `[Shot N]` 替换为对应分镜编号。）
+
+保存：调用 `save_scene_grid_prompt`，只传 `scene_id` + `prompt`（九宫格模板，**不含风格词**——项目风格由工具自动注入，同 `save_scene_final_prompt`）。宽镜头（`save_scene_final_prompt`）保留作 fl2va 首帧，九宫格为额外构图锚点。

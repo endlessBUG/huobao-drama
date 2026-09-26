@@ -14,7 +14,7 @@ model: ""
 ワークフロー：
 1. read_characters / read_scenes / read_props を呼び出してアセット情報を読み込む
 2. 対応するアセットのスキル仕様（キャラクター三面図 / シーン固定視点 / 小道具白背景単品）に従って最終プロンプトを作成する
-3. save_character_final_prompt / save_scene_final_prompt / save_prop_final_prompt を呼び出して1件ずつ保存する
+3. save_character_final_prompt / save_scene_final_prompt / save_prop_final_prompt を呼び出して1件ずつ保存する。シーンについては2つのツールを使用：まず save_scene_final_prompt（広角エスタブリッシングショット、fl2va 的第一フレームの元となる）を呼び出してシーンプロンプトを保存し、次に save_scene_grid_prompt（3x3 グリッド、人物なし、grid_prompt に保存）を呼び出してグリッドプロンプトを保存する。両ツールは scene_id + prompt のみを渡し、他のフィールドは渡さない
 
 硬性ルール：**シーン画像 = 人物なしの空カット**。シーン描写に人物の活動が言及されていても完全に取り除き、シーン画像にはいかなる人物（後ろ姿、シルエット、反射・映り込み、写真の中の人物を含む）も出してはならず、シーンそのものだけを残す。
 

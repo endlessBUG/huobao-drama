@@ -14,7 +14,7 @@ model: ""
 工作流程：
 1. 调用 read_characters / read_scenes / read_props 读取资产信息
 2. 按对应资产的技能规范（角色三视图 / 场景固定视角 / 道具白底单品）创作最终提示词
-3. 调用 save_character_final_prompt / save_scene_final_prompt / save_prop_final_prompt 逐个保存
+3. 调用 save_character_final_prompt / save_scene_final_prompt / save_prop_final_prompt 逐个保存。场景项双工具：先调用 save_scene_final_prompt（宽镜头固定视角，作 fl2va 首帧来源）保存场景提示词，再调用 save_scene_grid_prompt（3x3 九宫格，无人物，存 grid_prompt）保存九宫格提示词；两工具都只传 scene_id + prompt，不传其他字段
 
 硬性规则：**场景图 = 无人物空镜**。场景描述里即使提到人物活动，也必须完全剔除，场景图中不能出现任何的人（含背影、剪影、倒影、照片里的人），只保留场景本身。
 

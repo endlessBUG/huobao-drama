@@ -97,6 +97,51 @@ app.post('/:id/generate-image', async (c) => {
   }
 })
 
+// POST /scenes/:id/generate-grid-image — 生成场景九宫格（3x3 多角度，1536x1536，无人物）
+app.post('/:id/generate-grid-image', async (c) => {
+  const id = Number(c.req.param('id'))
+  const body = await c.req.json()
+  const [scene] = await db.select().from(schema.scenes).where(eq(schema.scenes.id, id))
+  if (!scene) return badRequest(c, '场景不存在')
+  if (!body.episode_id) return badRequest(c, 'episode_id 必填')
+  const [ep] = await db.select().from(schema.episodes).where(eq(schema.episodes.id, Number(body.episode_id)))
+  if (!ep) return badRequest(c, '剧集不存在')
+
+  const stylePrompt = await getDramaStylePrompt(scene.dramaId)
+  // ponytail: 九宫格 prompt 用 gridPrompt（若 agent 已产）否则固定 9 视角模板（恒英文、无人物）；风格前缀由 getDramaStylePrompt 拼
+  const gridBase = scene.gridPrompt || ''
+  const fallback = '3x3 grid, 9 views of the SAME ' + (scene.location || '') + ', NO PEOPLE: ' +
+    "top-left front view; top-middle left 45-degree view; top-right right 45-degree view; " +
+    "middle-left back view; center bird's-eye overhead; middle-right low floor-level view; " +
+    "bottom-left left wall perspective; bottom-right right wall perspective; " +
+    "bottom-center close-up of main prop or entrance; consistent lighting, style and no people in any panel"
+  const prompt = [
+    stylePrompt || '',
+    gridBase || fallback,
+    scene.prompt || '',
+    scene.lighting || '',
+  ].filter(Boolean).join(', ')
+  try {
+    logTaskStart('SceneImage', 'grid-generate', { sceneId: id, episodeId: ep.id, dramaId: scene.dramaId, location: scene.location })
+    await db.update(schema.scenes).set({ status: 'processing', updatedAt: now() }).where(eq(schema.scenes.id, id))
+    const genId = await generateImage({
+      sceneId: id,
+      dramaId: scene.dramaId,
+      prompt,
+      size: '1536x1536',
+      sceneGrid: true,
+      model: body.model,
+      configId: body.config_id ?? ep.imageConfigId ?? undefined,
+    })
+    logTaskSuccess('SceneImage', 'grid-generate', { sceneId: id, generationId: genId })
+    return success(c, { image_generation_id: genId })
+  } catch (err: any) {
+    logTaskError('SceneImage', 'grid-generate', { sceneId: id, error: err.message })
+    await db.update(schema.scenes).set({ status: 'failed', updatedAt: now() }).where(eq(schema.scenes.id, id))
+    return badRequest(c, err.message)
+  }
+})
+
 // POST /scenes/:id/generate-prompt — 独立生成/重新生成固定视角最终提示词（不生图）
 app.post('/:id/generate-prompt', async (c) => {
   const id = Number(c.req.param('id'))

@@ -98,6 +98,8 @@ export const scenes = sqliteTable('scenes', {
   finalPrompt: text('final_prompt'),
   storyboardCount: integer('storyboard_count').default(1),
   imageUrl: text('image_url'),
+  gridPrompt: text('grid_prompt'),
+  gridImageUrl: text('grid_image_url'),
   status: text('status').default('pending'),
   localPath: text('local_path'),
   createdAt: text('created_at').notNull(),

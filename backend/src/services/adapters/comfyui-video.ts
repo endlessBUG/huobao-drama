@@ -120,6 +120,7 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
         size: DEFAULT_SIZE,
         length: DEFAULT_LENGTH,
         images,
+        ref_scale: 2.0,
         seed: record.seed ?? undefined,
       },
     }

@@ -17,6 +17,7 @@ import { imagePromptTools } from './tools/image-prompt-tools.js'
 import { loadAgentSkills, skillWorkspaces } from './skills.js'
 import { loadAgentPromptFile, loadBasePromptFile } from './prompts.js'
 import { buildLanguageDirective } from './language.js'
+import { createToolCallRepairFetch } from './tool-call-repair.js'
 import { getContentLanguageFromRC } from './context.js'
 
 // Default prompts (used when workspace/prompts/<type>.md 文件缺失时兜底)
@@ -317,12 +318,15 @@ async function getModel(fileModel: string | undefined, modelOverride?: string, t
   const fetchImpl = isOfficialOpenAIHost(resolvedBaseURL)
     ? tempFetch
     : createMaxTokensFetch(providerName, tempFetch)
+  // 响应侧兜底：模型把工具调用写成 content 里的 <tool_call> 文本时还原为结构化 tool_calls
+  // （见 tool-call-repair.ts；自建模型长 prompt 下 100% 复现，否则 agent 空转、什么都没保存）
+  const agentFetch = createToolCallRepairFetch(fetchImpl)
 
   if (providerName === 'gemini') {
     const googleProvider = createGoogleGenerativeAI({
       apiKey: textConfig.apiKey,
       baseURL: resolvedBaseURL,
-      fetch: fetchImpl,
+      fetch: agentFetch,
     })
     return googleProvider(modelName)
   }
@@ -330,7 +334,7 @@ async function getModel(fileModel: string | undefined, modelOverride?: string, t
   const provider = createOpenAI({
     baseURL: resolvedBaseURL,
     apiKey: textConfig.apiKey,
-    fetch: fetchImpl,
+    fetch: agentFetch,
   } as any)
   return provider.chat(modelName)
 }

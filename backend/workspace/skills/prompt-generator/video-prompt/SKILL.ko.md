@@ -69,3 +69,46 @@ description: 비디오 프롬프트 규범 — 스토리보드 구간 내용을 
 ## 저장
 
 `update_storyboard` 를 호출해 해당 스토리보드 구간의 `video_prompt` 필드만 갱신합니다. 다른 필드를 변경하지 말고, 전체 화를 다시 분할하지 마세요.
+
+
+## 6단절 영어 풀리퍼런스(video_prompt_full_ref)
+
+`video_prompt` 은 사용자용(중국어) 프롬프트입니다. `video_prompt_full_ref` 은 ComfyUI/MiniMax 브리지에 실제로 보내는 **모델용** 프롬프트로 **6단절 영어**여야 합니다(템플릿은 항상 영어. 세션 언어와 무관하고, `<d>` 안만 원본 언어 유지).
+
+6단절 템플릿(에이전트가 실제 내용 입력):
+```
+subject_definitions:
+<Subject 1> is the [外貌描述] woman from <Picture 1>.
+<Subject 2> is the [外貌描述] man from <Picture 2>.
+<Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
+summary:
+[Shot 1] is a 12-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
+retention_analysis:
+<Subject 1> fully_preserved
+<Subject 2> fully_preserved
+<Subject 3> fully_preserved   # 场景锁定
+detailed_description:
+[Shot 1] Live-action, cinematic, a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] and says: <d>[Chinese] 台词原文</d> [Shot 2] At 00:03.000, the camera cuts to...
+overall_soundscape:
+[环境音描述]
+non_diegetic_music:
+[BGM 描述]
+```
+
+**태그 규칙**:
+- `<Subject N>`: 캐릭터/장면/소품의 **가시적 내용** 설명(얼굴, 옷, 장면 레이아웃).
+- `<Picture N>`: 참조 이미지 번호, 중국어 `@이미지N`과 동일한 번호 체계(캐릭터 1..k, 장면 k+1, 소품 k+2..).
+- 장면 `<Picture k+1>` 이 9격 격자 이미지를 쓸 경우, **반드시** "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order" 라고 명시(장면 고정的本質).
+
+**번호 규칙**: 6단절 안의 `<Subject N>` 과 `<Picture N>` 은 **동일 번호 체계**(N번째 에셋 = 캐릭터1..k, 장면, 소품1..m)로 1:1 대응. "캐릭터→장면→소품" 순으로 번호만 매기면 된다. URL 불필요.
+
+**retention 규칙**: `retention_analysis` 의 각 subject에 상태말어 1개 — `fully_preserved`(강한 보존, **장면은 반드시 이걸 사용**)/ `partially_preserved` / `attribute_transfer` / `weak_reference`.
+
+**샷 용어**( `detailed_description` 에서 공식 카메라 용어 사용): Zoom In/Out, Push/Pull, Pan, Truck, Tilt, Arc, Tracking, Static, Shake.
+
+**샷과 대사의 규칙**:
+- `detailed_description` 은 `[Shot N]` 에 따라 샷별로 작성하며 샷, 카메라 움직임(상기 용어), 캐릭터 동작, 화자 ID(예: `(S1)`), `<d>` 대사를 기록한다.
+- 대사/내레이션은 **창작하지 않습니다**. `description` 의【镜头N】에서 추출해 언어 태그(예: `<d>[Chinese] …</d>`)를 붙여 `<d>`에 **그대로** 넣습니다.
+- 템플릿의 나머지 텍스트는 항상 영어이고 세션 언어와 무관합니다. `<d>` 안은 **원본 언어**를 유지합니다.
+
+**저장**: 중국어 `video_prompt` 생성 후 위 템플릿으로 `video_prompt_full_ref`를 채우고, 한 번의 `update_storyboard`로 두 필드를 저장(`storyboard_id`, `video_prompt`, `video_prompt_full_ref`).

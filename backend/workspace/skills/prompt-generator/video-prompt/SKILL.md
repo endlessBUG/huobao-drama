@@ -69,3 +69,46 @@ description: 视频提示词规范 — 根据分镜段落内容生成按时间�
 ## 保存
 
 调用 `update_storyboard` 仅更新该分镜段落的 `video_prompt` 字段，不要改动其他字段，不要重新拆分整集。
+
+
+## 六段式英文全参考（video_prompt_full_ref）
+
+`video_prompt` 是给人看的中文提示词；`video_prompt_full_ref` 是真正送 ComfyUI/MiniMax 桥的**模型侧**提示词，**必须是六段式英文**（模板恒英文，与会话语言无关；`<d>` 内台词保留原文语言）。
+
+六段式模板（agent 填实际内容）：
+```
+subject_definitions:
+<Subject 1> is the [外貌描述] woman from <Picture 1>.
+<Subject 2> is the [外貌描述] man from <Picture 2>.
+<Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
+summary:
+[Shot 1] is a 12-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
+retention_analysis:
+<Subject 1> fully_preserved
+<Subject 2> fully_preserved
+<Subject 3> fully_preserved   # 场景锁定
+detailed_description:
+[Shot 1] Live-action, cinematic, a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] and says: <d>[Chinese] 台词原文</d> [Shot 2] At 00:03.000, the camera cuts to...
+overall_soundscape:
+[环境音描述]
+non_diegetic_music:
+[BGM 描述]
+```
+
+**标签规则**：
+- `<Subject N>`：角色/场景/道具的**可见内容**描述（人脸、穿着、场景布局）。
+- `<Picture N>`：参考图序号，与中文 `@图片N` 同一套 N（角色 1..k、场景 k+1、道具 k+2..）。
+- 场景 `<Picture k+1>` 若用九宫格图，**必须**写明 "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order"（九宫格场景锚定的精髓）。
+
+**编号规则**：六段式里 `<Subject N>` 与 `<Picture N>` 用**同一套 N**（第 N 个资产 = 角色1..k、场景、道具1..m），两者序号一一对应。只需按"角色→场景→道具"顺序编号，无需感知具体 URL。
+
+**retention 规则**：`retention_analysis` 每个 subject 一个状态词——`fully_preserved`（强保留，**场景一律用它**）/ `partially_preserved` / `attribute_transfer` / `weak_reference`。
+
+**镜头词汇表**（`detailed_description` 用官方机位词）：Zoom In/Out, Push/Pull, Pan, Truck, Tilt, Arc, Tracking, Static, Shake。
+
+**镜头与对白规则**：
+- `detailed_description` 按 `[Shot N]` 逐镜头写，含镜头、机位运动（上述词汇）、人物动作、说话人 ID（如 `(S1)`）、`<d>` 对白。
+- 台词/旁白**不创作**，从 `description` 的【镜头N】提取，**原样**塞进 `<d>`，并加语言 tag（如 `<d>[Chinese] …</d>`）。
+- 模板其余部分恒英文，无论会话语言；`<d>` 内台词保留**原文语言**。
+
+**保存**：生成完中文 `video_prompt` 后按上面模板填好 `video_prompt_full_ref`，一次 `update_storyboard` 同时保存两字段（`storyboard_id`、`video_prompt`、`video_prompt_full_ref`）。

@@ -69,3 +69,46 @@ description: 動画プロンプト仕様 — 絵コンテパラグラフの内�
 ## 保存
 
 `update_storyboard` を呼び出して、その絵コンテパラグラフの `video_prompt` フィールドのみを更新する。他のフィールドは変更せず、話全体を再分解しない。
+
+
+## 六段式英語フルリファレンス（video_prompt_full_ref）
+
+`video_prompt` は人間向け（中国語）の提示词です。`video_prompt_full_ref` は ComfyUI/MiniMax ブリッジに実際に送る**モデル向け**の提示词で、**六段式英語**である必要があります（テンプレは常に英語。セッション言語に関わらず、`<d>` の内側のみ元の言語を保持）。
+
+六段式テンプレ（agent が実内容で埋める）：
+```
+subject_definitions:
+<Subject 1> is the [外貌描述] woman from <Picture 1>.
+<Subject 2> is the [外貌描述] man from <Picture 2>.
+<Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
+summary:
+[Shot 1] is a 12-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
+retention_analysis:
+<Subject 1> fully_preserved
+<Subject 2> fully_preserved
+<Subject 3> fully_preserved   # 场景锁定
+detailed_description:
+[Shot 1] Live-action, cinematic, a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] and says: <d>[Chinese] 台词原文</d> [Shot 2] At 00:03.000, the camera cuts to...
+overall_soundscape:
+[环境音描述]
+non_diegetic_music:
+[BGM 描述]
+```
+
+**ラベル規則**：
+- `<Subject N>`：キャラクター／シーン／小物への**視覚的な内容**記述（顔、服装、シーンのレイアウト）。
+- `<Picture N>`：参照画像の番号。中国語の `@画像N` と同じ番号体系（キャラ 1..k、シーン k+1、小物 k+2..）。
+- 九宮格画像をシーン `<Picture k+1>` で使う場合、**必ず** "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order" と明記（シーン固定の本質）。
+
+**番号規則**：六段式内の `<Subject N>` と `<Picture N>` は**同一番号体系**（N番目 Asset ＝ キャラ 1..k、シーン、小物 1..m）で 1:1 対応。「キャラ→シーン→小物」の順で番号付けするだけでよい。URL は不要。
+
+**retention 規則**：`retention_analysis` の各 subject に状態語を 1つ — `fully_preserved`（強い保持、**シーンは必ずこれ**）/ `partially_preserved` / `attribute_transfer` / `weak_reference`。
+
+**ショット語彙**（`detailed_description` で公式のカメラ用語を使う）：Zoom In/Out, Push/Pull, Pan, Truck, Tilt, Arc, Tracking, Static, Shake。
+
+**ショットと対話の規則**：
+- `detailed_description` は `[Shot N]` ごとに各ショットで記述し、ショット、カメラの動き（上記語彙）、キャラクターの動作、話者 ID（例：`(S1)`）、`<d>` 対話を記述する。
+- 台詞／ナレーションは**作成しない**。`description` の【镜头N】から抽出し、言語タグ（例：`<d>[Chinese] …</d>`）を添えて `<d>` に**そのまま**入れる。
+- テンプレの残りのテキストは常に英語で、セッション言語に関わらない。`<d>` 内は**元の言語**を保つ。
+
+**保存**：中国語の `video_prompt` を生成した後、上のテンプレで `video_prompt_full_ref` を記入し、1つの `update_storyboard` で両フィールドを保存（`storyboard_id`、`video_prompt`、`video_prompt_full_ref`）。

@@ -69,3 +69,46 @@ Organize each segment's content in this order (items with no content may be omit
 ## Saving
 
 Call `update_storyboard` to update only this storyboard segment's `video_prompt` field; do not modify any other field, and do not re-breakdown the whole episode.
+
+
+## Six-Section English Full Reference (video_prompt_full_ref)
+
+`video_prompt` is the human-facing Chinese prompt. `video_prompt_full_ref` is the **model-facing** prompt actually sent to the ComfyUI/MiniMax bridge, and it **must be six-section English** (the template is always English, independent of session language; only the line inside `<d>` keeps its original language).
+
+Six-section template (the agent fills in real content):
+```
+subject_definitions:
+<Subject 1> is the [外貌描述] woman from <Picture 1>.
+<Subject 2> is the [外貌描述] man from <Picture 2>.
+<Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
+summary:
+[Shot 1] is a 12-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
+retention_analysis:
+<Subject 1> fully_preserved
+<Subject 2> fully_preserved
+<Subject 3> fully_preserved   # 场景锁定
+detailed_description:
+[Shot 1] Live-action, cinematic, a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] and says: <d>[Chinese] 台词原文</d> [Shot 2] At 00:03.000, the camera cuts to...
+overall_soundscape:
+[环境音描述]
+non_diegetic_music:
+[BGM 描述]
+```
+
+**Label rules**:
+- `<Subject N>`: a **visible-content** description of the character/scene/prop (face, clothing, scene layout).
+- `<Picture N>`: the reference-image index, the same N set as the Chinese `@Image N` (characters 1..k, scene k+1, props k+2..).
+- If the scene `<Picture k+1>` uses a nine-grid image, it **must** read "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order" (the essence of scene anchoring).
+
+**Numbering rules:** the `<Subject N>` and `<Picture N>` in the six-section prompt share the **same N set** (Nth asset = character 1..k, scene, prop 1..m), one-to-one. Just number in "character -> scene -> prop" order; you do not need to know any URLs.
+
+**Retention rules:** each subject in `retention_analysis` takes one state word — `fully_preserved` (strong retention; **scenes always use it**) / `partially_preserved` / `attribute_transfer` / `weak_reference`.
+
+**Shot vocabulary** (use the official camera terms in `detailed_description`): Zoom In/Out, Push/Pull, Pan, Truck, Tilt, Arc, Tracking, Static, Shake.
+
+**Shot & dialogue rules**:
+- `detailed_description` is written shot by shot via `[Shot N]`, covering the shot, camera motion (terms above), character actions, speaker IDs (e.g. `(S1)`), and `<d>` dialogue.
+- **Never invent** lines; pull them verbatim from the `description`'s [Shot N] and drop them into `<d>` with a language tag (e.g. `<d>[Chinese] …</d>`).
+- The template's remaining text is always English, whatever the session language is; the line inside `<d>` keeps its **original language**.
+
+**Saving:** after generating the Chinese `video_prompt`, fill in `video_prompt_full_ref` per the template above; save both fields in one `update_storyboard` call (`storyboard_id`, `video_prompt`, `video_prompt_full_ref`).

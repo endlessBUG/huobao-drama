@@ -356,6 +356,7 @@ const updateStoryboard = createTool({
     atmosphere: z.string().optional(),
     image_prompt: z.string().optional(),
     video_prompt: z.string().optional(),
+    video_prompt_full_ref: z.string().optional(),
     bgm_prompt: z.string().optional(),
     sound_effect: z.string().optional(),
     description: z.string().optional(),
@@ -417,6 +418,7 @@ const updateStoryboard = createTool({
     if ('atmosphere' in fields) updates.atmosphere = fields.atmosphere
     if ('image_prompt' in fields) updates.imagePrompt = fields.image_prompt
     if ('video_prompt' in fields) updates.videoPrompt = fields.video_prompt
+    if ('video_prompt_full_ref' in fields) updates.videoPromptFullRef = fields.video_prompt_full_ref
     if ('bgm_prompt' in fields) updates.bgmPrompt = fields.bgm_prompt
     if ('sound_effect' in fields) updates.soundEffect = fields.sound_effect
     if ('description' in fields) updates.description = fields.description

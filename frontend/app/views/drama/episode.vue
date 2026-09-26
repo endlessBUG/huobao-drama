@@ -686,6 +686,13 @@
                       @commit="v => updateField(selectedSb, 'video_prompt', v)"
                     />
                   </section>
+                  <section class="video-inspector-section video-fullref-panel" v-if="selectedSb.videoPromptFullRef || selectedSb.video_prompt_full_ref">
+                    <div class="video-fullref-head">
+                      <span class="video-inspector-label video-inspector-label-hero">ComfyUI Full-Reference（只读）</span>
+                    </div>
+                    <pre class="video-fullref-text" spellcheck="false">{{ selectedSb.videoPromptFullRef || selectedSb.video_prompt_full_ref }}</pre>
+                    <button type="button" class="btn btn-sm video-fullref-copy" @click="copyText(selectedSb.videoPromptFullRef || selectedSb.video_prompt_full_ref)">{{ t('common.copy') }}</button>
+                  </section>
               </div>
               </div>
 
@@ -1820,6 +1827,16 @@ async function copyAssetFinalPrompt() {
   if (!text) return
   try {
     await navigator.clipboard.writeText(text)
+    toast.success(t('episode.asset.promptCopied'))
+  } catch {
+    toast.error(t('episode.asset.copyFailed'))
+  }
+}
+
+async function copyText(value) {
+  if (!value) return
+  try {
+    await navigator.clipboard.writeText(value)
     toast.success(t('episode.asset.promptCopied'))
   } catch {
     toast.error(t('episode.asset.copyFailed'))
@@ -3259,7 +3276,9 @@ async function genVid(sb, opts = {}) {
   const params = {
     storyboard_id: sb.id,
     drama_id: dramaId,
-    prompt: resolveVideoPromptRefs(sb),
+    prompt: selectedVideoConfig.value?.provider === 'comfyui'
+      ? (sb.videoPromptFullRef || sb.videoPrompt || '')
+      : resolveVideoPromptRefs(sb),
     duration: Number(sb.duration || 10),
     aspect_ratio: dramaAspectRatio.value,
     generate_audio: true,
@@ -6109,4 +6128,9 @@ button.video-task-metric.on { box-shadow: 0 0 0 2px var(--accent); }
   }
 
 }
+
+.video-fullref-panel { margin-top: 12px; }
+.video-fullref-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--text-dim); }
+.video-fullref-text { font-family: var(--font-mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: var(--text-dim); background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin: 0 0 6px; max-height: 280px; overflow: auto; }
+.video-fullref-copy { margin-left: auto; }
 </style>

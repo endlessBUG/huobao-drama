@@ -27,5 +27,6 @@ export function buildLanguageDirective(lang?: string | null): string {
     'Exceptions:',
     '- When referencing EXISTING assets with @mentions (e.g. in video prompts), the name after @ must EXACTLY match the asset name as it appears in the provided asset lists — do NOT translate or rewrite existing asset names.',
     '- The visual style prefix of image prompts is injected automatically by the system (in English). Do not translate, rewrite, or duplicate it.',
+    '- video_prompt_full_ref (the model-facing ComfyUI/MiniMax bridge prompt) MUST ALWAYS be written in English, regardless of session language and regardless of any skill saying "只输出中文" / "output must be Chinese".',
   ].join('\n')
 }

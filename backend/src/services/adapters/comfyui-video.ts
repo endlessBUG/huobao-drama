@@ -27,6 +27,7 @@ import type {
 } from './types'
 import path from 'node:path'
 import fs from 'node:fs'
+import { DATA_ROOT } from '../../utils/paths.js'
 
 /** 本机 ComfyUI input 目录（默认；可被 settings.comfyuiInputDir / 环境变量 COMFYUI_INPUT_DIR 覆盖） */
 const DEFAULT_INPUT_DIR = 'E:\\AI\\ComfyUI\\input'
@@ -59,11 +60,13 @@ async function readReferenceBytes(value: string): Promise<Uint8Array | null> {
     const b64 = raw.slice(sep + 1).replace(/\s+/g, '')
     return Buffer.from(b64, 'base64')
   }
+  // 本地 static 路径直接读磁盘（与 ffmpeg-merge 的 toAbsPath 同口径）。
+  // 旧实现 fetch('/static/'+raw) 对 DB 的 static/... 会 double-prefix 成
+  // /static/static/... → 404，且 Node fetch 对相对路径必抛，故本地文件永落不到 input/
   if (/^static\/|^\/static\//.test(raw)) {
     try {
-      const resp = await fetch('/static/' + raw.replace(/^\/?/, '').replace(/\/+$/, ''))
-      if (!resp.ok) return null
-      return new Uint8Array(await resp.arrayBuffer())
+      const rel = raw.replace(/^\/+/, '')
+      return new Uint8Array(fs.readFileSync(path.join(DATA_ROOT, rel)))
     } catch {
       return null
     }

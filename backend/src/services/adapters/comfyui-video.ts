@@ -110,6 +110,11 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
       // 但为明确起见传 []（桥内部 _wf_video 会对不足 2 张补空串）
     }
 
+    // ponytail: 首帧只 staging 一张；firstFrameUrl 缺失/空则不 staging、body 无 first_frame → bridge 回 ref2v
+    const firstFrameFile = record.firstFrameUrl
+      ? (await stageReferenceImages([record.firstFrameUrl], inputDir))[0]
+      : undefined
+
     return {
       method: 'POST',
       url: `${baseOf(config.baseUrl)}/v1/videos/generations`,
@@ -121,6 +126,7 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
         length: DEFAULT_LENGTH,
         images,
         ref_scale: 2.0,
+        first_frame: firstFrameFile,
         seed: record.seed ?? undefined,
       },
     }

@@ -817,6 +817,20 @@
                       </span>
                     </div>
                     <div class="video-param-hint">{{ t('episode.inspector.durationHint') }}</div>
+                    <div class="video-param-row video-fl2va-row" v-if="selectedVideoConfig">
+                      <label class="video-fl2va-check">
+                        <input
+                          type="checkbox"
+                          :checked="useFl2va"
+                          :disabled="selectedVideoConfig.provider !== 'comfyui'"
+                          @change="useFl2va = $event.target.checked"
+                        />
+                        <span>
+                          首帧锚定(fl2va)
+                          <small v-if="useFl2va">用场景宽镜头图作首帧锁定构图（单镜头强锁定，多镜头未验证）</small>
+                        </span>
+                      </label>
+                    </div>
                   </section>
                   <div class="video-inspector-effective">
                     {{ t('episode.inspector.effective', { model: effectiveVideoModelLabel || t('episode.vid.defaultModel'), res: episodeResolutionShort, dur: effectiveVideoDuration }) }}
@@ -2137,6 +2151,9 @@ const selectedVideoConfig = computed(() => {
 const isWan3Video = computed(() => selectedVideoConfig.value?.provider === 'aliyun'
   || bareModelName(videoModel.value).startsWith('wan3.0-video'))
 
+// ponytail: fl2va 实验性档位，仅当 provider==='comfyui' 可用；默认关闭、用户手开
+const useFl2va = ref(false)
+
 // 参考图上限（Wan 3.0 官方 10 张，其他模型 9 张），绑定素材收集与 @名字 映射统一读取
 const refImageLimit = computed(() => isWan3Video.value ? 10 : 9)
 
@@ -3285,6 +3302,12 @@ async function genVid(sb, opts = {}) {
     model: bareModelName(videoModel.value) || undefined,
     config_id: ownerConfigId(videoModelOptions.value, videoModel.value),
     reference_image_urls: referenceImages,
+    // ponytail: fl2va 首帧锚定——仅当勾选且 provider==='comfyui' 时取本分镜场景的宽镜头图；
+    // 场景无 image_url 时传 ''（adapter 空值不 staging → bridge 回 ref2v，安全）。
+    // 用 getStoryboardScene(sb) 而非 selectedSb：batch 生成时 sb 可能≠selectedSb。
+    first_frame_url: useFl2va.value && selectedVideoConfig.value?.provider === 'comfyui'
+      ? (getStoryboardScene(sb)?.image_url || getStoryboardScene(sb)?.imageUrl || '')
+      : undefined,
   }
   if (!params.prompt && !referenceImages.length) {
     toast.error(t('episode.vid.needRefOrPrompt'))
@@ -5208,6 +5231,9 @@ button.video-task-metric.on { box-shadow: 0 0 0 2px var(--accent); }
 .video-param-control { display: inline-flex; align-items: center; gap: 6px; }
 .video-param-unit { font-size: 11px; color: var(--text-2); }
 .video-duration-input { width: 56px; height: 24px; padding: 2px 6px; font-size: 12px; font-weight: 700; font-family: var(--font-mono); text-align: center; }
+.video-fl2va-row { align-items: center; gap: 8px; }
+.video-fl2va-check { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: var(--text-dim); cursor: pointer; }
+.video-fl2va-check input:disabled + span { opacity: 0.5; }
 
 /* Prod grid */
 .prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }

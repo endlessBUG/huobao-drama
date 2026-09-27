@@ -57,7 +57,7 @@ test('backend rejects unsupported providers at DB and route boundaries', () => {
 
   assert.match(ai, /officialProviders/)
   assert.match(ai, /text:\s*\[\s*'openai',\s*'gemini',\s*'volcengine'\s*\]/)
-  assert.match(ai, /image:\s*\[\s*'openai',\s*'gemini',\s*'volcengine'\s*\]/)
+  assert.match(ai, /image:\s*\[\s*'openai',\s*'gemini',\s*'volcengine',\s*'comfyui',\s*'qwen'\s*\]/)
   assert.match(ai, /video:\s*\[\s*'volcengine',\s*'minimax',\s*'aliyun',\s*'comfyui'\s*\]/)
   assert.doesNotMatch(ai, /'deepseek'/)
   assert.doesNotMatch(ai, /'ali'/)
@@ -132,7 +132,8 @@ test('removed providers no longer ship adapters or webhook routes', () => {
   const registry = read('src/services/adapters/registry.ts')
   const index = read('src/index.ts')
 
-  assert.doesNotMatch(registry, /ali-image|ali-video|vidu-video/)
+  // minimax 仅保留视频：图片 adapter 与已移除的 ali/vidu 一样不得回归
+  assert.doesNotMatch(registry, /ali-image|ali-video|vidu-video|minimax-image/)
   assert.doesNotMatch(registry, /AliImageAdapter|AliVideoAdapter|ViduVideoAdapter/)
   assert.doesNotMatch(index, /webhooks/)
 })

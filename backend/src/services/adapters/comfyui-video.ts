@@ -25,79 +25,13 @@ import type {
   VideoGenResponse,
   VideoPollResponse,
 } from './types'
-import path from 'node:path'
-import fs from 'node:fs'
-import { DATA_ROOT } from '../../utils/paths.js'
+import { baseOf, stageReferenceImages, toInputDir } from './comfyui-common'
 
-/** 本机 ComfyUI input 目录（默认；可被 settings.comfyuiInputDir / 环境变量 COMFYUI_INPUT_DIR 覆盖） */
-const DEFAULT_INPUT_DIR = 'E:\\AI\\ComfyUI\\input'
 // 工作流本身动态（JZL ref2v 支持 ref_image_0~8 / Autogrow max=9），不人为截断
 const MAX_IMAGES = 9
 const DEFAULT_SIZE = '576x320'
 const FPS = 24
 const DEFAULT_LENGTH = 124
-
-function toInputDir(config: AIConfig): string {
-  const envDir = process.env.COMFYUI_INPUT_DIR?.trim()
-  const settingDir = (config as any).comfyuiInputDir?.trim()
-  return (settingDir || envDir || DEFAULT_INPUT_DIR).replace(/^[/\\]+|[/\\]+$/, '')
-}
-
-function guessExtension(value: string): string {
-  const base = value.split('?')[0].split('#')[0].replace(/^data:[^,]+/, '')
-  const name = (base.split(/[/\\]/).pop() || base) || ''
-  const dot = name.lastIndexOf('.')
-  return dot > 0 && dot < name.length - 1 ? name.slice(dot).toLowerCase() : '.png'
-}
-
-/** data URL / 本地 static 路径 / 远程 URL 统一读成字节 */
-async function readReferenceBytes(value: string): Promise<Uint8Array | null> {
-  const raw = value.trim()
-  if (!raw) return null
-  if (raw.startsWith('data:')) {
-    const sep = raw.indexOf(',')
-    if (sep < 0) return null
-    const b64 = raw.slice(sep + 1).replace(/\s+/g, '')
-    return Buffer.from(b64, 'base64')
-  }
-  // 本地 static 路径直接读磁盘（与 ffmpeg-merge 的 toAbsPath 同口径）。
-  // 旧实现 fetch('/static/'+raw) 对 DB 的 static/... 会 double-prefix 成
-  // /static/static/... → 404，且 Node fetch 对相对路径必抛，故本地文件永落不到 input/
-  if (/^static\/|^\/static\//.test(raw)) {
-    try {
-      const rel = raw.replace(/^\/+/, '')
-      return new Uint8Array(fs.readFileSync(path.join(DATA_ROOT, rel)))
-    } catch {
-      return null
-    }
-  }
-  try {
-    const resp = await fetch(raw)
-    if (!resp.ok) return null
-    return new Uint8Array(await resp.arrayBuffer())
-  } catch {
-    return null
-  }
-}
-
-/** 把参考图落到 ComfyUI input/ 目录，返回新文件名（最多 2 张，其余被 ref2v 忽略） */
-async function stageReferenceImages(images: string[] | null | undefined, inputDir: string): Promise<string[]> {
-  const out: string[] = []
-  for (const v of (images || []).slice(0, MAX_IMAGES)) {
-    const bytes = await readReferenceBytes(String(v || ''))
-    if (!bytes) continue
-    const fname = `huobao_ref_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${guessExtension(v)}`
-    fs.mkdirSync(inputDir, { recursive: true })
-    fs.writeFileSync(path.join(inputDir, fname), bytes)
-    out.push(fname)
-  }
-  return out
-}
-
-function baseOf(baseUrl: string): string {
-  // 容忍配置成 http://127.0.0.1:6006 或 http://127.0.0.1:6006/v1（OpenAI 风格带 /v1）
-  return (baseUrl || '').replace(/\/v1?$/, '').replace(/\/+$/, '')
-}
 
 export class ComfyUIVideoAdapter implements VideoProviderAdapter {
   provider = 'comfyui'
@@ -107,7 +41,7 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
     if (!prompt) throw new Error('ComfyUI 视频生成要求必须提供提示词（prompt）')
 
     const inputDir = toInputDir(config)
-    const images = await stageReferenceImages(parseUrlArray(record.referenceImageUrls), inputDir)
+    const images = await stageReferenceImages(parseUrlArray(record.referenceImageUrls), inputDir, MAX_IMAGES)
     if (images.length === 0) {
       // 桥会把 images 填默认 qingyi.jpg / xueqi.jpeg；此处显式传空即可，
       // 但为明确起见传 []（桥内部 _wf_video 会对不足 2 张补空串）
@@ -115,7 +49,7 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
 
     // ponytail: 首帧只 staging 一张；firstFrameUrl 缺失/空则不 staging、body 无 first_frame → bridge 回 ref2v
     const firstFrameFile = record.firstFrameUrl
-      ? (await stageReferenceImages([record.firstFrameUrl], inputDir))[0]
+      ? (await stageReferenceImages([record.firstFrameUrl], inputDir, 1))[0]
       : undefined
 
     return {

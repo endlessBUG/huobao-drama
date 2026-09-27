@@ -107,6 +107,18 @@ function buildProbe(serviceType: string, provider: string, baseUrl: string, mode
     }
   }
 
+  if (p === 'comfyui') {
+    // 本机 ComfyUI 桥暴露的是 OpenAI 形状路由（/v1/models 等），且不校验鉴权。
+    // 不加这个分支会落到下面的通用兜底 GET {baseUrl}/{model} → 404，
+    // 设置页点"测试"会误报"端点未按预期响应"（图片/视频两个 comfyui 配置都中招）。
+    return {
+      method: 'GET',
+      url: joinProviderUrl(baseUrl, '/v1', '/models'),
+      headers: {},
+      body: undefined,
+    }
+  }
+
   return {
     method: 'GET',
     url: joinProviderUrl(baseUrl, '', m ? `/${m}` : '/'),

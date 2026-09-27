@@ -10,7 +10,7 @@ export interface ImageProviderAdapter {
    * @param config AI 配置 { baseUrl, apiKey, model }
    * @param record 图片生成记录
    */
-  buildGenerateRequest(config: AIConfig, record: ImageGenerationRecord): ProviderRequest
+  buildGenerateRequest(config: AIConfig, record: ImageGenerationRecord): ProviderRequest | Promise<ProviderRequest>
 
   /**
    * 解析生成响应，判断是同步还是异步
@@ -79,6 +79,8 @@ export interface AIConfig {
   baseUrl: string
   apiKey: string
   model: string
+  // 本机 ComfyUI 专用：input 目录（落盘参考图）
+  comfyuiInputDir?: string
 }
 
 export interface ImageGenerationRecord {

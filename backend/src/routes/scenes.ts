@@ -108,22 +108,24 @@ app.post('/:id/generate-grid-image', async (c) => {
   if (!ep) return badRequest(c, '剧集不存在')
 
   const stylePrompt = await getDramaStylePrompt(scene.dramaId)
-  // ponytail: 九宫格 prompt 用 gridPrompt（若 agent 已产）否则固定 9 视角模板（恒英文、无人物）；风格前缀由 getDramaStylePrompt 拼
-  const gridBase = scene.gridPrompt || ''
+  // ponytail: 九宫格恒无人物（ref2v 场景参考图，人物由角色参考位补），恒用「3x3 固定 9 视角 NO PEOPLE」英文模板。
+  // 风格仅取 stylePrompt，环境只补 lighting —— 绝不嵌入 finalPrompt：它是单一固定机位描述且自带风格前缀，
+  // 拼进会把主图提示词整体嵌进九宫格 → 两图提示词看起来一模一样（用户报「和主图一样」的根因）。
   const fallback = '3x3 grid, 9 views of the SAME ' + (scene.location || '') + ', NO PEOPLE: ' +
     "top-left front view; top-middle left 45-degree view; top-right right 45-degree view; " +
     "middle-left back view; center bird's-eye overhead; middle-right low floor-level view; " +
     "bottom-left left wall perspective; bottom-right right wall perspective; " +
     "bottom-center close-up of main prop or entrance; consistent lighting, style and no people in any panel"
-  const prompt = [
-    stylePrompt || '',
-    gridBase || fallback,
-    scene.prompt || '',
-    scene.lighting || '',
-  ].filter(Boolean).join(', ')
+  // ponytail: 始终重算清洁 prompt 并落盘，不用旧的 scene.gridPrompt ——
+  // 旧的 grid_prompt 可能是上一版回退拼进去 finalPrompt 的脏值，复用会把脏值一直保留。
+  const prompt = [stylePrompt || '', fallback, scene.lighting || '']
+    .filter(Boolean)
+    .join(', ')
   try {
     logTaskStart('SceneImage', 'grid-generate', { sceneId: id, episodeId: ep.id, dramaId: scene.dramaId, location: scene.location })
-    await db.update(schema.scenes).set({ status: 'processing', updatedAt: now() }).where(eq(schema.scenes.id, id))
+    // ponytail: 把实际用于生成九宫格的 prompt 落 grid_prompt，前端详情页只读展示；
+    // 之前只算不存 → 九宫格提示词恒为空。
+    await db.update(schema.scenes).set({ status: 'processing', updatedAt: now(), gridPrompt: prompt }).where(eq(schema.scenes.id, id))
     const genId = await generateImage({
       sceneId: id,
       dramaId: scene.dramaId,

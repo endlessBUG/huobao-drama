@@ -273,10 +273,6 @@
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                   {{ t('episode.prod.batchChar') }}
                 </button>
-                <button class="btn btn-sm asset-btn-batch" @click="batchSceneImages">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                  {{ t('episode.prod.batchScene') }}
-                </button>
                 <button class="btn btn-sm asset-btn-batch" @click="batchPropImages">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                   {{ t('episode.prod.batchProp') }}
@@ -346,7 +342,7 @@
                           <span>{{ t('episode.asset.styling') }}{{ characterStylingValue(c) }}</span>
                         </div>
                       </div>
-                      <button class="btn btn-sm character-gen-btn" :disabled="isPendingCharImage(c.id)" @click.stop="genCharImg(c.id)">
+                      <button class="btn btn-sm character-gen-btn" :disabled="isPendingCharImage(c.id) || !hasCharRefImage(c)" :title="hasCharRefImage(c) ? '' : t('episode.asset.needRefImage')" @click.stop="genCharImg(c.id)">
                         <Loader2 v-if="isPendingCharImage(c.id)" :size="11" class="animate-spin" />
                         {{ (c.image_url || c.imageUrl) ? t('episode.asset.regen') : (isPendingCharImage(c.id) ? t('episode.asset.generating') : t('episode.asset.generate')) }}
                       </button>
@@ -1116,7 +1112,168 @@
           </header>
 
           <div class="dialog-body asset-detail-body">
-            <div class="asset-detail-shell">
+            <div
+              v-if="assetDetail.type === 'scene'"
+              class="asset-detail-scene-grid"
+            >
+              <div class="asset-detail-meta-row asset-detail-meta-row--scene">
+                <div class="asset-detail-meta-item">
+                  <span>{{ t('episode.asset.kindLabel') }}</span>
+                  <strong>{{ t('episode.asset.sceneImage') }}</strong>
+                </div>
+                <div class="asset-detail-meta-item">
+                  <span>{{ t('episode.asset.timeLabel') }}</span>
+                  <strong>{{ assetDetail.item.time || t('episode.asset.noTime') }}</strong>
+                </div>
+              </div>
+
+              <!-- 行1：场景描述 + 场景光影 -->
+              <label class="asset-detail-edit-field">
+                <span>{{ t('episode.asset.sceneDescField') }}</span>
+                <textarea
+                  v-model="assetDetailDraft.prompt"
+                  class="textarea asset-detail-textarea"
+                  rows="5"
+                  :placeholder="t('episode.asset.sceneDescPlaceholder')"
+                />
+              </label>
+              <label class="asset-detail-edit-field">
+                <span>{{ t('episode.asset.sceneLightField') }}</span>
+                <textarea
+                  v-model="assetDetailDraft.lighting"
+                  class="textarea asset-detail-textarea"
+                  rows="5"
+                  :placeholder="t('episode.asset.sceneLightPlaceholder')"
+                />
+              </label>
+
+              <!-- 行2：主图 + 九宫格 -->
+              <button
+                v-if="sceneWideSrc(assetDetail.item)"
+                type="button"
+                class="asset-detail-media-frame"
+                :title="t('episode.asset.sceneImage')"
+                @click.stop="openImageViewer(sceneWideSrc(assetDetail.item), t('episode.asset.sceneImage') + ' · 宽镜头')"
+              >
+                <img
+                  :src="thumbOf(sceneWideSrc(assetDetail.item))"
+                  class="previewable-image"
+                  @error="thumbFallback($event, sceneWideSrc(assetDetail.item))"
+                />
+                <span class="asset-detail-frame-label">{{ t('episode.asset.sceneImage') }}</span>
+              </button>
+              <button
+                v-else
+                class="asset-detail-media-frame asset-detail-media-frame-empty"
+              >
+                <span class="asset-detail-media-empty">{{ t('episode.asset.sceneImage') }}</span>
+              </button>
+
+              <button
+                v-if="sceneGridSrc(assetDetail.item)"
+                type="button"
+                class="asset-detail-media-frame asset-detail-media-frame-grid"
+                :title="t('episode.asset.sceneImage') + ' · 九宫格'"
+                @click.stop="openImageViewer(sceneGridSrc(assetDetail.item), t('episode.asset.sceneImage') + ' · 九宫格')"
+              >
+                <img
+                  :src="thumbOf(sceneGridSrc(assetDetail.item))"
+                  class="previewable-image"
+                  @error="thumbFallback($event, sceneGridSrc(assetDetail.item))"
+                />
+                <span class="asset-detail-frame-label">九宫格</span>
+              </button>
+              <button
+                v-else
+                class="asset-detail-media-frame asset-detail-media-frame-empty"
+              >
+                <span class="asset-detail-media-empty">九宫格</span>
+              </button>
+
+              <!-- 行3：最终提示词 + 九宫格提示词 -->
+              <section class="asset-detail-prompt-panel">
+                <div class="asset-detail-section-title">
+                  <span>{{ t('episode.asset.finalPromptFixed') }}</span>
+                  <div class="asset-detail-prompt-head-actions">
+                    <button
+                      class="btn btn-sm"
+                      :disabled="isGeneratingPrompt(assetDetail.type, assetDetail.item.id) || isAssetImagePending(assetDetail.type, assetDetail.item.id)"
+                      @click="genAssetFinalPrompt"
+                    >
+                      <Loader2 v-if="isGeneratingPrompt(assetDetail.type, assetDetail.item.id)" :size="11" class="animate-spin" />
+                      {{ isGeneratingPrompt(assetDetail.type, assetDetail.item.id) ? t('episode.asset.generating') : (assetFinalPrompt ? t('episode.asset.regenPrompt') : t('episode.asset.genPrompt')) }}
+                    </button>
+                    <span :class="['asset-detail-state', assetFinalPrompt && 'is-ready']">
+                      {{ assetFinalPrompt ? t('episode.asset.ready') : t('episode.asset.todo') }}
+                    </span>
+                    <button
+                      v-if="assetPromptDraft"
+                      class="btn btn-ghost btn-sm asset-detail-copy-btn"
+                      @click="copyAssetFinalPrompt"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      {{ t('common.copy') }}
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  :value="assetPromptDraft"
+                  @input="onAssetPromptInput"
+                  class="textarea asset-detail-prompt-textarea"
+                  rows="3"
+                  :placeholder="t('episode.asset.promptPlaceholderScene')"
+                />
+                <p class="asset-detail-prompt-hint">{{ t('episode.asset.promptHintScene') }}</p>
+              </section>
+
+              <section
+                class="asset-detail-prompt-panel"
+                v-if="sceneGridSrc(assetDetail.item) || assetGridPrompt"
+              >
+                <div class="asset-detail-section-title">
+                  <span>{{ t('episode.asset.gridPromptTitle') }}</span>
+                  <div class="asset-detail-prompt-head-actions">
+                    <button
+                      class="btn btn-sm"
+                      :disabled="isPendingSceneGridImage(assetDetail.item.id)"
+                      @click="genSceneGridImg(assetDetail.item.id)"
+                    >
+                      <Loader2 v-if="isPendingSceneGridImage(assetDetail.item.id)" :size="11" class="animate-spin" />
+                      {{ isPendingSceneGridImage(assetDetail.item.id)
+                         ? t('episode.asset.generating')
+                         : sceneGridSrc(assetDetail.item)
+                            ? t('episode.asset.regenScene') + ' · 九宫格'
+                            : t('episode.asset.genScene') + ' · 九宫格' }}
+                    </button>
+                    <span :class="['asset-detail-state', assetGridPrompt && 'is-ready']">
+                      {{ assetGridPrompt ? t('episode.asset.ready') : t('episode.asset.todo') }}
+                    </span>
+                    <button
+                      v-if="assetGridPrompt"
+                      class="btn btn-ghost btn-sm asset-detail-copy-btn"
+                      @click="copyText(assetGridPrompt)"
+                      :title="t('common.copy')"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      {{ t('common.copy') }}
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  :value="assetGridPrompt || ''"
+                  readonly
+                  class="textarea asset-detail-prompt-textarea"
+                  rows="3"
+                  :placeholder="t('episode.asset.gridPromptPlaceholder')"
+                />
+                <p class="asset-detail-prompt-hint">{{ t('episode.asset.gridPromptHint') }}</p>
+              </section>
+            </div>
+
+            <div
+              v-else
+              class="asset-detail-shell"
+            >
               <aside class="asset-detail-preview-panel">
                 <div class="asset-detail-section-title">
                   <span>{{ t('episode.asset.visualPreview') }}</span>
@@ -1125,24 +1282,155 @@
                   </span>
                 </div>
 
+                <div
+                  v-if="assetDetail.type === 'scene' && (sceneWideSrc(assetDetail.item) || sceneGridSrc(assetDetail.item))"
+                  class="asset-detail-media-grid"
+                >
+                  <button
+                    v-if="sceneWideSrc(assetDetail.item)"
+                    type="button"
+                    class="asset-detail-media-frame"
+                    :title="t('episode.asset.sceneImage')"
+                    @click.stop="openImageViewer(sceneWideSrc(assetDetail.item), t('episode.asset.sceneImage') + ' · 宽镜头')"
+                  >
+                    <img
+                      :src="thumbOf(sceneWideSrc(assetDetail.item))"
+                      class="previewable-image"
+                      @error="thumbFallback($event, sceneWideSrc(assetDetail.item))"
+                    />
+                    <span class="asset-detail-frame-label">{{ t('episode.asset.sceneImage') }}</span>
+                  </button>
+
+                  <button
+                    v-if="sceneGridSrc(assetDetail.item)"
+                    type="button"
+                    class="asset-detail-media-frame asset-detail-media-frame-grid"
+                    :title="t('episode.asset.sceneImage') + ' · 九宫格'"
+                    @click.stop="openImageViewer(sceneGridSrc(assetDetail.item), t('episode.asset.sceneImage') + ' · 九宫格')"
+                  >
+                    <img
+                      :src="thumbOf(sceneGridSrc(assetDetail.item))"
+                      class="previewable-image"
+                      @error="thumbFallback($event, sceneGridSrc(assetDetail.item))"
+                    />
+                    <span class="asset-detail-frame-label">九宫格</span>
+                  </button>
+
+                  <!-- 最终提示词（对应宽镜头/场景图） -->
+                  <section class="asset-detail-prompt-panel">
+                    <div class="asset-detail-section-title">
+                      <span>{{ t('episode.asset.finalPromptFixed') }}</span>
+                      <div class="asset-detail-prompt-head-actions">
+                        <button
+                          class="btn btn-sm"
+                          :disabled="isGeneratingPrompt(assetDetail.type, assetDetail.item.id) || isAssetImagePending(assetDetail.type, assetDetail.item.id)"
+                          @click="genAssetFinalPrompt"
+                        >
+                          <Loader2 v-if="isGeneratingPrompt(assetDetail.type, assetDetail.item.id)" :size="11" class="animate-spin" />
+                          {{ isGeneratingPrompt(assetDetail.type, assetDetail.item.id) ? t('episode.asset.generating') : (assetFinalPrompt ? t('episode.asset.regenPrompt') : t('episode.asset.genPrompt')) }}
+                        </button>
+                        <span :class="['asset-detail-state', assetFinalPrompt && 'is-ready']">
+                          {{ assetFinalPrompt ? t('episode.asset.ready') : t('episode.asset.todo') }}
+                        </span>
+                        <button
+                          v-if="assetPromptDraft"
+                          class="btn btn-ghost btn-sm asset-detail-copy-btn"
+                          @click="copyAssetFinalPrompt"
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                          {{ t('common.copy') }}
+                        </button>
+                      </div>
+                    </div>
+                    <textarea
+                      :value="assetPromptDraft"
+                      @input="onAssetPromptInput"
+                      class="textarea asset-detail-prompt-textarea"
+                      rows="5"
+                      :placeholder="t('episode.asset.promptPlaceholderScene')"
+                    />
+                    <p class="asset-detail-prompt-hint">{{ t('episode.asset.promptHintScene') }}</p>
+                  </section>
+
+
+                  <!-- 九宫格提示词（对应九宫格） -->
+                  <section
+                    v-if="assetDetail.type === 'scene' && (sceneGridSrc(assetDetail.item) || assetGridPrompt)"
+                    class="asset-detail-prompt-panel"
+                  >
+                    <div class="asset-detail-section-title">
+                      <span>{{ t('episode.asset.gridPromptTitle') }}</span>
+                      <span :class="['asset-detail-state', assetGridPrompt && 'is-ready']">
+                        {{ assetGridPrompt ? t('episode.asset.ready') : t('episode.asset.todo') }}
+                      </span>
+                      <button
+                        v-if="assetGridPrompt"
+                        class="btn btn-ghost btn-sm asset-detail-copy-btn"
+                        @click="copyText(assetGridPrompt)"
+                        :title="t('common.copy')"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        {{ t('common.copy') }}
+                      </button>
+                    </div>
+                    <textarea
+                      :value="assetGridPrompt || ''"
+                      readonly
+                      class="textarea asset-detail-prompt-textarea"
+                      rows="3"
+                      :placeholder="t('episode.asset.gridPromptPlaceholder')"
+                    />
+                    <p class="asset-detail-prompt-hint">{{ t('episode.asset.gridPromptHint') }}</p>
+                  </section>
+                </div>
+                <div v-else-if="isCharSheet" class="asset-detail-media-grid">
+                  <button
+                    type="button"
+                    class="asset-detail-media-frame asset-detail-media-frame-char"
+                    @click.stop="openImageViewer(sceneImageSrc(assetDetail.item), assetDetailImageTitle(assetDetail) + ' · ' + t('episode.asset.charFace'))"
+                  >
+                    <img
+                      :src="thumbOf(sceneImageSrc(assetDetail.item))"
+                      class="previewable-image"
+                      @load="onCharSheetLoad"
+                      @error="thumbFallback($event, sceneImageSrc(assetDetail.item))"
+                    />
+                    <span class="asset-detail-frame-label">{{ t('episode.asset.charFace') }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="asset-detail-media-frame asset-detail-media-frame-turn"
+                    @click.stop="openImageViewer(sceneImageSrc(assetDetail.item), assetDetailImageTitle(assetDetail) + ' · ' + t('episode.asset.charTurnaround'))"
+                  >
+                    <img
+                      :src="thumbOf(sceneImageSrc(assetDetail.item))"
+                      class="previewable-image"
+                      @load="onCharSheetLoad"
+                      @error="thumbFallback($event, sceneImageSrc(assetDetail.item))"
+                    />
+                    <span class="asset-detail-frame-label">{{ t('episode.asset.charTurnaround') }}</span>
+                  </button>
+                </div>
                 <button
+                  v-else-if="sceneImageSrc(assetDetail.item)"
                   type="button"
                   class="asset-detail-media-frame"
                   :disabled="!sceneImageSrc(assetDetail.item)"
                   @click.stop="openImageViewer(sceneImageSrc(assetDetail.item), assetDetailImageTitle(assetDetail))"
                 >
                   <img
-                    v-if="sceneImageSrc(assetDetail.item)"
                     :src="thumbOf(sceneImageSrc(assetDetail.item))"
                     class="previewable-image"
                     @error="thumbFallback($event, sceneImageSrc(assetDetail.item))"
                   />
-                  <span v-else class="asset-detail-media-empty">
+                </button>
+                <div v-else class="asset-detail-media-frame asset-detail-media-frame-empty">
+                  <span class="asset-detail-media-empty">
                     <svg v-if="assetDetail.type === 'character'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    <svg v-else-if="assetDetail.type === 'prop'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    <svg v-else-if="assetDetail.type === 'prop'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7 4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
                     <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                   </span>
-                </button>
+                </div>
 
                 <div class="asset-detail-meta-row">
                   <div class="asset-detail-meta-item">
@@ -1216,9 +1504,9 @@
               </section>
             </div>
 
-            <section class="asset-detail-prompt-panel">
+            <section v-if="assetDetail.type !== 'scene'" class="asset-detail-prompt-panel">
               <div class="asset-detail-section-title">
-                <span>{{ assetDetail.type === 'character' ? t('episode.asset.finalPromptTurnaround') : assetDetail.type === 'scene' ? t('episode.asset.finalPromptFixed') : t('episode.asset.finalPromptWhiteBg') }}</span>
+                <span>{{ assetDetail.type === 'character' ? t('episode.asset.finalPromptTurnaround') : t('episode.asset.finalPromptWhiteBg') }}</span>
                 <div class="asset-detail-prompt-head-actions">
                   <button
                     class="btn btn-sm"
@@ -1260,6 +1548,7 @@
                     : t('episode.asset.promptHintProp') }}
               </p>
             </section>
+
           </div>
 
           <footer class="dialog-foot asset-detail-foot">
@@ -1280,7 +1569,8 @@
               <button
                 v-if="assetDetail.type === 'character'"
                 class="btn"
-                :disabled="isPendingCharImage(assetDetail.item.id)"
+                :disabled="isPendingCharImage(assetDetail.item.id) || !hasCharRefImage(assetDetail.item)"
+                :title="hasCharRefImage(assetDetail.item) ? '' : t('episode.asset.needRefImage')"
                 @click="genCharImg(assetDetail.item.id)"
               >
                 {{ sceneImageSrc(assetDetail.item) ? t('episode.asset.regenPortrait') : (isPendingCharImage(assetDetail.item.id) ? t('episode.asset.generating') : t('episode.asset.genPortrait')) }}
@@ -1300,17 +1590,6 @@
                 @click="genPropImg(assetDetail.item.id)"
               >
                 {{ sceneImageSrc(assetDetail.item) ? t('episode.asset.regenProp') : (isPendingPropImage(assetDetail.item.id) ? t('episode.asset.generating') : t('episode.asset.genProp')) }}
-              </button>
-              <button
-                v-if="assetDetail.type === 'scene'"
-                class="btn btn-sm"
-                :disabled="isPendingSceneGridImage(assetDetail.item.id)"
-                @click.stop="genSceneGridImg(assetDetail.item.id)"
-              >
-                <Loader2 v-if="isPendingSceneGridImage(assetDetail.item.id)" :size="11" class="animate-spin" />
-                {{ (assetDetail.item.gridImageUrl || assetDetail.item.grid_image_url)
-                   ? t('episode.asset.regenScene') + ' · 九宫格'
-                   : t('episode.asset.genScene') + ' · 九宫格' }}
               </button>
               <button class="btn btn-primary" :disabled="savingAssetDetail" @click="saveAssetDetail">
                 <Loader2 v-if="savingAssetDetail" :size="12" class="animate-spin" />
@@ -1671,6 +1950,23 @@ const assetDetailDraft = ref({ appearance: '', styling: '', prompt: '', lighting
 const assetPromptDraft = ref('')
 const assetPromptDirty = ref(false)
 const savingAssetDetail = ref(false)
+// ponytail: 角色形象图是一张 1920x1080 的 sheet（左正脸特写 + 右正面/90°侧面/背面，构图由
+// backend/workspace/skills/prompt-generator/character-prompt/SKILL.md 钉死），详情页拆成
+// 「角色」「三视图」两格各取一半。只有横图才拆——手动上传的竖构图拆开会得到两张一样的。
+// 尺寸靠 img @load 现取，不预读不引库。
+const charSheetWide = ref(false)
+function onCharSheetLoad(e) {
+  const el = e?.target
+  charSheetWide.value = !!el && el.naturalWidth > el.naturalHeight
+}
+const isCharSheet = computed(() =>
+  assetDetail.value.type === 'character' && !!sceneImageSrc(assetDetail.value.item) && charSheetWide.value)
+
+// 角色三视图走 Qwen-Image-2.1 参考图驱动：参考图是形象基准，没上传就没有基准
+// → 生成按钮置灰并提示上传（后端不再重复校验，直接调 API 会以 LoadImage 报错收场）。
+function hasCharRefImage(item) {
+  return !!(item?.image_url || item?.imageUrl)
+}
 
 function isPendingCharImage(id) {
   return pendingCharImageIds.value.includes(id)
@@ -1688,6 +1984,7 @@ function closeImageViewer() {
 function openAssetDetail(type, item) {
   if (!item) return
   assetDetail.value = { open: true, type, item }
+  charSheetWide.value = false
   assetDetailDraft.value = {
     appearance: item.appearance || '',
     styling: item.styling || '',
@@ -1736,12 +2033,17 @@ async function saveAssetCreate() {
   assetCreate.value.saving = true
   try {
     const base = { drama_id: dramaId, episode_id: epId.value }
+    let newSceneId
     if (type === 'character') await characterAPI.create({ ...base, name: d.name, role: d.role, appearance: d.appearance, styling: d.styling })
-    else if (type === 'scene') await sceneAPI.create({ ...base, location: d.location, time: d.time, prompt: d.prompt, lighting: d.lighting })
-    else await propAPI.create({ ...base, name: d.name, type: d.type, description: d.description })
+    else if (type === 'scene') {
+      const created = await sceneAPI.create({ ...base, location: d.location, time: d.time, prompt: d.prompt, lighting: d.lighting })
+      newSceneId = created?.id
+    } else await propAPI.create({ ...base, name: d.name, type: d.type, description: d.description })
     toast.success(t('episode.create.created', { type: assetCreateTypeLabel.value }))
     assetCreate.value.open = false
     await refresh()
+    // ponytail: 新建场景自动开始宽图+九宫格；生成是长任务，用 void 异步触发不阻塞创建
+    if (newSceneId && type === 'scene') void genSceneImg(newSceneId)
   } catch (e) {
     toastError(e)
   } finally {
@@ -1785,6 +2087,10 @@ function onAssetPromptInput(event) {
 const assetFinalPrompt = computed(() => {
   const item = assetDetail.value?.item
   return item?.final_prompt || item?.finalPrompt || ''
+})
+const assetGridPrompt = computed(() => {
+  const item = assetDetail.value?.item
+  return item?.grid_prompt || item?.gridPrompt || ''
 })
 
 /** 把生成好的最终提示词同步到列表项与弹窗项 */
@@ -1924,6 +2230,20 @@ function assetImageSrc(item) {
 // ponytail: 场景卡/详情主预览九宫格优先（3x3 构图锚点），无则回退宽镜头；角色/道具不动
 function sceneImageSrc(item) {
   const raw = item?.gridImageUrl || item?.grid_image_url || item?.image_url || item?.imageUrl || ''
+  if (!raw) return ''
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) return raw
+  return `/${raw}`
+}
+
+// ponytail: 宽镜头/九宫格分别取，便于详情页并列展示所有场景图
+function sceneWideSrc(item) {
+  const raw = item?.image_url || item?.imageUrl || ''
+  if (!raw) return ''
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) return raw
+  return `/${raw}`
+}
+function sceneGridSrc(item) {
+  const raw = item?.gridImageUrl || item?.grid_image_url || ''
   if (!raw) return ''
   if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) return raw
   return `/${raw}`
@@ -2243,6 +2563,37 @@ const videoModelMultiCfg = computed(() => hasMultiConfigs(videoModelOptions.valu
 
 // Production step helpers
 // ========== 任务列表面板 ==========
+// ponytail: 视频生产面板独立轮询。drawer 关闭时无人刷 sbs(外部生成场景), 此处补齐
+// sys_task 与 sbs 同步, 让外部/脚本完成的视频落到列表与播放器。
+let videoPanelPoll = null
+
+function videoPanelPollIdle() {
+  const processing = genTasks.value.some(t => t.type === 'video' && t.status === 'processing')
+  return !processing && pendingVideoIds.value.length === 0
+}
+
+async function tickVideoPanelPoll() {
+  await loadGenTasks()   // 先填 genTasks, 再据此判断空闲
+  await refresh()        // 刷 sbs, 落到 video_url
+  if (videoPanelPollIdle()) stopVideoPanelPoll()
+}
+
+function startVideoPanelPoll() {
+  stopVideoPanelPoll()
+  tickVideoPanelPoll().catch(() => {})
+  videoPanelPoll = setInterval(() => { tickVideoPanelPoll().catch(() => {}) }, 4000)
+}
+
+function stopVideoPanelPoll() {
+  if (videoPanelPoll) { clearInterval(videoPanelPoll); videoPanelPoll = null }
+}
+
+const videoPanelActive = computed(() => prodTab.value === 'videos' && sbs.value.length > 0)
+watch(videoPanelActive, active => {
+  stopVideoPanelPoll()
+  if (active) startVideoPanelPoll()
+})
+
 async function loadGenTasks() {
   if (!epId.value) return
   try {
@@ -2675,6 +3026,15 @@ async function refresh() {
       } else {
         selectedSb.value = null
       }
+      // ponytail: 刷新后同步打开的资产详情项。上传/生图后 refresh 拿到全新对象，
+      // 而 assetDetail.item 仍是弹窗打开时捕获的旧引用（会一直显示旧图，
+      // 如生成时是三维图、上传后本应换成肖像）。按 id 重指向，
+      // 不动用户正在编辑的 assetDetailDraft / assetPromptDraft。
+      if (assetDetail.value.open && assetDetail.value.item) {
+        const lists = { character: chars.value, scene: scenes.value, prop: propItems.value }
+        const fresh = lists[assetDetail.value.type]?.find(x => x.id === assetDetail.value.item.id)
+        if (fresh) Object.assign(assetDetail.value.item, fresh)
+      }
 
       const epHasContent = !!(episode.value?.content)
       const epHasScript = !!(episode.value?.script_content || episode.value?.scriptContent)
@@ -2924,10 +3284,14 @@ async function genCharImg(id) {
     await characterAPI.generateImage(id, epId.value, bareModelName(imageModel.value) || undefined, ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId())
     toast.success(t('episode.image.generatingChar'))
     await refresh()
+    patchOpenAssetImageItem(id)
     watchAsyncResult(() => {
       const char = chars.value.find(c => c.id === id)
       const done = !!(char?.image_url || char?.imageUrl)
-      if (done) pendingCharImageIds.value = pendingCharImageIds.value.filter(item => item !== id)
+      if (done) {
+        patchOpenAssetImageItem(id)
+        pendingCharImageIds.value = pendingCharImageIds.value.filter(item => item !== id)
+      }
       return done
     })
   } catch (e) {
@@ -2945,7 +3309,10 @@ function batchCharImages() {
     watchAsyncResult(() => ids.every(id => {
       const char = chars.value.find(c => c.id === id)
       const done = !!(char?.image_url || char?.imageUrl)
-      if (done) pendingCharImageIds.value = pendingCharImageIds.value.filter(item => item !== id)
+      if (done) {
+        patchOpenAssetImageItem(id)
+        pendingCharImageIds.value = pendingCharImageIds.value.filter(item => item !== id)
+      }
       return done
     }), 36)
   }).catch(e => {
@@ -2953,9 +3320,11 @@ function batchCharImages() {
     toastError(e)
   })
 }
+// ponytail: 重绘场景 = 宽图+九宫格 一起重绘（宽图用 final_prompt，九宫格用 grid_prompt，无则后端 fallback）
 async function genSceneImg(id) {
   try {
     if (!isPendingSceneImage(id)) pendingSceneImageIds.value.push(id)
+    if (!isPendingSceneGridImage(id)) pendingSceneGridImageIds.value.push(id)
     const scene = scenes.value.find(s => s.id === id)
     if (scene && !(scene.final_prompt || scene.finalPrompt)) {
       toast.info(t('episode.asset.generatingPrompt'))
@@ -2963,23 +3332,55 @@ async function genSceneImg(id) {
         await ensureAssetPrompt('scene', id)
       } catch {} // 提示词生成失败不阻断：后端生图前会再兜底生成或回退本地拼接
     }
-    await sceneAPI.generateImage(id, epId.value, bareModelName(imageModel.value) || undefined, ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId())
+    const model = bareModelName(imageModel.value) || undefined
+    const cfg = ownerConfigId(imageModelOptions.value, imageModel.value)
+    const tm = chatModelOverride()
+    const tc = chatConfigId()
+    await sceneAPI.generateImage(id, epId.value, model, cfg, tm, tc)
+    await sceneAPI.generateGridImage(id, epId.value, model, cfg, tm, tc)
     toast.success(t('episode.image.generatingScene'))
     await refresh()
+    patchOpenAssetImageItem(id)
     watchAsyncResult(() => {
-      const scene = scenes.value.find(s => s.id === id)
-      const done = !!(scene?.image_url || scene?.imageUrl)
-      if (done) pendingSceneImageIds.value = pendingSceneImageIds.value.filter(item => item !== id)
-      return done
+      const sc = scenes.value.find(s => s.id === id)
+      const wideDone = !!(sc?.image_url || sc?.imageUrl)
+      const gridDone = !!(sc?.gridImageUrl || sc?.grid_image_url)
+      if (wideDone && gridDone) {
+        pendingSceneImageIds.value = pendingSceneImageIds.value.filter(item => item !== id)
+        pendingSceneGridImageIds.value = pendingSceneGridImageIds.value.filter(x => x !== id)
+        patchOpenAssetImageItem(id)
+      }
+      return wideDone && gridDone
     })
   } catch (e) {
     pendingSceneImageIds.value = pendingSceneImageIds.value.filter(item => item !== id)
+    pendingSceneGridImageIds.value = pendingSceneGridImageIds.value.filter(x => x !== id)
     toastError(e)
   }
 }
 
 function isPendingSceneGridImage(id) {
   return pendingSceneGridImageIds.value.includes(id)
+}
+// ponytail: 刷新当前打开的资产详情，同步九宫格/宽镜头图与 grid_prompt（生图异步落地）
+function patchOpenAssetImageItem(id) {
+  const detail = assetDetail.value
+  if (!detail.open || !detail.item?.id || detail.item.id !== id) return
+  const list = detail.type === 'scene' ? scenes.value : detail.type === 'character' ? chars.value : propItems.value
+  const item = list.find(x => x.id === id)
+  if (!item) return
+  Object.assign(
+    detail.item,
+    {
+      image_url: item.imageUrl || item.image_url,
+      imageUrl: item.imageUrl || item.image_url,
+      grid_image_url: item.gridImageUrl || item.grid_image_url,
+      gridImageUrl: item.gridImageUrl || item.grid_image_url,
+      grid_prompt: item.gridPrompt || item.grid_prompt,
+      gridPrompt: item.gridPrompt || item.grid_prompt,
+      status: item.status || detail.item.status,
+    }
+  )
 }
 async function genSceneGridImg(id) {
   try {
@@ -2988,10 +3389,14 @@ async function genSceneGridImg(id) {
       ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId())
     toast.success(t('episode.asset.gridGenerating') || '九宫格场景图生成中')
     await refresh()
+    patchOpenAssetImageItem(id)
     watchAsyncResult(() => {
       const sc = scenes.value.find(s => s.id === id)
       const done = !!((sc?.gridImageUrl || sc?.grid_image_url) && sc?.status !== 'processing')
-      if (done) pendingSceneGridImageIds.value = pendingSceneGridImageIds.value.filter(x => x !== id)
+      if (done) {
+        pendingSceneGridImageIds.value = pendingSceneGridImageIds.value.filter(x => x !== id)
+        patchOpenAssetImageItem(id)
+      }
       return done
     })
   } catch (e) {
@@ -3015,29 +3420,21 @@ async function genPropImg(id) {
     await propAPI.generateImage(id, epId.value, bareModelName(imageModel.value) || undefined, ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId())
     toast.success(t('episode.image.generatingProp'))
     await refresh()
+    // ponytail: 同角色/场景生成补开放口，完成后才落 image_url，不 patch 则打开的道具详情一直不刷新出新图
+    patchOpenAssetImageItem(id)
     watchAsyncResult(() => {
       const prop = propItems.value.find(p => p.id === id)
       const done = !!(prop?.image_url || prop?.imageUrl)
-      if (done) pendingPropImageIds.value = pendingPropImageIds.value.filter(item => item !== id)
+      if (done) {
+        patchOpenAssetImageItem(id)
+        pendingPropImageIds.value = pendingPropImageIds.value.filter(item => item !== id)
+      }
       return done
     })
   } catch (e) {
     pendingPropImageIds.value = pendingPropImageIds.value.filter(item => item !== id)
     toastError(e)
   }
-}
-function batchSceneImages() {
-  const ids = scenes.value.filter(s => !(s.image_url || s.imageUrl)).map(s => s.id)
-  if (!ids.length) { toast.info(t('episode.image.allScenesDone')); return }
-  pendingSceneImageIds.value = [...new Set([...pendingSceneImageIds.value, ...ids])]
-  ids.forEach(id => { sceneAPI.generateImage(id, epId.value, bareModelName(imageModel.value) || undefined, ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId()).then(() => refresh()).catch(e => toastError(e)) })
-  toast.success(t('episode.image.batchGeneratingScene'))
-  watchAsyncResult(() => ids.every(id => {
-    const scene = scenes.value.find(s => s.id === id)
-    const done = !!(scene?.image_url || scene?.imageUrl)
-    if (done) pendingSceneImageIds.value = pendingSceneImageIds.value.filter(item => item !== id)
-    return done
-  }), 36)
 }
 function batchPropImages() {
   const ids = propItems.value.filter(p => !(p.image_url || p.imageUrl)).map(p => p.id)
@@ -3048,7 +3445,10 @@ function batchPropImages() {
   watchAsyncResult(() => ids.every(id => {
     const prop = propItems.value.find(p => p.id === id)
     const done = !!(prop?.image_url || prop?.imageUrl)
-    if (done) pendingPropImageIds.value = pendingPropImageIds.value.filter(item => item !== id)
+    if (done) {
+      patchOpenAssetImageItem(id)
+      pendingPropImageIds.value = pendingPropImageIds.value.filter(item => item !== id)
+    }
     return done
   }), 36)
 }
@@ -5367,6 +5767,37 @@ button.video-task-metric.on { box-shadow: 0 0 0 2px var(--accent); }
   gap: 14px;
   align-items: start;
 }
+.asset-detail-scene-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  min-height: 0;
+}
+.asset-detail-scene-grid > * {
+  min-width: 0;
+}
+.asset-detail-scene-grid .asset-detail-meta-row--scene {
+  grid-column: 1 / -1;
+}
+.asset-detail-scene-grid .asset-detail-media-frame {
+  width: 100%;
+}
+.asset-detail-scene-grid .asset-detail-media-frame.asset-detail-media-frame-grid {
+  aspect-ratio: 1 / 1;
+}
+.asset-detail-scene-grid .asset-detail-prompt-panel {
+  margin-top: 0;
+  margin-bottom: 0;
+  border-top: 0;
+}
+.asset-detail-scene-grid .asset-detail-textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+.asset-detail-scene-grid .asset-detail-prompt-textarea {
+  min-height: 84px;
+  resize: vertical;
+}
 .asset-detail-preview-panel,
 .asset-detail-editor-panel {
   min-width: 0;
@@ -5447,6 +5878,58 @@ button.video-task-metric.on { box-shadow: 0 0 0 2px var(--accent); }
   justify-content: center;
   color: var(--text-3);
 }
+.asset-detail-media-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 10px;
+}
+.asset-detail-media-grid > * {
+  min-width: 0;
+}
+.asset-detail-media-grid .asset-detail-media-frame {
+  width: 100%;
+}
+.asset-detail-media-grid .asset-detail-media-frame.asset-detail-media-frame-grid {
+  aspect-ratio: 1 / 1;
+}
+/* 角色 sheet 拆两格：同一张图，靠 object-position 各取一半。框的宽高比是从 SKILL.md 钉死的
+   构图反推的——3:4 框 + left 恰好露 0~42%（正脸特写），1:1 框 + right 恰好露 42%~100%
+   （正面/90°侧面/背面）。构图改了这里要跟着改。 */
+.asset-detail-media-frame-char {
+  aspect-ratio: 3 / 4;
+}
+.asset-detail-media-frame-char img {
+  object-position: left center;
+}
+.asset-detail-media-frame-turn {
+  aspect-ratio: 1 / 1;
+}
+.asset-detail-media-frame-turn img {
+  object-position: right center;
+}
+.asset-detail-media-grid .asset-detail-prompt-panel {
+  margin-top: 0;
+  margin-bottom: 0;
+  border-top: 0;
+}
+.asset-detail-frame-label {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent 60%);
+  padding: 3px 6px 2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .asset-detail-desc {
   margin: 0;
   color: var(--text-1);
@@ -5496,9 +5979,11 @@ button.video-task-metric.on { box-shadow: 0 0 0 2px var(--accent); }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
-.asset-detail-edit-grid--character,
-.asset-detail-edit-grid--scene {
+.asset-detail-edit-grid--character {
   grid-template-columns: 1fr;
+}
+.asset-detail-edit-grid--scene {
+  grid-template-columns: 1fr 1fr;
 }
 .asset-detail-edit-field {
   min-width: 0;
@@ -5968,7 +6453,9 @@ button.video-task-metric.on { box-shadow: 0 0 0 2px var(--accent); }
   .asset-detail-shell {
     grid-template-columns: 1fr;
   }
-
+  .asset-detail-scene-grid {
+    grid-template-columns: 1fr;
+  }
   .asset-detail-preview-panel {
     position: static;
   }

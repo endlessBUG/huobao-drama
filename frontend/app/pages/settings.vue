@@ -734,7 +734,7 @@ const serviceTypes = computed(() => [
   { type: 'image', label: t('common.serviceType.image') },
   { type: 'video', label: t('common.serviceType.video') },
 ])
-const providers = ['gemini', 'openai', 'volcengine', 'minimax', 'aliyun', 'comfyui']
+const providers = ['gemini', 'openai', 'volcengine', 'minimax', 'aliyun', 'comfyui', 'qwen']
 const providerSelectOptions = computed(() => providers.map(p => ({ label: p, value: p })))
 const serviceMeta = computed(() => ({
   text: { label: t('common.serviceType.text'), desc: t('settings.ai.meta.text') },
@@ -749,6 +749,8 @@ const providerPresets = {
   image: {
     gemini: { label: 'Gemini 官方', baseUrl: 'https://generativelanguage.googleapis.com', models: ['gemini-3-pro-image', 'gemini-3.1-flash-image'] },
     openai: { label: 'OpenAI 官方', baseUrl: 'https://api.openai.com', models: ['gpt-image-2'] },
+    comfyui: { label: '本机 ComfyUI', baseUrl: 'http://127.0.0.1:6006', models: ['krea2-turbo'] },
+    qwen: { label: '本机 ComfyUI · Qwen-Image-2.1 三视图（参考图驱动）', baseUrl: 'http://127.0.0.1:6006', models: ['qwen-image-2.1'] },
   },
   video: {
     aliyun: { label: '阿里云百炼 Wan 3.0', baseUrl: 'https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com', models: ['wan3.0-video', 'wan3.0-video-prime'] },

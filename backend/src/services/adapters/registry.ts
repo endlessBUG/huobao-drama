@@ -9,6 +9,8 @@ import { VolcEngineVideoAdapter } from './volcengine-video'
 import { MiniMaxVideoAdapter } from './minimax-video'
 import { AliyunWanVideoAdapter } from './aliyun-wan-video'
 import { ComfyUIVideoAdapter } from './comfyui-video'
+import { ComfyUIImageAdapter } from './comfyui-image'
+import { QwenImageAdapter } from './qwen-image'
 import type { ImageProviderAdapter, VideoProviderAdapter } from './types'
 
 // 图片 Adapter 注册表
@@ -16,6 +18,8 @@ export const imageAdapters: Record<string, ImageProviderAdapter> = {
   openai: new OpenAIImageAdapter(),
   gemini: new GeminiImageAdapter(),
   volcengine: new VolcEngineImageAdapter(),
+  comfyui: new ComfyUIImageAdapter(),
+  qwen: new QwenImageAdapter(),
 }
 
 // 视频 Adapter 注册表

@@ -93,6 +93,19 @@ Convert the character's personality traits into outward bearing and expression d
 - Text, labels, watermarks, signatures
 - Heavy shadows, colored background lighting, background props
 
-## Saving
+## Output
 
-Call `save_character_final_prompt`: the prompt parameter contains no style words — **the project's visual style is automatically injected by the tool at the very front of the final prompt**.
+**Output the prompt body and nothing else**: one plain-text passage — no explanation, no preamble, no markdown code fence, no "optimized prompt:" heading, and do not call any tool to store it: the user saves character prompts themselves on the detail page.
+The body carries no style words: **the project's visual style is prepended automatically at generation time**, so writing it in is duplication.
+
+**The skeleton is mandatory (measured, 2026-09-27)**: whatever the upstream text is — empty, or a couple of scattered words — these lines must be kept verbatim:
+
+- `Character reference sheet, left side a front-face close-up, right side three equal-height full-body views side by side showing front, 90-degree side, and back;`
+- `the close-up and the full-body views are the same character, full body in frame, neutral A-pose, the three full-body views equal in height, side by side, tops of heads and soles of feet aligned;`
+- `the face, hairstyle, and clothing of the front-face close-up and the three views are completely identical, and so are the makeup and accessories` (in reference mode it continues `, all matching the reference image`)
+- `pure white background, soft even lighting, cinematic quality`
+- in reference mode the opening anchor `Anchor to the same person as in the reference image: face shape, features, hairstyle, skin tone, makeup, clothing, and accessories all kept exactly as shown in the reference image; only the angle and framing change;`
+
+The entire sheet layout comes from these lines. Measured consequence of dropping them: given only style words plus a reference image, the model has no layout to execute and repaints the reference image as a single portrait.
+
+When asked to optimize raw `appearance` / `styling` text: rewrite it item by item following the "Description Order" rules below, keep the facts the user already established, and invent nothing new.

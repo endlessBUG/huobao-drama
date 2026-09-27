@@ -460,6 +460,7 @@
                 <span>{{ t('detail.mat.finalPromptLabel') }}</span>
                 <span class="dim">{{ t('detail.mat.finalPromptSub') }}</span>
                 <button
+                  v-if="editTarget?.kindKey !== 'character'"
                   class="btn btn-sm mat-detail-prompt-gen"
                   :disabled="finalPromptGen || !firstEpisodeId"
                   :title="firstEpisodeId ? t('detail.mat.genPromptTitle') : t('detail.mat.needEpisodeFirst')"
@@ -863,6 +864,7 @@ function openEdit(m) {
 }
 
 // 生成/重新生成最终提示词（不生图）：调用各类型 generate-prompt 接口，结果写回 draft
+// 角色不在此列——角色提示词完全由用户手写，没有 Agent 代笔
 const finalPromptGen = ref(false)
 const firstEpisodeId = computed(() => drama.value?.episodes?.[0]?.id || null)
 async function generateFinalPrompt(m) {
@@ -871,8 +873,7 @@ async function generateFinalPrompt(m) {
   finalPromptGen.value = true
   try {
     let res
-    if (m.kindKey === 'character') res = await characterAPI.generatePrompt(m.id, epId, true)
-    else if (m.kindKey === 'scene') res = await sceneAPI.generatePrompt(m.id, epId, true)
+    if (m.kindKey === 'scene') res = await sceneAPI.generatePrompt(m.id, epId, true)
     else res = await propAPI.generatePrompt(m.id, epId, true)
     const fp = res?.final_prompt || res?.finalPrompt
     if (!fp) throw new Error(t('episode.asset.promptGenFailedRetry'))

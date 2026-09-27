@@ -3,9 +3,9 @@
  * 模块级单例 — dramaId 通过 RequestContext 按请求注入
  *
  * Agent 负责创作最终提示词：
- * 1. 角色 → 三视图（character turnaround：正面/侧面/背面）
- * 2. 场景 → 固定视角 + 前景/中景/后景分层构图
- * 3. 道具 → 白底单品静物（single product shot on pure white background）
+ * 1. 场景 → 固定视角 + 前景/中景/后景分层构图
+ * 2. 道具 → 白底单品静物（single product shot on pure white background）
+ * （角色提示词不在这里：完全由用户在详情页手写，见 routes/characters.ts）
  * 工具负责读取资产信息与保存 Agent 产出的最终提示词（保存时注入项目视觉风格）
  */
 import { createTool } from '@mastra/core/tools'
@@ -15,61 +15,6 @@ import { eq } from 'drizzle-orm'
 import { now } from '../../utils/response.js'
 import { getDramaStylePrompt } from '../../services/style-preset.js'
 import { getDramaId } from '../context.js'
-
-// ─── 角色提示词 ───────────────────────────────────────
-
-const readCharacters = createTool({
-  id: 'read_characters',
-  description: '读取当前剧集中的所有角色信息，用于生成角色三视图最终提示词。',
-  inputSchema: z.object({}),
-  execute: async (_input, context) => {
-    const dramaId = getDramaId(context?.requestContext)
-    if (!dramaId) return { error: 'Missing dramaId in request context' }
-    const chars = (await db.select().from(schema.characters)
-      .where(eq(schema.characters.dramaId, dramaId)))
-      .filter(c => !c.deletedAt)
-    return {
-      characters: chars.map(c => ({
-        id: c.id,
-        name: c.name,
-        role: c.role || '',
-        description: c.description || '',
-        appearance: c.appearance || '',
-        styling: c.styling || '',
-        final_prompt: c.finalPrompt || '',
-      })),
-    }
-  },
-})
-
-const saveCharacterFinalPrompt = createTool({
-  id: 'save_character_final_prompt',
-  description: '保存为角色创作的三视图最终提示词。项目视觉风格会由工具自动拼接，prompt 参数中不要包含风格词。',
-  inputSchema: z.object({
-    character_id: z.number(),
-    prompt: z.string().describe('角色三视图最终提示词（使用会话语言指令指定的目标语言，不含风格词）'),
-  }),
-  execute: async ({ character_id, prompt }, context) => {
-    const dramaId = getDramaId(context?.requestContext)
-    if (!dramaId) return { error: 'Missing dramaId in request context' }
-    const [c] = await db.select().from(schema.characters)
-      .where(eq(schema.characters.id, character_id))
-    if (!c) return { error: 'Character not found' }
-
-    const stylePrompt = await getDramaStylePrompt(dramaId)
-    const finalPrompt = stylePrompt ? `${stylePrompt}, ${prompt}` : prompt
-    await db.update(schema.characters)
-      .set({ finalPrompt, updatedAt: now() })
-      .where(eq(schema.characters.id, character_id))
-
-    return {
-      character_id: c.id,
-      character_name: c.name,
-      saved: true,
-      final_prompt: finalPrompt,
-    }
-  },
-})
 
 // ─── 场景提示词 ───────────────────────────────────────
 
@@ -209,8 +154,6 @@ const savePropFinalPrompt = createTool({
 })
 
 export const imagePromptTools = {
-  readCharacters,
-  saveCharacterFinalPrompt,
   readScenes,
   saveSceneFinalPrompt,
   saveSceneGridPrompt,

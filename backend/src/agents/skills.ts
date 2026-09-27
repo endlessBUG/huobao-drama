@@ -41,11 +41,13 @@ const AGENT_SKILL_MAP: Record<string, string[]> = {
   extractor: ['extractor'],
   storyboard_breaker: ['storyboard-breaker'],
   prompt_generator: [
-    'prompt-generator/character-prompt',
     'prompt-generator/scene-prompt',
     'prompt-generator/prop-prompt',
     'prompt-generator/video-prompt',
   ],
+  // 角色三视图：技能回来了，但只挂在这个无工具的优化 Agent 上——
+  // 它不改设定、不写库，只把用户框里那段字按技能规范优化后原样返回
+  character_prompt_optimizer: ['prompt-generator/character-prompt'],
 }
 
 /** 每个 Agent 的 Workspace（filesystem 工作目录 + 原生技能注册）

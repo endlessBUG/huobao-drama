@@ -17,8 +17,13 @@ type TaskType = 'image' | 'video'
 const taskLabel = (type: TaskType) => (type === 'image' ? 'ImageTask' : 'VideoTask')
 
 // 轮询节奏：图片 5s×120（上限 10 分钟）；视频 10s×300
+// 图片 360×5s = 30 分钟。原来卡死 10 分钟（120×5s），而本机 qwen 三视图单张实测跑过
+// 10 分钟（任务 55：后端判 failed、ComfyUI 还在算，算完的图没人取）。原因在本机的
+// 8G 显存扛不住 qwen 的模型（日志里 unet 只装进 4.5G / 12G，text encoder 8.9G 全在 CPU），
+// 一直在 host↔device 搬运 —— python 进程烧 CPU、步速 7~30s/it，单张 6.6 分钟到 20+ 分钟不等。
+// 视频本来就没有墙钟上限。
 const POLL_PROFILES: Record<TaskType, { attempts: number; intervalMs: number; maxDurationMs: number | null }> = {
-  image: { attempts: 120, intervalMs: 5000, maxDurationMs: 600_000 },
+  image: { attempts: 360, intervalMs: 5000, maxDurationMs: null },
   video: { attempts: 300, intervalMs: 10_000, maxDurationMs: null },
 }
 

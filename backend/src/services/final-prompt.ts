@@ -1,10 +1,10 @@
 /**
  * 最终提示词服务
- * 生图前确保角色/场景/道具已有「最终提示词」：
- * - 角色 → 三视图（character turnaround：正面/侧面/背面）
+ * 生图前确保资产已有「最终提示词」，缺失时运行 prompt_generator Agent 创作并保存；
+ * 失败返回 ''，由调用方回退到本地拼接提示词。
  * - 场景 → 固定视角 + 前景/中景/后景
  * - 道具 → 白底单品静物（single product shot on pure white background）
- * 缺失时运行 prompt_generator Agent 创作并保存；失败返回 ''，由调用方回退到本地拼接提示词
+ * 角色不在此列：角色提示词完全由用户在详情页手写，没有 Agent 代笔（见 routes/characters.ts）
  */
 import { eq } from 'drizzle-orm'
 import { db, schema } from '../db/index.js'
@@ -12,7 +12,6 @@ import { mastra } from '../mastra/index.js'
 import { buildAgentRequestContext } from '../agents/context.js'
 import { logTaskError, logTaskProgress } from '../utils/task-logger.js'
 
-type CharacterRow = typeof schema.characters.$inferSelect
 type SceneRow = typeof schema.scenes.$inferSelect
 type PropRow = typeof schema.props.$inferSelect
 
@@ -29,21 +28,6 @@ async function runPromptAgent(episodeId: number, dramaId: number, message: strin
     textConfigId: opts?.configId || undefined,
   })
   await agent.generate([{ role: 'user', content: message }], { maxSteps: 12, requestContext })
-}
-
-/** 确保角色拥有三视图最终提示词，返回最终提示词（失败返回 ''）；force 时忽略已有提示词强制重新生成 */
-export async function ensureCharacterFinalPrompt(char: CharacterRow, episodeId: number, force = false, opts?: PromptAgentOptions): Promise<string> {
-  if (char.finalPrompt && !force) return char.finalPrompt
-  try {
-    logTaskProgress('FinalPrompt', 'character-generate', { characterId: char.id, episodeId })
-    await runPromptAgent(episodeId, char.dramaId,
-      `为角色「${char.name}」(character_id=${char.id}) 生成三视图最终提示词，并调用 save_character_final_prompt 保存。`, opts)
-    const [fresh] = await db.select().from(schema.characters).where(eq(schema.characters.id, char.id))
-    return fresh?.finalPrompt || ''
-  } catch (err: any) {
-    logTaskError('FinalPrompt', 'character-generate', { characterId: char.id, error: err.message })
-    return ''
-  }
 }
 
 /** 确保场景拥有固定视角（前中后景）最终提示词，返回最终提示词（失败返回 ''）；force 时忽略已有提示词强制重新生成 */

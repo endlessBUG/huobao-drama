@@ -24,8 +24,9 @@ test('image prompt agent keeps role and scene prompts but removes grid prompt mo
 
   assert.match(agents, /prompt_generator/)
   assert.match(skills, /prompt_generator/)
-  assert.match(imagePromptTools, /save_character_final_prompt/)
   assert.match(imagePromptTools, /save_scene_final_prompt/)
+  // 角色提示词由用户手写，Agent 侧没有角色工具
+  assert.doesNotMatch(imagePromptTools, /save_character_final_prompt/)
   assert.doesNotMatch(agents, /宫格图/)
   assert.doesNotMatch(agents, /read_shots_for_grid/)
   assert.doesNotMatch(agents, /generate_grid_prompt/)

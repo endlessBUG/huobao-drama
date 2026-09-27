@@ -344,7 +344,7 @@
                       </div>
                       <button class="btn btn-sm character-gen-btn" :disabled="isPendingCharImage(c.id) || !hasCharRefImage(c)" :title="hasCharRefImage(c) ? '' : t('episode.asset.needRefImage')" @click.stop="genCharImg(c.id)">
                         <Loader2 v-if="isPendingCharImage(c.id)" :size="11" class="animate-spin" />
-                        {{ (c.image_url || c.imageUrl) ? t('episode.asset.regen') : (isPendingCharImage(c.id) ? t('episode.asset.generating') : t('episode.asset.generate')) }}
+                        {{ isPendingCharImage(c.id) ? t('episode.asset.generating') : ((c.image_url || c.imageUrl) ? t('episode.asset.regen') : t('episode.asset.generate')) }}
                       </button>
                       <button class="btn btn-sm" :title="t('episode.asset.uploadCharImage')" :disabled="isUploadingAsset('character', c.id)" @click.stop="uploadAssetImage('character', c.id)">
                         <Loader2 v-if="isUploadingAsset('character', c.id)" :size="11" class="animate-spin" />
@@ -411,7 +411,7 @@
                   </button>
                   <button class="btn btn-sm" :disabled="isPendingSceneImage(s.id)" @click.stop="genSceneImg(s.id)">
                     <Loader2 v-if="isPendingSceneImage(s.id)" :size="11" class="animate-spin" />
-                    {{ (s.image_url || s.imageUrl) ? t('episode.asset.regen') : (isPendingSceneImage(s.id) ? t('episode.asset.generating') : t('episode.asset.generate')) }}
+                    {{ isPendingSceneImage(s.id) ? t('episode.asset.generating') : ((s.image_url || s.imageUrl) ? t('episode.asset.regen') : t('episode.asset.generate')) }}
                   </button>
                 </div>
               </div>
@@ -468,7 +468,7 @@
                   </button>
                   <button class="btn btn-sm" :disabled="isPendingPropImage(p.id)" @click.stop="genPropImg(p.id)">
                     <Loader2 v-if="isPendingPropImage(p.id)" :size="11" class="animate-spin" />
-                    {{ (p.image_url || p.imageUrl) ? t('episode.asset.regen') : (isPendingPropImage(p.id) ? t('episode.asset.generating') : t('episode.asset.generate')) }}
+                    {{ isPendingPropImage(p.id) ? t('episode.asset.generating') : ((p.image_url || p.imageUrl) ? t('episode.asset.regen') : t('episode.asset.generate')) }}
                   </button>
                 </div>
               </div>
@@ -1463,24 +1463,48 @@
                 </div>
 
                 <div v-else :class="['asset-detail-edit-grid', `asset-detail-edit-grid--${assetDetail.type}`]">
-                  <label v-if="assetDetail.type === 'character'" class="asset-detail-edit-field">
-                    <span>{{ t('episode.asset.appearanceField') }}</span>
+                  <div v-if="assetDetail.type === 'character'" class="asset-detail-edit-field">
+                    <div class="asset-detail-field-head">
+                      <span>{{ t('episode.asset.appearanceField') }}</span>
+                      <div class="asset-detail-optimize-actions">
+                        <PromptOptimizeButtons
+                          field="appearance"
+                          :active="promptOptimizing"
+                          :can-undo="promptOptimizePrev.appearance !== undefined"
+                          :disabled="isPromptDraftEmpty('appearance')"
+                          @optimize="optimizePromptField"
+                          @undo="undoOptimize"
+                        />
+                      </div>
+                    </div>
                     <textarea
                       v-model="assetDetailDraft.appearance"
                       class="textarea asset-detail-textarea"
                       rows="6"
                       :placeholder="t('episode.asset.appearanceFieldPlaceholder')"
                     />
-                  </label>
-                  <label v-if="assetDetail.type === 'character'" class="asset-detail-edit-field">
-                    <span>{{ t('episode.asset.stylingField') }}</span>
+                  </div>
+                  <div v-if="assetDetail.type === 'character'" class="asset-detail-edit-field">
+                    <div class="asset-detail-field-head">
+                      <span>{{ t('episode.asset.stylingField') }}</span>
+                      <div class="asset-detail-optimize-actions">
+                        <PromptOptimizeButtons
+                          field="styling"
+                          :active="promptOptimizing"
+                          :can-undo="promptOptimizePrev.styling !== undefined"
+                          :disabled="isPromptDraftEmpty('styling')"
+                          @optimize="optimizePromptField"
+                          @undo="undoOptimize"
+                        />
+                      </div>
+                    </div>
                     <textarea
                       v-model="assetDetailDraft.styling"
                       class="textarea asset-detail-textarea"
                       rows="6"
                       :placeholder="t('episode.asset.stylingFieldPlaceholder')"
                     />
-                  </label>
+                  </div>
                   <label v-if="assetDetail.type === 'scene'" class="asset-detail-edit-field">
                     <span>{{ t('episode.asset.sceneDescField') }}</span>
                     <textarea
@@ -1509,6 +1533,7 @@
                 <span>{{ assetDetail.type === 'character' ? t('episode.asset.finalPromptTurnaround') : t('episode.asset.finalPromptWhiteBg') }}</span>
                 <div class="asset-detail-prompt-head-actions">
                   <button
+                    v-if="assetDetail.type !== 'character'"
                     class="btn btn-sm"
                     :disabled="isGeneratingPrompt(assetDetail.type, assetDetail.item.id) || isAssetImagePending(assetDetail.type, assetDetail.item.id)"
                     @click="genAssetFinalPrompt"
@@ -1516,7 +1541,16 @@
                     <Loader2 v-if="isGeneratingPrompt(assetDetail.type, assetDetail.item.id)" :size="11" class="animate-spin" />
                     {{ isGeneratingPrompt(assetDetail.type, assetDetail.item.id) ? t('episode.asset.generating') : (assetFinalPrompt ? t('episode.asset.regenPrompt') : t('episode.asset.genPrompt')) }}
                   </button>
-                  <span :class="['asset-detail-state', assetFinalPrompt && 'is-ready']">
+                  <PromptOptimizeButtons
+                    v-if="assetDetail.type === 'character'"
+                    field="final"
+                    :active="promptOptimizing"
+                    :can-undo="promptOptimizePrev.final !== undefined"
+                    :disabled="isPromptDraftEmpty('final')"
+                    @optimize="optimizePromptField"
+                    @undo="undoOptimize"
+                  />
+                  <span v-if="assetDetail.type !== 'character'" :class="['asset-detail-state', assetFinalPrompt && 'is-ready']">
                     {{ assetFinalPrompt ? t('episode.asset.ready') : t('episode.asset.todo') }}
                   </span>
                   <button
@@ -1573,7 +1607,8 @@
                 :title="hasCharRefImage(assetDetail.item) ? '' : t('episode.asset.needRefImage')"
                 @click="genCharImg(assetDetail.item.id)"
               >
-                {{ sceneImageSrc(assetDetail.item) ? t('episode.asset.regenPortrait') : (isPendingCharImage(assetDetail.item.id) ? t('episode.asset.generating') : t('episode.asset.genPortrait')) }}
+                <Loader2 v-if="isPendingCharImage(assetDetail.item.id)" :size="11" class="animate-spin" />
+                {{ isPendingCharImage(assetDetail.item.id) ? t('episode.asset.generating') : (sceneImageSrc(assetDetail.item) ? t('episode.asset.regenPortrait') : t('episode.asset.genPortrait')) }}
               </button>
               <button
                 v-else-if="assetDetail.type === 'scene'"
@@ -1581,7 +1616,8 @@
                 :disabled="isPendingSceneImage(assetDetail.item.id)"
                 @click="genSceneImg(assetDetail.item.id)"
               >
-                {{ sceneImageSrc(assetDetail.item) ? t('episode.asset.regenScene') : (isPendingSceneImage(assetDetail.item.id) ? t('episode.asset.generating') : t('episode.asset.genScene')) }}
+                <Loader2 v-if="isPendingSceneImage(assetDetail.item.id)" :size="11" class="animate-spin" />
+                {{ isPendingSceneImage(assetDetail.item.id) ? t('episode.asset.generating') : (sceneImageSrc(assetDetail.item) ? t('episode.asset.regenScene') : t('episode.asset.genScene')) }}
               </button>
               <button
                 v-if="assetDetail.type === 'prop'"
@@ -1589,7 +1625,8 @@
                 :disabled="isPendingPropImage(assetDetail.item.id)"
                 @click="genPropImg(assetDetail.item.id)"
               >
-                {{ sceneImageSrc(assetDetail.item) ? t('episode.asset.regenProp') : (isPendingPropImage(assetDetail.item.id) ? t('episode.asset.generating') : t('episode.asset.genProp')) }}
+                <Loader2 v-if="isPendingPropImage(assetDetail.item.id)" :size="11" class="animate-spin" />
+                {{ isPendingPropImage(assetDetail.item.id) ? t('episode.asset.generating') : (sceneImageSrc(assetDetail.item) ? t('episode.asset.regenProp') : t('episode.asset.genProp')) }}
               </button>
               <button class="btn btn-primary" :disabled="savingAssetDetail" @click="saveAssetDetail">
                 <Loader2 v-if="savingAssetDetail" :size="12" class="animate-spin" />
@@ -1750,6 +1787,7 @@ import { startTour, autoTour } from '~/composables/useTour'
 import { useAgent } from '~/composables/useAgent'
 import { toastError, mapError, MODERATION_RE } from '~/composables/useToast'
 import LocaleSwitcher from '~/components/LocaleSwitcher.vue'
+import PromptOptimizeButtons from '~/components/PromptOptimizeButtons.vue'
 
 definePageMeta({ layout: 'studio' })
 
@@ -1968,8 +2006,95 @@ function hasCharRefImage(item) {
   return !!(item?.image_url || item?.imageUrl)
 }
 
+// 角色提示词由用户在详情页手写：详情页开着时，框里当前的字就是要出的字——不点保存也认，
+// 清空框（有意的空）同样认。面板没开（卡片上的按钮）则返回 undefined，由后端取库里存的
+function charDraftPrompt(id) {
+  const d = assetDetail.value
+  return d.open && d.type === 'character' && d.item?.id === id
+    ? assetPromptDraft.value.trim()
+    : undefined
+}
+
 function isPendingCharImage(id) {
   return pendingCharImageIds.value.includes(id)
+}
+
+// 「提示词优化」：把框里当前的字交给 character_prompt_optimizer Agent（无工具，只回文本），
+// 回来后覆盖草稿并标记 dirty —— 存不存仍然由用户点「保存」决定。
+// 优化器只改用户写下的那段字，不碰角色设定、不碰其他字段、不写版式。
+const promptOptimizing = ref('')
+const promptOptimizePrev = ref({})
+
+// 模型偶尔会包一层 ``` 或加个标题，剥掉（空结果交给调用方报错）
+function cleanOptimizedText(raw) {
+  const text = (raw || '')
+    .trim()
+    .replace(/^```[a-zA-Z]*\s*/, '').replace(/```\s*$/, '')
+    .trim()
+    .replace(/^(优化后的提示词|优化结果|提示词|optimized prompt|final prompt)\s*[:：]\s*/i, '')
+    .trim()
+  // 空框时模型该什么都不输出，实测会把「空文本」三个字照抄回来 —— 当空处理，别填进框里
+  return /^(空文本|空|（空）|\(空\)|无|none|null|n\/a)$/i.test(text) ? '' : text
+}
+
+function fieldDraftValue(field) {
+  if (field === 'appearance') return assetDetailDraft.value.appearance
+  if (field === 'styling') return assetDetailDraft.value.styling
+  return assetPromptDraft.value
+}
+// 框里没字就没得优化 —— 优化只作用于用户写下的字，不替他补写（按钮灰掉，API 直连同样拦住）
+function isPromptDraftEmpty(field) {
+  return !(fieldDraftValue(field) || '').trim()
+}
+function setFieldDraftValue(field, text) {
+  if (field === 'appearance') assetDetailDraft.value.appearance = text
+  else if (field === 'styling') assetDetailDraft.value.styling = text
+  else { assetPromptDraft.value = text; assetPromptDirty.value = true }
+}
+
+async function optimizePromptField(field) {
+  const detail = assetDetail.value
+  if (!detail.open || detail.type !== 'character' || promptOptimizing.value) return
+  if (isPromptDraftEmpty(field)) {
+    toast.error(t('episode.asset.optimizeNeedText'))
+    return
+  }
+  const char = chars.value.find(c => c.id === detail.item?.id) || detail.item || {}
+  const hasRef = hasCharRefImage(char)
+  // 字段标签固定中文：Agent 按【字段】的值分流，与界面语言无关（输出语言由目标语言指令决定）
+  const label = field === 'appearance' ? '样貌' : field === 'styling' ? '妆造' : '最终三视图'
+  promptOptimizing.value = field
+  try {
+    // 只发框里那段字（+参考图有/无）：优化器不碰角色设定、不碰其他字段、不写版式
+    const res = await api.post('/agent/character_prompt_optimizer/chat', {
+      message: [
+        `【字段】${label}`,
+        `【参考图】${hasRef ? '有' : '无'}`,
+        '【当前文本】',
+        (fieldDraftValue(field) || '').trim() || '（空）',
+      ].join('\n'),
+      drama_id: dramaId,
+      episode_id: epId.value,
+      model: chatModelOverride() || undefined,
+      config_id: chatConfigId() || undefined,
+    })
+    const text = cleanOptimizedText(res?.text)
+    if (!text) throw new Error(t('episode.asset.optimizeEmpty'))
+    promptOptimizePrev.value = { [field]: fieldDraftValue(field) || '' }
+    setFieldDraftValue(field, text)
+    toast.success(t('episode.asset.optimizeDone'))
+  } catch (e) {
+    toastError(e)
+  } finally {
+    promptOptimizing.value = ''
+  }
+}
+
+function undoOptimize(field) {
+  const prev = promptOptimizePrev.value[field]
+  if (prev === undefined) return
+  setFieldDraftValue(field, prev)
+  promptOptimizePrev.value = {}
 }
 
 function openImageViewer(src, title = '') {
@@ -2119,17 +2244,16 @@ function isAssetImagePending(type, id) {
  * 生成最终提示词（弹窗按钮与外层两段式生图共用同一 key 状态，避免重复触发）
  * force=true 时忽略已有提示词强制重新生成
  * 返回最终提示词；生成失败由接口抛错，Agent 返回空时返回 ''
+ * 角色不在此列——角色提示词完全由用户手写（详情页那个文本框）
  */
 async function ensureAssetPrompt(type, id, force = false) {
   const key = `${type}:${id}`
   if (generatingPromptKeys.value.includes(key)) return ''
   generatingPromptKeys.value.push(key)
   try {
-    const res = type === 'character'
-      ? await characterAPI.generatePrompt(id, epId.value, force, chatModelOverride(), chatConfigId())
-      : type === 'scene'
-        ? await sceneAPI.generatePrompt(id, epId.value, force, chatModelOverride(), chatConfigId())
-        : await propAPI.generatePrompt(id, epId.value, force, chatModelOverride(), chatConfigId())
+    const res = type === 'scene'
+      ? await sceneAPI.generatePrompt(id, epId.value, force, chatModelOverride(), chatConfigId())
+      : await propAPI.generatePrompt(id, epId.value, force, chatModelOverride(), chatConfigId())
     const fp = res?.final_prompt || res?.finalPrompt || ''
     if (fp) applyFinalPrompt(type, id, fp)
     return fp
@@ -3271,29 +3395,38 @@ function watchAsyncResult(check, attempts = 24, delay = 2500) {
   })()
 }
 
+// 图片任务按 sys_task 轮询到真结束：4s 一轮、最长 32 分钟（后端 30 分钟，前端要比它活得久，
+// 否则后端还在等、页面先放弃 → 永远不会刷新）。
+// 原来图片走 watchAsyncResult 的 60s 默认窗口，而 qwen 三视图实测单张 200–400s，
+// 前端早就放弃轮询 —— 图都生成了页面也不刷新，pending 一直转圈。
+// 场景/角色/道具、单个/批量全走这里，别再各写一份。
+async function waitImageTasks(genIds) {
+  const ids = (genIds || []).filter(Boolean)
+  if (!ids.length) return { ok: false, error: t('episode.image.genFailed') }
+  for (let i = 0; i < 480; i++) {
+    await sleep(4000)
+    let states = []
+    try { states = await Promise.all(ids.map(g => taskAPI.get(g))) } catch { continue }
+    await refresh()
+    const failed = states.find(s => s?.status === 'failed')
+    if (failed) return { ok: false, error: failed.error_msg || failed.errorMsg || t('episode.image.genFailed') }
+    if (states.every(s => s?.status === 'completed')) return { ok: true }
+  }
+  return { ok: false, error: t('episode.image.genTimeout') }
+}
+
 async function genCharImg(id) {
   try {
     if (!isPendingCharImage(id)) pendingCharImageIds.value.push(id)
-    const char = chars.value.find(c => c.id === id)
-    if (char && !(char.final_prompt || char.finalPrompt)) {
-      toast.info(t('episode.asset.generatingPrompt'))
-      try {
-        await ensureAssetPrompt('character', id)
-      } catch {} // 提示词生成失败不阻断：后端生图前会再兜底生成或回退本地拼接
-    }
-    await characterAPI.generateImage(id, epId.value, bareModelName(imageModel.value) || undefined, ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId())
+    // 角色提示词完全由用户手写：不生图前代笔，详情页当前框里的草稿（未保存也算）直接带上
+    const res = await characterAPI.generateImage(id, epId.value, bareModelName(imageModel.value) || undefined, ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId(), charDraftPrompt(id))
     toast.success(t('episode.image.generatingChar'))
     await refresh()
     patchOpenAssetImageItem(id)
-    watchAsyncResult(() => {
-      const char = chars.value.find(c => c.id === id)
-      const done = !!(char?.image_url || char?.imageUrl)
-      if (done) {
-        patchOpenAssetImageItem(id)
-        pendingCharImageIds.value = pendingCharImageIds.value.filter(item => item !== id)
-      }
-      return done
-    })
+    const r = await waitImageTasks([res?.image_generation_id])
+    pendingCharImageIds.value = pendingCharImageIds.value.filter(item => item !== id)
+    patchOpenAssetImageItem(id)
+    if (!r.ok) toastError(r.error, { fallback: 'episode.image.genFailed' })
   } catch (e) {
     pendingCharImageIds.value = pendingCharImageIds.value.filter(item => item !== id)
     toastError(e)
@@ -3303,18 +3436,14 @@ function batchCharImages() {
   const ids = visualChars.value.filter(c => !(c.image_url || c.imageUrl)).map(c => c.id)
   if (!ids.length) { toast.info(t('episode.image.allCharsDone')); return }
   pendingCharImageIds.value = [...new Set([...pendingCharImageIds.value, ...ids])]
-  characterAPI.batchImages(ids, epId.value, bareModelName(imageModel.value) || undefined, ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId()).then(async () => {
+  characterAPI.batchImages(ids, epId.value, bareModelName(imageModel.value) || undefined, ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId()).then(async (res) => {
     toast.success(t('episode.image.batchGeneratingChar'))
     await refresh()
-    watchAsyncResult(() => ids.every(id => {
-      const char = chars.value.find(c => c.id === id)
-      const done = !!(char?.image_url || char?.imageUrl)
-      if (done) {
-        patchOpenAssetImageItem(id)
-        pendingCharImageIds.value = pendingCharImageIds.value.filter(item => item !== id)
-      }
-      return done
-    }), 36)
+    const r = await waitImageTasks(res?.ids) // 返回的是 sys_task id，不是角色 id
+    pendingCharImageIds.value = pendingCharImageIds.value.filter(item => !ids.includes(item))
+    ids.forEach(id => patchOpenAssetImageItem(id))
+    // 单张失败在批量里不算致命：已成功的那几张照常落地，这里报一句就好
+    if (!r.ok) toastError(r.error, { fallback: 'episode.image.genFailed' })
   }).catch(e => {
     pendingCharImageIds.value = pendingCharImageIds.value.filter(item => !ids.includes(item))
     toastError(e)
@@ -3336,22 +3465,16 @@ async function genSceneImg(id) {
     const cfg = ownerConfigId(imageModelOptions.value, imageModel.value)
     const tm = chatModelOverride()
     const tc = chatConfigId()
-    await sceneAPI.generateImage(id, epId.value, model, cfg, tm, tc)
-    await sceneAPI.generateGridImage(id, epId.value, model, cfg, tm, tc)
+    const wideRes = await sceneAPI.generateImage(id, epId.value, model, cfg, tm, tc)
+    const gridRes = await sceneAPI.generateGridImage(id, epId.value, model, cfg, tm, tc)
     toast.success(t('episode.image.generatingScene'))
     await refresh()
     patchOpenAssetImageItem(id)
-    watchAsyncResult(() => {
-      const sc = scenes.value.find(s => s.id === id)
-      const wideDone = !!(sc?.image_url || sc?.imageUrl)
-      const gridDone = !!(sc?.gridImageUrl || sc?.grid_image_url)
-      if (wideDone && gridDone) {
-        pendingSceneImageIds.value = pendingSceneImageIds.value.filter(item => item !== id)
-        pendingSceneGridImageIds.value = pendingSceneGridImageIds.value.filter(x => x !== id)
-        patchOpenAssetImageItem(id)
-      }
-      return wideDone && gridDone
-    })
+    const r = await waitImageTasks([wideRes?.image_generation_id, gridRes?.image_generation_id])
+    pendingSceneImageIds.value = pendingSceneImageIds.value.filter(item => item !== id)
+    pendingSceneGridImageIds.value = pendingSceneGridImageIds.value.filter(x => x !== id)
+    patchOpenAssetImageItem(id)
+    if (!r.ok) toastError(r.error, { fallback: 'episode.image.genFailed' })
   } catch (e) {
     pendingSceneImageIds.value = pendingSceneImageIds.value.filter(item => item !== id)
     pendingSceneGridImageIds.value = pendingSceneGridImageIds.value.filter(x => x !== id)
@@ -3385,20 +3508,15 @@ function patchOpenAssetImageItem(id) {
 async function genSceneGridImg(id) {
   try {
     if (!isPendingSceneGridImage(id)) pendingSceneGridImageIds.value.push(id)
-    await sceneAPI.generateGridImage(id, epId.value, bareModelName(imageModel.value) || undefined,
+    const res = await sceneAPI.generateGridImage(id, epId.value, bareModelName(imageModel.value) || undefined,
       ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId())
     toast.success(t('episode.asset.gridGenerating') || '九宫格场景图生成中')
     await refresh()
     patchOpenAssetImageItem(id)
-    watchAsyncResult(() => {
-      const sc = scenes.value.find(s => s.id === id)
-      const done = !!((sc?.gridImageUrl || sc?.grid_image_url) && sc?.status !== 'processing')
-      if (done) {
-        pendingSceneGridImageIds.value = pendingSceneGridImageIds.value.filter(x => x !== id)
-        patchOpenAssetImageItem(id)
-      }
-      return done
-    })
+    const r = await waitImageTasks([res?.image_generation_id])
+    pendingSceneGridImageIds.value = pendingSceneGridImageIds.value.filter(x => x !== id)
+    patchOpenAssetImageItem(id)
+    if (!r.ok) toastError(r.error, { fallback: 'episode.image.genFailed' })
   } catch (e) {
     pendingSceneGridImageIds.value = pendingSceneGridImageIds.value.filter(x => x !== id)
     toastError(e)
@@ -3417,20 +3535,15 @@ async function genPropImg(id) {
         await ensureAssetPrompt('prop', id)
       } catch {} // 提示词生成失败不阻断：后端生图前会再兜底生成或回退本地拼接
     }
-    await propAPI.generateImage(id, epId.value, bareModelName(imageModel.value) || undefined, ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId())
+    const res = await propAPI.generateImage(id, epId.value, bareModelName(imageModel.value) || undefined, ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId())
     toast.success(t('episode.image.generatingProp'))
     await refresh()
     // ponytail: 同角色/场景生成补开放口，完成后才落 image_url，不 patch 则打开的道具详情一直不刷新出新图
     patchOpenAssetImageItem(id)
-    watchAsyncResult(() => {
-      const prop = propItems.value.find(p => p.id === id)
-      const done = !!(prop?.image_url || prop?.imageUrl)
-      if (done) {
-        patchOpenAssetImageItem(id)
-        pendingPropImageIds.value = pendingPropImageIds.value.filter(item => item !== id)
-      }
-      return done
-    })
+    const r = await waitImageTasks([res?.image_generation_id])
+    pendingPropImageIds.value = pendingPropImageIds.value.filter(item => item !== id)
+    patchOpenAssetImageItem(id)
+    if (!r.ok) toastError(r.error, { fallback: 'episode.image.genFailed' })
   } catch (e) {
     pendingPropImageIds.value = pendingPropImageIds.value.filter(item => item !== id)
     toastError(e)
@@ -3440,17 +3553,17 @@ function batchPropImages() {
   const ids = propItems.value.filter(p => !(p.image_url || p.imageUrl)).map(p => p.id)
   if (!ids.length) { toast.info(t('episode.image.allPropsDone')); return }
   pendingPropImageIds.value = [...new Set([...pendingPropImageIds.value, ...ids])]
-  ids.forEach(id => { propAPI.generateImage(id, epId.value, bareModelName(imageModel.value) || undefined, ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId()).then(() => refresh()).catch(e => toastError(e)) })
   toast.success(t('episode.image.batchGeneratingProp'))
-  watchAsyncResult(() => ids.every(id => {
-    const prop = propItems.value.find(p => p.id === id)
-    const done = !!(prop?.image_url || prop?.imageUrl)
-    if (done) {
-      patchOpenAssetImageItem(id)
-      pendingPropImageIds.value = pendingPropImageIds.value.filter(item => item !== id)
-    }
-    return done
-  }), 36)
+  // 道具没有批量接口：逐个起，各自一个 sys_task，收齐 id 一起等
+  void (async () => {
+    const started = await Promise.all(ids.map(id => propAPI.generateImage(id, epId.value, bareModelName(imageModel.value) || undefined, ownerConfigId(imageModelOptions.value, imageModel.value), chatModelOverride(), chatConfigId())
+      .catch(e => { toastError(e); return null })))
+    await refresh()
+    const r = await waitImageTasks(started.map(s => s?.image_generation_id))
+    pendingPropImageIds.value = pendingPropImageIds.value.filter(item => !ids.includes(item))
+    ids.forEach(id => patchOpenAssetImageItem(id))
+    if (!r.ok) toastError(r.error, { fallback: 'episode.image.genFailed' })
+  })()
 }
 function getVideoUrl(s) { return s?.video_url || s?.videoUrl || s?.composed_video_url || s?.composedVideoUrl || null }
 function hasVid(s) { return !!getVideoUrl(s) }
@@ -5990,6 +6103,19 @@ button.video-task-metric.on { box-shadow: 0 0 0 2px var(--accent); }
   display: flex;
   flex-direction: column;
   gap: 7px;
+}
+/* 输入框右上角：提示词优化 + 撤回（按钮本体在 PromptOptimizeButtons.vue） */
+.asset-detail-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.asset-detail-optimize-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 .asset-detail-textarea {
   min-height: 138px;

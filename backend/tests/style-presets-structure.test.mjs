@@ -49,7 +49,7 @@ test('drama style prompt is injected into image prompt composition', () => {
   // 保存最终提示词时由工具拼接项目视觉风格（风格片段置于最前方）
   assert.match(gridTools, /stylePrompt \? `\$\{stylePrompt\}, \$\{prompt\}` : prompt/)
   assert.match(characters, /getDramaStylePrompt/)
-  assert.match(characters, /characterImagePrompt\(char, stylePrompt\)/)
+  assert.match(characters, /characterImagePrompt\(stylePrompt, /)
   assert.match(scenes, /getDramaStylePrompt\(scene\.dramaId\)/)
 })
 

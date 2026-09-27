@@ -45,8 +45,10 @@ export async function saveUploadedFile(data: ArrayBuffer, subDir: string, origin
 
 function getExtFromUrl(url: string): string {
   try {
-    const pathname = new URL(url).pathname
-    const ext = path.extname(pathname)
+    const u = new URL(url)
+    // ComfyUI 的取图接口把扩展名放在 query 里（/view?filename=x.png），只看 pathname 会全落 .bin
+    // —— 存成 .bin 后服务端按 octet-stream 发，图在 <img> 里靠浏览器嗅探才显示得出来
+    const ext = path.extname(u.pathname) || path.extname(u.searchParams.get('filename') || '')
     if (ext && ext.length <= 5) return ext
   } catch {}
   return '.bin'

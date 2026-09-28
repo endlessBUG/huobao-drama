@@ -111,11 +111,14 @@ app.post('/:id/generate-grid-image', async (c) => {
   // ponytail: 九宫格恒无人物（ref2v 场景参考图，人物由角色参考位补），恒用「3x3 固定 9 视角 NO PEOPLE」英文模板。
   // 风格仅取 stylePrompt，环境只补 lighting —— 绝不嵌入 finalPrompt：它是单一固定机位描述且自带风格前缀，
   // 拼进会把主图提示词整体嵌进九宫格 → 两图提示词看起来一模一样（用户报「和主图一样」的根因）。
-  const fallback = '3x3 grid, 9 views of the SAME ' + (scene.location || '') + ', NO PEOPLE: ' +
-    "top-left front view; top-middle left 45-degree view; top-right right 45-degree view; " +
-    "middle-left back view; center bird's-eye overhead; middle-right low floor-level view; " +
-    "bottom-left left wall perspective; bottom-right right wall perspective; " +
-    "bottom-center close-up of main prop or entrance; consistent lighting, style and no people in any panel"
+  // 九个机位按「房间的墙面/门口/角落」数，不要写成 front view / 45-degree / back view /
+  // bird's-eye —— 那是角色转面图的镜头语言，模型会读成「同一主体的 9 个视角」并补个主体进去
+  // （实测：同一段风格预设下主图干净，九宫格 8/9 格冒出个躺床上的角色）。
+  const fallback = 'a 3x3 grid of 9 photographs of the same empty ' + (scene.location || '') + ', no people: ' +
+    'top-left the north wall; top-middle the west wall; top-right the east wall; ' +
+    'middle-left the south wall; center from the doorway; middle-right from the far corner; ' +
+    'bottom-left the window side; bottom-right the opposite corner; ' +
+    'bottom-center close-up of the main furniture or entrance; consistent lighting and style'
   // ponytail: 始终重算清洁 prompt 并落盘，不用旧的 scene.gridPrompt ——
   // 旧的 grid_prompt 可能是上一版回退拼进去 finalPrompt 的脏值，复用会把脏值一直保留。
   const prompt = [stylePrompt || '', fallback, scene.lighting || '']

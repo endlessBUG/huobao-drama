@@ -1,7 +1,7 @@
 {
   "1": {
     "class_type": "UnetLoaderGGUF",
-    "inputs": { "unet_name": "qwen-image-2.1-UC-Q4_K_M.gguf" }
+    "inputs": { "unet_name": "qwen_image_2.1_turbo_Q4_K_M.gguf" }
   },
   "2": {
     "class_type": "CLIPLoader",
@@ -34,24 +34,35 @@
     "class_type": "EmptySD3LatentImage",
     "inputs": { "width": 1344, "height": 768, "batch_size": 1 }
   },
-  "7": {
-    "class_type": "KSampler",
+  "12": {
+    "class_type": "RandomNoise",
+    "inputs": { "noise_seed": 8888 }
+  },
+  "13": {
+    "class_type": "KSamplerSelect",
+    "inputs": { "sampler_name": "euler" }
+  },
+  "14": {
+    "class_type": "ManualSigmas",
+    "inputs": { "sigmas": "1.0, 0.9375, 0.875, 0.75, 0.5, 0.25, 0.0" }
+  },
+  "15": {
+    "class_type": "BasicGuider",
+    "inputs": { "model": ["11", 0], "conditioning": ["4", 0] }
+  },
+  "16": {
+    "class_type": "SamplerCustomAdvanced",
     "inputs": {
-      "model": ["11", 0],
-      "seed": 8888,
-      "steps": 25,
-      "cfg": 1.0,
-      "sampler_name": "euler",
-      "scheduler": "simple",
-      "positive": ["4", 0],
-      "negative": ["4", 1],
-      "latent_image": ["6", 0],
-      "denoise": 1.0
+      "noise": ["12", 0],
+      "guider": ["15", 0],
+      "sampler": ["13", 0],
+      "sigmas": ["14", 0],
+      "latent_image": ["6", 0]
     }
   },
   "8": {
     "class_type": "VAEDecode",
-    "inputs": { "samples": ["7", 0], "vae": ["3", 0] }
+    "inputs": { "samples": ["16", 0], "vae": ["3", 0] }
   },
   "9": {
     "class_type": "SaveImage",

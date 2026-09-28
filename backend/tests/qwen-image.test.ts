@@ -37,16 +37,28 @@ test('模板：参考图键是 images.image_1，且链到 LoadImage', () => {
   assert.equal(link[0], Object.keys(TEMPLATE).find(k => TEMPLATE[k] === load))
   assert.ok(Array.isArray(te.inputs.vae), 'TextEncodeQwenImage21 必须接 vae（走 reference latents）')
   assert.equal(te.inputs.negative_prompt, '')
-  // 与 qwen21_sheet_generic.py 同一套模型与采样
-  assert.equal(findNode(TEMPLATE, 'UnetLoaderGGUF').inputs.unet_name, 'qwen-image-2.1-UC-Q4_K_M.gguf')
+  // 6 步 turbo 蒸馏：模型文件与 sigma 表都是钉死的，换成别的就不是同一套出图
+  assert.equal(findNode(TEMPLATE, 'UnetLoaderGGUF').inputs.unet_name, 'qwen_image_2.1_turbo_Q4_K_M.gguf')
   assert.equal(findNode(TEMPLATE, 'CLIPLoader').inputs.clip_name, 'qwen3vl_8b_int8_convrot.safetensors')
   assert.equal(findNode(TEMPLATE, 'VAELoader').inputs.vae_name, 'qwen_image_2.1_vae_bf16.safetensors')
   assert.equal(findNode(TEMPLATE, 'QwenImage21Cache').inputs.device, 'cpu')
-  const ks = findNode(TEMPLATE, 'KSampler')
-  assert.equal(ks.inputs.steps, 25)
-  assert.equal(ks.inputs.cfg, 1.0)
-  assert.equal(ks.inputs.sampler_name, 'euler')
-  assert.equal(ks.inputs.scheduler, 'simple')
+})
+
+// 蒸馏模型光改步数不够：走 KSampler steps=6 出图会发灰发软，必须配作者的 sigma 表。
+// 这条测试盯的就是「别有人图省事把 SamplerCustomAdvanced 链换回 KSampler」。
+test('模板：采样是 6 步 turbo 的 SamplerCustomAdvanced 链，不是 KSampler', () => {
+  assert.equal(findNode(TEMPLATE, 'KSampler'), undefined, '必须没有 KSampler')
+  assert.equal(
+    findNode(TEMPLATE, 'ManualSigmas').inputs.sigmas,
+    '1.0, 0.9375, 0.875, 0.75, 0.5, 0.25, 0.0', // 7 个值 = 6 步
+  )
+  assert.equal(findNode(TEMPLATE, 'KSamplerSelect').inputs.sampler_name, 'euler')
+  // 缓存节点仍在链上（8G 显存靠它把前缀缓存放 RAM），且接在 BasicGuider 之前
+  const sca = findNode(TEMPLATE, 'SamplerCustomAdvanced')
+  assert.deepEqual(findNode(TEMPLATE, 'BasicGuider').inputs.model, ['11', 0])
+  assert.deepEqual(sca.inputs.guider, ['15', 0])
+  assert.deepEqual(sca.inputs.latent_image, ['6', 0])
+  assert.deepEqual(sca.inputs.sigmas, ['14', 0])
 })
 
 test('buildGenerateRequest：参考图落盘 + 注入 prompt/尺寸/seed；1920x1080 缩到 1344x768', async () => {
@@ -75,17 +87,31 @@ test('buildGenerateRequest：参考图落盘 + 注入 prompt/尺寸/seed；1920x
   const latent = findNode(g, 'EmptySD3LatentImage')
   assert.equal(latent.inputs.width, 1344)
   assert.equal(latent.inputs.height, 768)
-  assert.equal(typeof findNode(g, 'KSampler').inputs.seed, 'number')
+  assert.equal(typeof findNode(g, 'RandomNoise').inputs.noise_seed, 'number')
   assert.equal(findNode(g, 'SaveImage').inputs.filename_prefix, 'huobao_qwen_sheet')
   // 采样参数不被 adapter 改（归模板）
-  assert.equal(findNode(g, 'KSampler').inputs.steps, 25)
+  assert.equal(findNode(g, 'ManualSigmas').inputs.sigmas, '1.0, 0.9375, 0.875, 0.75, 0.5, 0.25, 0.0')
 })
 
-test('buildGenerateRequest：无参考图不抛错（按钮侧已堵），LoadImage 留空', async () => {
+// 场景/道具没有参考图，走的就是这条路。参考图那条线必须**整个摘掉**：
+// 留空的 LoadImage 会去列 input/ 目录，报 [Errno 13] Permission denied: '…\input'
+// —— 看着像权限问题，真因是空文件名，而且要到 ComfyUI 执行时才炸，白等一个来回。
+test('buildGenerateRequest：无参考图 = 纯文生图，LoadImage 与 images.image_1 被摘掉', async () => {
   const adapter = new QwenImageAdapter()
   const req = (await adapter.buildGenerateRequest(cfg(), { id: 2, prompt: 'p', size: '512x512' })) as any
-  assert.equal(findNode(req.body.prompt, 'LoadImage').inputs.image, '')
-  assert.equal(findNode(req.body.prompt, 'EmptySD3LatentImage').inputs.width, 512)
+  const g = req.body.prompt
+  assert.equal(findNode(g, 'LoadImage'), undefined, 'LoadImage 必须整个摘掉，不能留空文件名')
+  assert.equal('images.image_1' in findNode(g, 'TextEncodeQwenImage21').inputs, false,
+    'images.image_1 键必须删掉，不能留着悬空或空串')
+  assert.equal(findNode(g, 'EmptySD3LatentImage').inputs.width, 512)
+  assert.equal(typeof findNode(g, 'RandomNoise').inputs.noise_seed, 'number')
+
+  // delete 不能污染下一个请求：紧接着再带参考图跑一次，LoadImage 和 images.image_1 都得回来
+  const withRef = (await adapter.buildGenerateRequest(cfg(), {
+    id: 4, prompt: 'p', referenceImages: JSON.stringify([refDataUrl]),
+  })) as any
+  assert.ok(findNode(withRef.body.prompt, 'LoadImage'), '上一个请求的 delete 泄漏到了这一个')
+  assert.ok(Array.isArray(findNode(withRef.body.prompt, 'TextEncodeQwenImage21').inputs['images.image_1']))
 })
 
 test('尺寸兜底：非法/过小回默认档，合法范围内原样', async () => {

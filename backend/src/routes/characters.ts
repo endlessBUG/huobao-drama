@@ -59,31 +59,27 @@ const SHEET_SKELETON_TEXT_ONLY = [
 ].join('，')
 
 /**
- * 用户没写时的内容兜底 —— 老 characterImagePrompt() 那串原样保留（骨架不在这里，见 characterImagePrompt）。
- * 空字段不拼（filter(Boolean)）；兜底只影响这一次生成，不写库 —— 框里还是空的。
+ * 生图提示词 = 项目视觉风格 + 用户写的正文 + 三视图骨架。
+ * 正文完全由用户决定（详情页那个文本框）：草稿优先、其次库里存的，**没写就是空** ——
+ * 不拿 appearance/styling 拼兜底、不让 Agent 代笔。空框生成出来就是「风格 + 版式」，由用户自己承担。
+ * 骨架是产品保证的版式，与「提示词优化」无关（优化只管用户那段字的内容）——不管用户写没写都追加，
+ * 否则用户一写字版式就没了，出图不再是三视图。
+ * 带参考图的骨架（「服装与配饰一律照参考图原样保留」）只在真有参考图时带，判定口径同 referenceImageFor()。
  */
-function characterFallbackContent(char: typeof schema.characters.$inferSelect) {
-  return [
-    char.name,
-    char.appearance || char.description || '人物立绘',
-    char.styling || '',
-    '16:9 横版角色定妆照',
-    '半身角色海报构图',
-    '正面',
-    '高质量',
-    '白色背景',
-  ].filter(Boolean).join(', ')
+function characterImagePrompt(stylePrompt: string, userPrompt: string | null | undefined, char: typeof schema.characters.$inferSelect) {
+  const content = (userPrompt || '').trim()
+  return [stylePrompt || '', content, char.localPath ? SHEET_SKELETON_WITH_REF : SHEET_SKELETON_TEXT_ONLY].filter(Boolean).join(', ')
 }
 
 /**
- * 生图提示词 = 项目视觉风格 + 正文 + 三视图骨架。
- * 正文完全由用户决定（详情页那个文本框）：草稿优先、其次库里存的，没写才落到老版式兜底。
- * 骨架是产品保证的版式，与「提示词优化」无关（优化只管用户那段字的内容）——不管用户写没写都追加，
- * 否则用户一写字版式就没了，出图不再是三视图。
+ * 角色图的参考图 = **用户上传的原图**（localPath），不是上一轮生成的产物（imageUrl）。
+ * 生图回写只写 imageUrl（见 generation.ts 的 writeBackImageAssets），所以 localPath 永远停在用户自己给的那张。
+ * 用 imageUrl 会自我锁死：骨架句要求「服装与配饰一律照参考图原样保留」，参考图又是上一轮产物
+ * → 第一版生成成什么样就永远照抄，用户改提示词也换不掉服装（实测 styling 写着要求，三轮下来三视图仍是第一版那身）。
+ * 没上传就不给参考图、走纯文生图 —— 与「没写就是空」同一口径，不拿 imageUrl 兜底。
  */
-function characterImagePrompt(stylePrompt: string, userPrompt: string | null | undefined, char: typeof schema.characters.$inferSelect) {
-  const content = (userPrompt || '').trim() || characterFallbackContent(char)
-  return [stylePrompt || '', content, char.imageUrl ? SHEET_SKELETON_WITH_REF : SHEET_SKELETON_TEXT_ONLY].filter(Boolean).join(', ')
+function referenceImageFor(char: typeof schema.characters.$inferSelect) {
+  return char.localPath ? [char.localPath] : undefined
 }
 
 // PUT /characters/:id
@@ -127,7 +123,7 @@ app.post('/:id/generate-image', async (c) => {
   const prompt = characterImagePrompt(stylePrompt, typeof body.prompt === 'string' ? body.prompt : char.finalPrompt, char)
   try {
     logTaskStart('CharacterImage', 'generate', { characterId: id, episodeId: ep.id, dramaId: char.dramaId })
-    const genId = await generateImage({ characterId: id, dramaId: char.dramaId, prompt, model: body.model, size: CHARACTER_IMAGE_SIZE, configId: body.config_id ?? ep.imageConfigId ?? undefined, referenceImages: char.imageUrl ? [char.imageUrl] : undefined })
+    const genId = await generateImage({ characterId: id, dramaId: char.dramaId, prompt, model: body.model, size: CHARACTER_IMAGE_SIZE, configId: body.config_id ?? ep.imageConfigId ?? undefined, referenceImages: referenceImageFor(char) })
     logTaskSuccess('CharacterImage', 'generate', { characterId: id, generationId: genId })
     return success(c, { image_generation_id: genId })
   } catch (err: any) {
@@ -150,7 +146,7 @@ app.post('/batch-generate-images', async (c) => {
     if (!char) continue
     const prompt = characterImagePrompt(stylePrompt, char.finalPrompt, char)
     try {
-      const genId = await generateImage({ characterId: cid, dramaId: char.dramaId, prompt, model: body.model, size: CHARACTER_IMAGE_SIZE, configId: body.config_id ?? ep.imageConfigId ?? undefined, referenceImages: char.imageUrl ? [char.imageUrl] : undefined })
+      const genId = await generateImage({ characterId: cid, dramaId: char.dramaId, prompt, model: body.model, size: CHARACTER_IMAGE_SIZE, configId: body.config_id ?? ep.imageConfigId ?? undefined, referenceImages: referenceImageFor(char) })
       results.push(genId)
     } catch {}
   }

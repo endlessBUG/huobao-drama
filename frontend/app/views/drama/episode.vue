@@ -682,12 +682,22 @@
                       @commit="v => updateField(selectedSb, 'video_prompt', v)"
                     />
                   </section>
-                  <section class="video-inspector-section video-fullref-panel" v-if="selectedSb.videoPromptFullRef || selectedSb.video_prompt_full_ref">
+                  <section class="video-inspector-section video-fullref-panel">
                     <div class="video-fullref-head">
                       <span class="video-inspector-label video-inspector-label-hero">ComfyUI Full-Reference（只读）</span>
+                      <button
+                        type="button"
+                        class="btn btn-sm video-fullref-regen"
+                        :disabled="fullRefGeneratingIds.includes(selectedSb?.id) || videoPromptBatch.running"
+                        @click="genVideoPromptFullRef(selectedSb)"
+                      >
+                        <Loader2 v-if="fullRefGeneratingIds.includes(selectedSb?.id)" :size="11" class="animate-spin" />
+                        {{ hasFullRef(selectedSb) ? t('episode.sb.regenPrompt') : t('episode.sb.aiGenerate') }}
+                      </button>
                     </div>
-                    <pre class="video-fullref-text" spellcheck="false">{{ selectedSb.videoPromptFullRef || selectedSb.video_prompt_full_ref }}</pre>
-                    <button type="button" class="btn btn-sm video-fullref-copy" @click="copyText(selectedSb.videoPromptFullRef || selectedSb.video_prompt_full_ref)">{{ t('common.copy') }}</button>
+                    <pre v-if="hasFullRef(selectedSb)" class="video-fullref-text" spellcheck="false">{{ selectedSb.videoPromptFullRef || selectedSb.video_prompt_full_ref }}</pre>
+                    <div v-else class="video-fullref-empty">{{ t('episode.sb.fullRefEmpty') }}</div>
+                    <button v-if="hasFullRef(selectedSb)" type="button" class="btn btn-sm video-fullref-copy" @click="copyText(selectedSb.videoPromptFullRef || selectedSb.video_prompt_full_ref)">{{ t('common.copy') }}</button>
                   </section>
               </div>
               </div>
@@ -813,20 +823,6 @@
                       </span>
                     </div>
                     <div class="video-param-hint">{{ t('episode.inspector.durationHint') }}</div>
-                    <div class="video-param-row video-fl2va-row" v-if="selectedVideoConfig">
-                      <label class="video-fl2va-check">
-                        <input
-                          type="checkbox"
-                          :checked="useFl2va"
-                          :disabled="selectedVideoConfig.provider !== 'comfyui'"
-                          @change="useFl2va = $event.target.checked"
-                        />
-                        <span>
-                          首帧锚定(fl2va)
-                          <small v-if="useFl2va">用场景宽镜头图作首帧锁定构图（单镜头强锁定，多镜头未验证）</small>
-                        </span>
-                      </label>
-                    </div>
                   </section>
                   <div class="video-inspector-effective">
                     {{ t('episode.inspector.effective', { model: effectiveVideoModelLabel || t('episode.vid.defaultModel'), res: episodeResolutionShort, dur: effectiveVideoDuration }) }}
@@ -2615,8 +2611,6 @@ const selectedVideoConfig = computed(() => {
 const isWan3Video = computed(() => selectedVideoConfig.value?.provider === 'aliyun'
   || bareModelName(videoModel.value).startsWith('wan3.0-video'))
 
-// ponytail: fl2va 实验性档位，仅当 provider==='comfyui' 可用；默认关闭、用户手开
-const useFl2va = ref(false)
 
 // 参考图上限（Wan 3.0 官方 10 张，其他模型 9 张），绑定素材收集与 @名字 映射统一读取
 const refImageLimit = computed(() => isWan3Video.value ? 10 : 9)
@@ -3381,6 +3375,41 @@ async function genVideoPrompt(sb) {
   }
 }
 
+// ComfyUI Full-Reference（模型真正收到的那份）单独重生成。
+// 刻意只写 video_prompt_full_ref、不碰 video_prompt —— 与上面 genVideoPrompt 的「只更新 video_prompt」对称，
+// 两个入口各管一份，谁也不会静默覆盖用户手改过的另一份。
+const fullRefGeneratingIds = ref([])
+const hasFullRef = (sb) => !!(sb?.videoPromptFullRef || sb?.video_prompt_full_ref)
+
+async function genVideoPromptFullRef(sb) {
+  if (!sb || fullRefGeneratingIds.value.includes(sb.id)) return
+  const idx = sbs.value.indexOf(sb) + 1
+  const cfg = selectedVideoConfig.value
+  const label = cfg ? `${cfg.name} (${cfg.provider})` : '默认'
+  const charNames = getStoryboardCharacters(sb).map(c => c.name).join('、') || '无'
+  const propNames = getStoryboardProps(sb).map(p => p.name).join('、') || '无'
+  fullRefGeneratingIds.value.push(sb.id)
+  try {
+    await api.post(`/agent/prompt_generator/chat`, {
+      message: `请为分镜 #${idx}(ID:${sb.id})生成全参考提示词(video_prompt_full_ref)。视频模型:${label}。
+
+该分镜信息:时长 ${sb.duration || 10}s;场景:${getSceneName(sb) || '未绑定'};角色:${charNames};道具:${propNames}。
+
+请先调用 read_storyboard_context 获取该分镜的画面描述(含【镜头N】子镜头与台词/旁白)、氛围及时长,然后按技能「六段式英文全参考」生成 video_prompt_full_ref(英文,含 <Subject>/<Picture> 标签,<Subject N> 与 <Picture N> 用同一套编号:角色1..k、场景k+1、道具k+2..)。角色的 <Subject> 只写它是 <Picture N> 里的谁,不要描述外貌与妆造。最后调用 update_storyboard 保存到分镜 ID:${sb.id},参数只传 storyboard_id 和 video_prompt_full_ref 两个键,不要改动其他字段,不要重新拆分整集。`,
+      drama_id: dramaId,
+      episode_id: epId.value,
+      model: chatModelOverride() || undefined,
+      config_id: chatConfigId() || undefined,
+    })
+    toast.success(t('episode.sb.fullRefGenerated', { n: idx }))
+    await refresh()
+  } catch (e) {
+    toastError(e)
+  } finally {
+    fullRefGeneratingIds.value = fullRefGeneratingIds.value.filter(id => id !== sb.id)
+  }
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -3849,8 +3878,10 @@ async function genVid(sb, opts = {}) {
   const params = {
     storyboard_id: sb.id,
     drama_id: dramaId,
+    // comfyui 走全参考英文提示词；接口回的是 snake_case，别只读驼峰（读了就是空串 →
+    // 后端「必须提供提示词」直接拒，而库里其实有值）
     prompt: selectedVideoConfig.value?.provider === 'comfyui'
-      ? (sb.videoPromptFullRef || sb.videoPrompt || '')
+      ? (sb.video_prompt_full_ref || sb.videoPromptFullRef || sb.video_prompt || sb.videoPrompt || '')
       : resolveVideoPromptRefs(sb),
     duration: Number(sb.duration || 10),
     aspect_ratio: dramaAspectRatio.value,
@@ -3858,12 +3889,10 @@ async function genVid(sb, opts = {}) {
     model: bareModelName(videoModel.value) || undefined,
     config_id: ownerConfigId(videoModelOptions.value, videoModel.value),
     reference_image_urls: referenceImages,
-    // ponytail: fl2va 首帧锚定——仅当勾选且 provider==='comfyui' 时取本分镜场景的宽镜头图；
-    // 场景无 image_url 时传 ''（adapter 空值不 staging → bridge 回 ref2v，安全）。
-    // 用 getStoryboardScene(sb) 而非 selectedSb：batch 生成时 sb 可能≠selectedSb。
-    first_frame_url: useFl2va.value && selectedVideoConfig.value?.provider === 'comfyui'
-      ? (getStoryboardScene(sb)?.image_url || getStoryboardScene(sb)?.imageUrl || '')
-      : undefined,
+    // 不传 first_frame_url：comfyui 桥一收到首帧就改走 fl2va 分支（_wf_fl2va），
+    // ref_image_0~8 槽位全部丢弃 → 角色完全重生成（实测同一分镜两个人一个都不像）。
+    // 底层 JZL_MiniMaxH3ReferenceToVideo2 没有 first_frame、JZL_MiniMaxH3ImageToVideoDual 没有 ref 槽位，
+    // 两者互斥 —— 与主分支口径一致：视频只走参考图。
   }
   if (!params.prompt && !referenceImages.length) {
     toast.error(t('episode.vid.needRefOrPrompt'))
@@ -5787,9 +5816,6 @@ button.video-task-metric.on { box-shadow: 0 0 0 2px var(--accent); }
 .video-param-control { display: inline-flex; align-items: center; gap: 6px; }
 .video-param-unit { font-size: 11px; color: var(--text-2); }
 .video-duration-input { width: 56px; height: 24px; padding: 2px 6px; font-size: 12px; font-weight: 700; font-family: var(--font-mono); text-align: center; }
-.video-fl2va-row { align-items: center; gap: 8px; }
-.video-fl2va-check { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: var(--text-dim); cursor: pointer; }
-.video-fl2va-check input:disabled + span { opacity: 0.5; }
 
 /* Prod grid */
 .prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
@@ -6815,4 +6841,6 @@ button.video-task-metric.on { box-shadow: 0 0 0 2px var(--accent); }
 .video-fullref-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--text-dim); }
 .video-fullref-text { font-family: var(--font-mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: var(--text-dim); background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin: 0 0 6px; max-height: 280px; overflow: auto; }
 .video-fullref-copy { margin-left: auto; }
+.video-fullref-regen { margin-left: auto; }
+.video-fullref-empty { font-size: 12px; color: var(--text-dim); background: var(--bg2); border: 1px dashed var(--border); border-radius: 8px; padding: 10px; margin: 0 0 6px; }
 </style>

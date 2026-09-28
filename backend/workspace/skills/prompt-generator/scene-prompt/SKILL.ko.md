@@ -62,7 +62,7 @@ description: 장면 최종 프롬프트 규범 — 선명한 광각 establishing
 
 ## 3x3 그리드 장면 (grid_prompt / save_scene_grid_prompt)
 
-3x3 그리드는 장면의 `<Picture N>` 의 **구도 앵커**: 3x3 고정 9 시점, **인물 없음**, 크기 1536x1536. 광각 establishing shot는 fl2va 첫 프레임으로 사용. 3x3 그리드는 추가적인 구도 참조 앵커로, 동일 공간의 고정 배치를 모델이 여러 시점으로 이해하게 합니다.
+3x3 그리드는 장면의 `<Picture N>` 의 **구도 앵커**: 3x3 고정 9 시점, **인물 없음**, 크기 1536x1536. 광각 establishing shot는 장면의 정경 컷(3x3 그리드가 없으면 장면 참조 이미지). 3x3 그리드는 추가적인 구도 참조 앵커로, 동일 공간의 고정 배치를 모델이 여러 시점으로 이해하게 합니다.
 
 3x3 그리드 템플릿은 항상 영어 (생성 루트의 fallback과 일치):
 
@@ -83,4 +83,4 @@ bottom-center close-up of main prop or entrance; consistent lighting, style and 
 ```
 (`[Shot N]` 은 해당 컷 번호로 치환합니다.)
 
-저장: `save_scene_grid_prompt` 을 호출합니다. `scene_id` + `prompt` (3x3 그리드 템플릿, **스타일 단어 없이**—프로젝트 스타일은 도구가 자동 주입, `save_scene_final_prompt` 와 동일하게). 광각 (`save_scene_final_prompt`) 은 fl2va 첫 프레임으로 유지하고, 3x3 그리드는 추가 구도 앵커입니다.
+저장: `save_scene_grid_prompt` 을 호출합니다. `scene_id` + `prompt` (3x3 그리드 템플릿, **스타일 단어 없이**—프로젝트 스타일은 도구가 자동 주입, `save_scene_final_prompt` 와 동일하게). 광각 (`save_scene_final_prompt`) 은 장면의 정경 컷으로 유지하고, 3x3 그리드는 추가 구도 앵커입니다.

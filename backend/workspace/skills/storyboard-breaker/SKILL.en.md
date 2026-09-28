@@ -45,13 +45,25 @@ Dialogue that does not fit must be moved to the next segment; cramming unperform
 4. **Shot size**: the dominant shot size of the segment; for multi-size segments write a combination, e.g. "medium shot + close-up"
 5. **Angle**: eye-level / low angle / high angle / side / back
 6. **Camera move**: static / push-in / pull-back / pan / tracking / dolly (different sub-shots within a segment may differ)
-7. **Visual description** `description`: describe sub-shot by sub-shot as `【镜头1】…【镜头2】…` what the audience actually sees and hears — the visuals (who + specific action + body-language details + expression) come first; when a sub-shot has dialogue, write it inside the corresponding `【镜头N】` as "CharacterName says: "line"", and narration as "Narration: content"
+7. **Visual description** `description`: describe sub-shot by sub-shot as `【镜头1】…【镜头2】…` what the audience actually sees and hears — the visuals (who + which side of frame + specific action + body-language details + expression) come first; when a sub-shot has dialogue, write it inside the corresponding `【镜头N】` as "CharacterName says: "line"", and narration as "Narration: content"
 8. **Visual result** `result`: the immediate consequence at the end of the segment + visual details
 9. **Atmosphere** `atmosphere`: lighting + color tone + sound + overall mood
 10. **Duration** `duration`: total segment duration 8-15 seconds, and it must satisfy the dialogue duration floor
 11. **Scene binding**: if it can be matched to an existing scene, `scene_id` must be filled in
 12. **Character binding**: fill in `character_ids`, binding 0 to multiple characters involved in this segment
 13. **Prop binding**: fill in `prop_ids`, binding 0 to multiple key props appearing in this segment
+
+## Space and Blocking (Hard Rule)
+
+Each segment is **generated as its own standalone video**, and the model has no memory of the previous segment. If the space is not written down, every segment re-arranges it from scratch — concatenated, characters jump left and right and props drift (measured: two clips of the same scene put the two people on opposite sides). Treat space as a fact that **exists only once it is written**:
+
+- **Spatial anchors**: the first time a scene appears, pin the fixed furnishings down once (which side of frame the bed / table / window / door / lamp sits on, foreground or background). Use only furnishings the scene already has — never invent new furniture; every later segment in the same scene reuses the same set, unchanged
+- **Character blocking**: each character holds a fixed position in that scene, written as "**which fixed furnishing it is relative to** + screen left/right + foreground/background + facing", e.g. "女生A on the left of frame at the bed edge on the nightstand-lamp side, facing right". **Write both**: screen left/right is this shot's fact, the furnishing anchor is the fact that survives a camera change (cut to reverse angles and left/right flips, "the lamp side" does not). Constant across segments within one scene: unless you write them moving, position, facing and what they rest on must not change
+- **Restate in every shot**: every `【镜头N】` must say who is where, who they look at, where their hands rest; after a cut, restate the blocking — never write "same as above" or "unchanged"
+- **Movement needs a visible process**: sitting-to-standing, table-to-door, turning and exiting all need the action written out; without the process no position change is allowed. A character who exits and re-enters must have the entry written (e.g. "walks in through the door on frame left, back to the bed edge")
+- **Assign gaze**: a sub-shot with dialogue must say who the speaker looks at, or the model will have them look at the camera or at a prop
+- **Position only, never styling**: no clothing, hair, makeup or accessories — those come from the character reference image, and anything invented will contradict it (how a character looks is not the storyboard's business)
+- State space **positively** ("on the left of frame"), never as a negation ("do not move to the right") — sampling has no negative branch, so negations do nothing
 
 ## Scene Binding Rules
 

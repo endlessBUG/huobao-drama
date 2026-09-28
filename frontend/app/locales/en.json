@@ -681,6 +681,8 @@
       "videoPromptSection": "Video Prompt",
       "regenPrompt": "Regenerate",
       "aiGenerate": "AI Generate",
+      "fullRefGenerated": "Full-reference prompt for shot #{n} generated",
+      "fullRefEmpty": "Not generated yet — click AI Generate above; this is the copy the model actually receives",
       "videoPromptCopy": "Generated from this shot's visual description (including dialogue/narration) and atmosphere",
       "videoPromptPlaceholder": "Reference assets with {'@'}character / {'@'}scene, describe motion and camera per 3-second line; or click AI Generate for the prompt Agent…",
       "breaking": "Breaking the storyboard...",

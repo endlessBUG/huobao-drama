@@ -62,7 +62,7 @@ description: 场景最终提示词规范 — 清晰广角建立镜头：前景/�
 
 ## 九宫格场景（grid_prompt / save_scene_grid_prompt）
 
-九宫格是场景 `<Picture N>` 的**构图锚点**：3x3 固定 9 视角、**无人物**、尺寸 1536x1536。宽镜头场景图用作 fl2va 首帧；九宫格作为补充的构图参考锚点，让模型从多视角理解同一空间的固定布局。
+九宫格是场景 `<Picture N>` 的**构图锚点**：3x3 固定 9 视角、**无人物**、尺寸 1536x1536。宽镜头场景图是场景的定场图（无九宫格时它就是场景的参考图）；九宫格作为补充的构图参考锚点，让模型从多视角理解同一空间的固定布局。
 
 九宫格模板恒为英文（与生成路由的 fallback 一致）：
 
@@ -83,4 +83,4 @@ bottom-center close-up of main prop or entrance; consistent lighting, style and 
 ```
 （把 `[Shot N]` 替换为对应分镜编号。）
 
-保存：调用 `save_scene_grid_prompt`，只传 `scene_id` + `prompt`（九宫格模板，**不含风格词**——项目风格由工具自动注入，同 `save_scene_final_prompt`）。宽镜头（`save_scene_final_prompt`）保留作 fl2va 首帧，九宫格为额外构图锚点。
+保存：调用 `save_scene_grid_prompt`，只传 `scene_id` + `prompt`（九宫格模板，**不含风格词**——项目风格由工具自动注入，同 `save_scene_final_prompt`）。宽镜头（`save_scene_final_prompt`）是场景的定场图，九宫格为额外构图锚点。

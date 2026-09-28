@@ -681,6 +681,8 @@
       "videoPromptSection": "영상 프롬프트",
       "regenPrompt": "다시 생성",
       "aiGenerate": "AI로 생성",
+      "fullRefGenerated": "스토리보드 #{n} 전체 참조 프롬프트가 생성되었습니다",
+      "fullRefEmpty": "아직 생성되지 않음 — 우측 상단 'AI로 생성'을 누르면 프롬프트 Agent가 작성합니다(모델이 실제로 받는 것은 이 버전입니다)",
       "videoPromptCopy": "이 스토리보드의 화면 설명(대사/나레이션 포함)과 분위기를 바탕으로 생성",
       "videoPromptPlaceholder": "{'@'}캐릭터명 / {'@'}장멸명 으로 참조 소재를 지정하고, 3초마다 줄 바꿈하여 화면의 움직임과 침라를 기술. AI로 생성해 프롬프트 Agent에 맡길 수도 있습니다…",
       "breaking": "스토리보드 분해 중...",

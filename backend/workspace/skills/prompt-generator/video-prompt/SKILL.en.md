@@ -37,9 +37,10 @@ The `description` is the sole content source of the video_prompt (visuals, actio
 
 Organize each segment's content in this order (items with no content may be omitted, but action/visuals are mandatory):
 
-**Time range + scene @reference + shot size/camera move + character @reference + main action·expression + dialogue/narration + mood and lighting**
+**Time range + scene @reference + shot size/camera move + character @reference + blocking·main action·expression + dialogue/narration + mood and lighting**
 
-- **The first segment must establish the space**: scene + camera position + each character's position and state, so the audience knows at a glance where we are and whom to watch
+- **The first segment must establish the space**: scene + camera position + each character's screen side (who is on the left, who is on the right) and state, so the audience knows at a glance where we are and whom to watch
+- **Blocking holds across segments**: every segment states which side of frame each character is on; if someone was on the left and no movement is written, they must not appear on the right in the next segment
 - **Cuts**: start a post-cut segment with a transition word such as "cut to / cut back", and restate the shot size and subject; cut points should align with the `【镜头N】` structure in the storyboard `description`
 - **Shot size/camera move**: one camera state per segment (close shot / medium shot / wide shot / close-up; static / push / pull / pan / tracking); the camera move is continuous within a single sub-shot and may change after a cut
 - **Action**: one main action per segment, with concrete visible verbs (walk, turn around, look up, clench, pause)
@@ -69,8 +70,8 @@ Organize each segment's content in this order (items with no content may be omit
 ## Saving
 
 Call `update_storyboard` to update only this storyboard segment's `video_prompt` field; do not modify any other field, and do not re-breakdown the whole episode.
-
-
+
+
 ## Six-Section English Full Reference (video_prompt_full_ref)
 
 `video_prompt` is the human-facing Chinese prompt. `video_prompt_full_ref` is the **model-facing** prompt actually sent to the ComfyUI/MiniMax bridge, and it **must be six-section English** (the template is always English, independent of session language; only the line inside `<d>` keeps its original language).
@@ -78,8 +79,8 @@ Call `update_storyboard` to update only this storyboard segment's `video_prompt`
 Six-section template (the agent fills in real content):
 ```
 subject_definitions:
-<Subject 1> is the [外貌描述] woman from <Picture 1>.
-<Subject 2> is the [外貌描述] man from <Picture 2>.
+<Subject 1> is [角色名] from <Picture 1>, on the left of frame by the [固定陈设].
+<Subject 2> is [角色名] from <Picture 2>, on the right of frame.
 <Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
 summary:
 [Shot 1] is a 12-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
@@ -96,19 +97,27 @@ non_diegetic_music:
 ```
 
 **Label rules**:
-- `<Subject N>`: a **visible-content** description of the character/scene/prop (face, clothing, scene layout).
+- `<Subject N>`: for a character write **two things** — who it is in `<Picture N>` (the character's name) and where it sits in the frame (e.g. `on the left of frame by the nightstand lamp` — side plus a fixed furnishing, write both). **Never styling**: hair, makeup, clothing and accessories all come straight from the reference image, and no styling adjectives either (`elegant` / `beautiful` / `in a silk dress` all count as styling). You **cannot see** that image, so anything you invent will contradict the character sheet. Same for scenes/props: describe only what the reference actually carries; never add people to it.
 - `<Picture N>`: the reference-image index, the same N set as the Chinese `@Image N` (characters 1..k, scene k+1, props k+2..).
 - If the scene `<Picture k+1>` uses a nine-grid image, it **must** read "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order" (the essence of scene anchoring).
 
 **Numbering rules:** the `<Subject N>` and `<Picture N>` in the six-section prompt share the **same N set** (Nth asset = character 1..k, scene, prop 1..m), one-to-one. Just number in "character -> scene -> prop" order; you do not need to know any URLs.
+
+**Blocking rules** (every video is one standalone generation — unwritten blocking gets re-rolled every time):
+- Always use screen-relative sides (`left / right of frame`), never the character's own left or right hand; also carry an anchor **relative to a fixed furnishing** (e.g. `at the bed edge by the nightstand lamp`) — the screen side is this shot's fact, the furnishing anchor is the fact that survives a camera change (cut to reverse angles and left/right flips, "the lamp side" does not), so write both
+- Source of truth: the blocking already written in the storyboard `description` wins; if `description` has none, pin it by the character's `<Picture N>` index — No.1 on the left of frame, No.2 on the right, No.3 and later further back and to the sides — and **keep that same set across the whole episode** (no side-swapping between storyboards of one scene)
+- Every `[Shot N]` restates the blocking (e.g. `<Subject 1> (left) …`); after a cut, restate it once more — never swap sides
+- A character moving within a shot (standing up, stepping closer, leaving) needs the visible process written out; never relocate them silently
+- **Inherit the previous shot's ending state**: if the call message carries it ("上一镜末态"), your first segment must pick up exactly from that state (same blocking, facing, hand placement, held prop, eyeline); any position change needs a visible action process
+- **Reuse the scene anchor verbatim**: within one scene, repeat the same spatial anchor (which side each fixed furnishing is on, where the light comes from) word-for-word in every prompt — paraphrasing is where the drift starts
 
 **Retention rules:** each subject in `retention_analysis` takes one state word — `fully_preserved` (strong retention; **scenes always use it**) / `partially_preserved` / `attribute_transfer` / `weak_reference`.
 
 **Shot vocabulary** (use the official camera terms in `detailed_description`): Zoom In/Out, Push/Pull, Pan, Truck, Tilt, Arc, Tracking, Static, Shake.
 
 **Shot & dialogue rules**:
-- `detailed_description` is written shot by shot via `[Shot N]`, covering the shot, camera motion (terms above), character actions, speaker IDs (e.g. `(S1)`), and `<d>` dialogue.
+- `detailed_description` is written shot by shot via `[Shot N]`, covering the shot, camera motion (terms above), **each character's screen side**, character actions, speaker IDs (e.g. `(S1)`), and `<d>` dialogue.
 - **Never invent** lines; pull them verbatim from the `description`'s [Shot N] and drop them into `<d>` with a language tag (e.g. `<d>[Chinese] …</d>`).
 - The template's remaining text is always English, whatever the session language is; the line inside `<d>` keeps its **original language**.
 
-**Saving:** after generating the Chinese `video_prompt`, fill in `video_prompt_full_ref` per the template above; save both fields in one `update_storyboard` call (`storyboard_id`, `video_prompt`, `video_prompt_full_ref`).
+**Saving:** after generating the Chinese `video_prompt`, fill in `video_prompt_full_ref` per the template above; save both fields in one `update_storyboard` call (`storyboard_id`, `video_prompt`, `video_prompt_full_ref`).

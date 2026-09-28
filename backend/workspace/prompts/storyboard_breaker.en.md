@@ -23,7 +23,7 @@ Each segment requires the following fields:
 - prop_ids: the list of key prop IDs appearing in this segment (bound when a prop is seen, used, or shown in close-up) — may be empty; must be chosen from props
 - scene_id: if it can be matched to an existing scene in scenes, the correct scene_id must be filled in; leave empty when there is no match
 - duration: total segment duration, 8-15 seconds
-- description: visual description, describing sub-shot by sub-shot as 【镜头1】【镜头2】... what the audience actually sees and hears — the visuals (who + specific action + body-language details + expression) come first; when a sub-shot has dialogue, write it inside the corresponding 【镜头N】 as "CharacterName says: "line"", and narration as "Narration: content"
+- description: visual description, describing sub-shot by sub-shot as 【镜头1】【镜头2】... what the audience actually sees and hears — the visuals (who + which side of frame + specific action + body-language details + expression) come first; when a sub-shot has dialogue, write it inside the corresponding 【镜头N】 as "CharacterName says: "line"", and narration as "Narration: content". **Blocking is a hard rule**: every 【镜头N】 states which side of frame each character is on, which fixed furnishing they are relative to (e.g. the bed edge on the lamp side), whom they face, where their hands rest; constant across segments within one scene, movement must be written as a visible process; write position only, never styling or appearance (see the skill guide, "Space and Blocking")
 - atmosphere: mood, lighting, color tone, environmental feel
 - video_prompt: the video-generation prompt for this segment (rules below)
 

@@ -62,7 +62,7 @@ description: シーン最終プロンプト仕様 — 明瞭な広角エスタ�
 
 ## 九宮格シーン（grid_prompt / save_scene_grid_prompt）
 
-九宮格はシーンの `<Picture N>` の**構図アンカー**：3x3 固定 9 視点、**人物なし**、サイズ 1536x1536。広角エスタブリッシングショットは fl2va 的第一フレームとして使用。九宮格は補足的な構図参照アンカーとして、同一空間の固定レイアウトをモデルが複数視点から理解するのに使う。
+九宮格はシーンの `<Picture N>` の**構図アンカー**：3x3 固定 9 視点、**人物なし**、サイズ 1536x1536。広角エスタブリッシングショットはシーンの定場カット（九宮格が無い場合はシーン参照画像）。九宮格は補足的な構図参照アンカーとして、同一空間の固定レイアウトをモデルが複数視点から理解するのに使う。
 
 九宮格テンプレートは常に英語（生成ルートの fallback と一致）：
 
@@ -83,4 +83,4 @@ bottom-center close-up of main prop or entrance; consistent lighting, style and 
 ```
 （`[Shot N]` は該当カット番号に置き換える。）
 
-保存：`save_scene_grid_prompt` を呼び出す。`scene_id` + `prompt`（九宮格テンプレート、**スタイル語を含めない**——プロジェクトのスタイルはツールが自動注入、`save_scene_final_prompt` と同様に）。広角（`save_scene_final_prompt`）は fl2va 的第一フレームとして維持し、九宮格は追加の構図アンカー。
+保存：`save_scene_grid_prompt` を呼び出す。`scene_id` + `prompt`（九宮格テンプレート、**スタイル語を含めない**——プロジェクトのスタイルはツールが自動注入、`save_scene_final_prompt` と同様に）。広角（`save_scene_final_prompt`）はシーンの定場カットとして維持し、九宮格は追加の構図アンカー。

@@ -64,7 +64,7 @@ Call `save_scene_final_prompt`: the prompt parameter contains no style words —
 
 ## Nine-Grid Scene (grid_prompt / save_scene_grid_prompt)
 
-The nine-grid is the **composition anchor** for the scene `<Picture N>`: a 3x3 fixed 9-viewpoint grid, **no people**, size 1536x1536. The wide establishing shot serves as the fl2va first frame; the nine-grid is an additional composition reference anchor so the model understands the fixed layout of the same space from multiple viewpoints.
+The nine-grid is the **composition anchor** for the scene `<Picture N>`: a 3x3 fixed 9-viewpoint grid, **no people**, size 1536x1536. The wide establishing shot is the scene establishing image (it is the scene reference when no nine-grid exists); the nine-grid is an additional composition reference anchor so the model understands the fixed layout of the same space from multiple viewpoints.
 
 The nine-grid template is always English (matching the generation route's fallback):
 
@@ -85,4 +85,4 @@ Scene-line tag (append):
 ```
 (Replace `[Shot N]` with the corresponding storyboard number.)
 
-Saving: call `save_scene_grid_prompt`, passing only `scene_id` + `prompt` (the nine-grid template, **no style words** — the project style is auto-injected by the tool, just like `save_scene_final_prompt`). The wide shot (`save_scene_final_prompt`) is kept as the fl2va first frame; the nine-grid is the extra composition anchor.
+Saving: call `save_scene_grid_prompt`, passing only `scene_id` + `prompt` (the nine-grid template, **no style words** — the project style is auto-injected by the tool, just like `save_scene_final_prompt`). The wide shot (`save_scene_final_prompt`) is the scene establishing image; the nine-grid is the extra composition anchor.

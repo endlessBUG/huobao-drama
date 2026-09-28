@@ -37,9 +37,10 @@ description: 비디오 프롬프트 규범 — 스토리보드 구간 내용을 
 
 각 구간은 이 순서로 내용을 조직합니다(내용이 없는 항목은 생략 가능하지만, 동작/화면은 반드시 있어야 함):
 
-**시간 범위 + 장면 @참조 + 화면 크기/카메라 무빙 + 캐릭터 @참조 + 주체 동작·표정 + 대사/내레이션 + 분위기 조명**
+**시간 범위 + 장면 @참조 + 화면 크기/카메라 무빙 + 캐릭터 @참조 + 위치·주체 동작·표정 + 대사/내레이션 + 분위기 조명**
 
-- **첫 구간은 반드시 공간을 설정해야 함**: 장면 + 카메라 위치 + 캐릭터의 위치와 상태로, 관객이 한눈에 어디인지, 누구를 보는지 알게 합니다
+- **첫 구간은 반드시 공간을 설정해야 함**: 장면 + 카메라 위치 + 각 캐릭터의 화면 좌우(누가 왼쪽, 누가 오른쪽)와 상태로, 관객이 한눈에 어디인지, 누구를 보는지 알게 합니다
+- **위치는 구간을 넘어 불변**: 각 구간에서 캐릭터가 화면 어느 쪽인지 씁니다. 앞 구간에서 왼쪽에 있었고 이동을 쓰지 않았다면, 다음 구간에서 오른쪽에 나타나면 안 됩니다
 - **컷 전환**: 전환 후 구간의 시작에 "~로 전환", "~로 되돌아온다" 같은 연결어를 쓰고, 화면 크기와 주체를 새로 밝힙니다; 컷 전환 지점은 스토리보드 `description` 의 `【镜头N】` 구조에 맞춰야 합니다
 - **화면 크기/카메라 무빙**: 구간마다 하나의 컷 상태(근경/미디엄샷/전경/클로즈업; 고정/푸시인/풀백/팬/팔로우); 하나의 서브 컷 내에서는 무빙이 연속되고, 컷 전환 후에는 무빙 방식을 바꿀 수 있습니다
 - **동작**: 구간마다 하나의 주된 동작. 동사는 구체적이고 보이는 것으로 씁니다(걷기, 몸 돌리기, 고개 들기, 움켜쥐기, 멈칫하기)
@@ -69,8 +70,8 @@ description: 비디오 프롬프트 규범 — 스토리보드 구간 내용을 
 ## 저장
 
 `update_storyboard` 를 호출해 해당 스토리보드 구간의 `video_prompt` 필드만 갱신합니다. 다른 필드를 변경하지 말고, 전체 화를 다시 분할하지 마세요.
-
-
+
+
 ## 6단절 영어 풀리퍼런스(video_prompt_full_ref)
 
 `video_prompt` 은 사용자용(중국어) 프롬프트입니다. `video_prompt_full_ref` 은 ComfyUI/MiniMax 브리지에 실제로 보내는 **모델용** 프롬프트로 **6단절 영어**여야 합니다(템플릿은 항상 영어. 세션 언어와 무관하고, `<d>` 안만 원본 언어 유지).
@@ -78,8 +79,8 @@ description: 비디오 프롬프트 규범 — 스토리보드 구간 내용을 
 6단절 템플릿(에이전트가 실제 내용 입력):
 ```
 subject_definitions:
-<Subject 1> is the [外貌描述] woman from <Picture 1>.
-<Subject 2> is the [外貌描述] man from <Picture 2>.
+<Subject 1> is [角色名] from <Picture 1>, on the left of frame by the [固定陈设].
+<Subject 2> is [角色名] from <Picture 2>, on the right of frame.
 <Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
 summary:
 [Shot 1] is a 12-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
@@ -96,19 +97,27 @@ non_diegetic_music:
 ```
 
 **태그 규칙**:
-- `<Subject N>`: 캐릭터/장면/소품의 **가시적 내용** 설명(얼굴, 옷, 장면 레이아웃).
+- `<Subject N>`: 캐릭터는 **두 가지**를 쓴다 — `<Picture N>` 의 누구인지(캐릭터 이름)와 화면 안에서의 위치(예: `on the left of frame by the nightstand lamp` — 좌우 + 고정 집기, 둘 다 씀). **스타일링은 절대 쓰지 않는다**: 헤어스타일·메이크업·의상·액세서리는 전부 참조 이미지에서 직접 가져오고, 스타일링 형용사(`elegant` / `beautiful` / `in a silk dress` 모두 스타일링)도 붙이지 않는다. 참조 이미지를 **볼 수 없으므로** 쓴 내용은 반드시 캐릭터 설정과 충돌한다. 장면/소품도 마찬가지: 참조 이미지가 실제로 담고 있는 레이아웃만 쓰고 인물을 더하지 않는다.
 - `<Picture N>`: 참조 이미지 번호, 중국어 `@이미지N`과 동일한 번호 체계(캐릭터 1..k, 장면 k+1, 소품 k+2..).
 - 장면 `<Picture k+1>` 이 9격 격자 이미지를 쓸 경우, **반드시** "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order" 라고 명시(장면 고정的本質).
 
 **번호 규칙**: 6단절 안의 `<Subject N>` 과 `<Picture N>` 은 **동일 번호 체계**(N번째 에셋 = 캐릭터1..k, 장면, 소품1..m)로 1:1 대응. "캐릭터→장면→소품" 순으로 번호만 매기면 된다. URL 불필요.
+
+**위치 규칙**(각 영상은 독립적인 1회 생성 — 적지 않으면 매번 다시 배치됨):
+- 좌우는 반드시 **화면 기준**(`left / right of frame`)으로 쓰고, 캐릭터 자신의 좌우 손은 쓰지 않습니다. 동시에 **고정 집기 기준 앵커**(예: `at the bed edge by the nightstand lamp`)도 씁니다 — 좌우는 이 샷의 사실, 집기는 카메라가 바뀌어도 변하지 않는 사실이므로(리버스 컷으로 자르면 좌우는 뒤집히지만 「램프 쪽」은 뒤집히지 않음) 둘 다 씁니다
+- 출처: 콘티 `description` 에 이미 적힌 위치를 **우선**합니다. `description` 에 없으면 `<Picture N>` 번호로 고정합니다 — 1번은 화면 왼쪽, 2번은 오른쪽, 3번 이후는 배경과 양쪽으로 펼치고, **전편에서 같은 조합을 유지**합니다(같은 장면의 구간 간에 좌우를 바꾸지 않음)
+- 각 `[Shot N]` 마다 위치를 재서술합니다(예: `<Subject 1> (left) …`). 컷 이후 다시 한 번 명시하고 좌우를 바꾸지 않습니다
+- 샷 안에서 캐릭터가 이동하는 경우(일어나기, 다가가기, 퇴장) 눈에 보이는 과정을 씁니다. 말없이 위치를 바꾸지 않습니다
+- **이전 샷의 종료 상태 이어받기**: 호출 메시지에 「上一镜末态」(이전 샷의 종료 상태)가 주어지면 이 샷의 첫 구간은 반드시 그 상태에서 시작합니다(위치·방향·손 위치·소지품·시선 일치). 위치를 바꾸려면 눈에 보이는 동작 과정을 씁니다
+- **장면 앵커는 그대로 재사용**: 같은 장면 안에서는 공간 앵커(각 고정 집기가 어느 쪽인지, 빛의 방향)를 모든 프롬프트에서 **같은 문구로 그대로 반복**합니다. 표현을 바꾸는 것이 드리프트의 시작입니다
 
 **retention 규칙**: `retention_analysis` 의 각 subject에 상태말어 1개 — `fully_preserved`(강한 보존, **장면은 반드시 이걸 사용**)/ `partially_preserved` / `attribute_transfer` / `weak_reference`.
 
 **샷 용어**( `detailed_description` 에서 공식 카메라 용어 사용): Zoom In/Out, Push/Pull, Pan, Truck, Tilt, Arc, Tracking, Static, Shake.
 
 **샷과 대사의 규칙**:
-- `detailed_description` 은 `[Shot N]` 에 따라 샷별로 작성하며 샷, 카메라 움직임(상기 용어), 캐릭터 동작, 화자 ID(예: `(S1)`), `<d>` 대사를 기록한다.
+- `detailed_description` 은 `[Shot N]` 에 따라 샷별로 작성하며 샷, 카메라 움직임(상기 용어), **각 캐릭터의 화면 위치**, 캐릭터 동작, 화자 ID(예: `(S1)`), `<d>` 대사를 기록한다.
 - 대사/내레이션은 **창작하지 않습니다**. `description` 의【镜头N】에서 추출해 언어 태그(예: `<d>[Chinese] …</d>`)를 붙여 `<d>`에 **그대로** 넣습니다.
 - 템플릿의 나머지 텍스트는 항상 영어이고 세션 언어와 무관합니다. `<d>` 안은 **원본 언어**를 유지합니다.
 
-**저장**: 중국어 `video_prompt` 생성 후 위 템플릿으로 `video_prompt_full_ref`를 채우고, 한 번의 `update_storyboard`로 두 필드를 저장(`storyboard_id`, `video_prompt`, `video_prompt_full_ref`).
+**저장**: 중국어 `video_prompt` 생성 후 위 템플릿으로 `video_prompt_full_ref`를 채우고, 한 번의 `update_storyboard`로 두 필드를 저장(`storyboard_id`, `video_prompt`, `video_prompt_full_ref`).

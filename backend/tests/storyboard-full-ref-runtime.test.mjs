@@ -20,7 +20,8 @@ test('update_storyboard 接受 video_prompt_full_ref 并映射 videoPromptFullRe
 test('genVid：comfyui 时优先 videoPromptFullRef；非 comfyui 路径仍走 resolveVideoPromptRefs（回归 Review Focus #1）', () => {
   const s = read('../frontend/app/views/drama/episode.vue')
   assert.match(s, /selectedVideoConfig\.value\?\.\s*provider\s*===\s*['"]comfyui['"]/)
-  assert.match(s, /videoPromptFullRef \|\| sb\.videoPrompt/)
+  // 驼峰与下划线都认：接口回的常是 snake_case，只读驼峰会拿到空串 → 后端「必须提供提示词」直接拒
+  assert.match(s, /sb\.video_prompt_full_ref \|\| sb\.videoPromptFullRef \|\| sb\.video_prompt \|\| sb\.videoPrompt/)
   assert.match(s, /: resolveVideoPromptRefs\(sb\)/)
 })
 

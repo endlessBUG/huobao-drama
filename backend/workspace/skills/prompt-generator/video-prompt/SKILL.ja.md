@@ -37,9 +37,10 @@ description: 動画プロンプト仕様 — 絵コンテパラグラフの内�
 
 各区間はこの順序で内容を組み立てる（内容のない項目は省略してよいが、動作／画面は必須）：
 
-**時間範囲 ＋ シーンの@参照 ＋ ショットサイズ／カメラワーク ＋ キャラクターの@参照＋主体の動作・表情 ＋ セリフ／ナレーション ＋ 雰囲気と光線**
+**時間範囲 ＋ シーンの@参照 ＋ ショットサイズ／カメラワーク ＋ キャラクターの@参照＋立ち位置・主体の動作・表情 ＋ セリフ／ナレーション ＋ 雰囲気と光線**
 
-- **最初の区間は必ず空間を確立する**：シーン ＋ カメラ位置 ＋ キャラクターの位置と状態で、観客が一目で「どこか、誰を見るか」を把握できるようにする
+- **最初の区間は必ず空間を確立する**：シーン ＋ カメラ位置 ＋ 各キャラクターの画面左右（誰が左、誰が右）と状態で、観客が一目で「どこか、誰を見るか」を把握できるようにする
+- **立ち位置は区間をまたいで不変**：各区間でキャラクターが画面のどちら側かを書く。前の区間で左にいて移動を書いていないなら、次の区間で右に現れてはならない
 - **カット切り替え**：切り替え後の区間の冒頭は「切り替わる／戻る」などの接続語を使い、ショットサイズと主体を改めて示す。カットの切り替え位置は絵コンテ `description` の `【镜头N】` 構造に揃える
 - **ショットサイズ／カメラワーク**：各区間1つのショット状態（近景／ミディアム／全景／クローズアップ；固定／プッシュイン／プルバック／パン／フォロー）。1つのサブカット内ではカメラワークは連続し、カット切り替え後に変更できる
 - **動作**：各区間1つの主な動作。動詞は具体的で目に見えるものにする（歩く、振り返る、顔を上げる、握り締める、間を置く）
@@ -69,8 +70,8 @@ description: 動画プロンプト仕様 — 絵コンテパラグラフの内�
 ## 保存
 
 `update_storyboard` を呼び出して、その絵コンテパラグラフの `video_prompt` フィールドのみを更新する。他のフィールドは変更せず、話全体を再分解しない。
-
-
+
+
 ## 六段式英語フルリファレンス（video_prompt_full_ref）
 
 `video_prompt` は人間向け（中国語）の提示词です。`video_prompt_full_ref` は ComfyUI/MiniMax ブリッジに実際に送る**モデル向け**の提示词で、**六段式英語**である必要があります（テンプレは常に英語。セッション言語に関わらず、`<d>` の内側のみ元の言語を保持）。
@@ -78,8 +79,8 @@ description: 動画プロンプト仕様 — 絵コンテパラグラフの内�
 六段式テンプレ（agent が実内容で埋める）：
 ```
 subject_definitions:
-<Subject 1> is the [外貌描述] woman from <Picture 1>.
-<Subject 2> is the [外貌描述] man from <Picture 2>.
+<Subject 1> is [角色名] from <Picture 1>, on the left of frame by the [固定陈设].
+<Subject 2> is [角色名] from <Picture 2>, on the right of frame.
 <Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
 summary:
 [Shot 1] is a 12-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
@@ -96,19 +97,27 @@ non_diegetic_music:
 ```
 
 **ラベル規則**：
-- `<Subject N>`：キャラクター／シーン／小物への**視覚的な内容**記述（顔、服装、シーンのレイアウト）。
+- `<Subject N>`：キャラクターは**2つ**書く——`<Picture N>` の誰か（キャラクター名）と、画面内の位置（例：`on the left of frame by the nightstand lamp`——左右＋固定調度品、両方書く）。**造型は一切書かない**：髪型・メイク・服装・装飾品はすべて参照画像から直接取り、造型の形容詞（`elegant` / `beautiful` / `in a silk dress` はいずれも造型）も付けない。あなたは参照画像を**見られない**ので、書けば必ずキャラクター設定と食い違う。シーン／小物も同様：参照画像が実際に持つレイアウトだけを書き、人物を足さない。
 - `<Picture N>`：参照画像の番号。中国語の `@画像N` と同じ番号体系（キャラ 1..k、シーン k+1、小物 k+2..）。
 - 九宮格画像をシーン `<Picture k+1>` で使う場合、**必ず** "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order" と明記（シーン固定の本質）。
 
 **番号規則**：六段式内の `<Subject N>` と `<Picture N>` は**同一番号体系**（N番目 Asset ＝ キャラ 1..k、シーン、小物 1..m）で 1:1 対応。「キャラ→シーン→小物」の順で番号付けするだけでよい。URL は不要。
+
+**立ち位置ルール**（各動画は独立した1回の生成——書かなければ毎回置き直される）：
+- 左右は必ず**画面基準**（`left / right of frame`）で書き、キャラクター自身の左右の手は使わない。同時に**固定調度品に対するアンカー**（例：`at the bed edge by the nightstand lamp`）も書く——左右はこのカットの事実、調度品はカメラが変わっても不変の事実（切り返しにすると左右は反転するが「ランプ側」は反転しない）なので、両方書く
+- 出典：絵コンテ `description` に既に書かれた立ち位置を**優先**。`description` に無い場合は `<Picture N>` の番号で固定する——1番は画面左、2番は右、3番以降は後景と両側へ展開し、**全編で同じ組み合わせを踏襲**（同じ場面のパラグラフ間で左右を入れ替えない）
+- 各 `[Shot N]` で立ち位置を復述する（例：`<Subject 1> (left) …`）。カット後はもう一度明示し、左右を入れ替えない
+- ショット内でキャラクターが移動する場合（立ち上がる、近づく、退場する）は目に見える過程を書く。無言で位置を変えない
+- **前のカットの終了状態を承接**：呼び出しメッセージに「上一镜末态」が渡されている場合、本カットの最初の区間は必ずその状態から始める（立ち位置・向き・手の位置・持ち物・視線を一致させる）。位置を変えるなら目に見える動作の過程を書く
+- **シーンアンカーは逐語で再利用**：同一シーン内では空間アンカー（各固定調度品がどちら側か、光の向き）をどのプロンプトでも**同じ文言でそのまま繰り返す**。言い換えはドリフトの始まり
 
 **retention 規則**：`retention_analysis` の各 subject に状態語を 1つ — `fully_preserved`（強い保持、**シーンは必ずこれ**）/ `partially_preserved` / `attribute_transfer` / `weak_reference`。
 
 **ショット語彙**（`detailed_description` で公式のカメラ用語を使う）：Zoom In/Out, Push/Pull, Pan, Truck, Tilt, Arc, Tracking, Static, Shake。
 
 **ショットと対話の規則**：
-- `detailed_description` は `[Shot N]` ごとに各ショットで記述し、ショット、カメラの動き（上記語彙）、キャラクターの動作、話者 ID（例：`(S1)`）、`<d>` 対話を記述する。
+- `detailed_description` は `[Shot N]` ごとに各ショットで記述し、ショット、カメラの動き（上記語彙）、**各キャラクターの画面位置**、キャラクターの動作、話者 ID（例：`(S1)`）、`<d>` 対話を記述する。
 - 台詞／ナレーションは**作成しない**。`description` の【镜头N】から抽出し、言語タグ（例：`<d>[Chinese] …</d>`）を添えて `<d>` に**そのまま**入れる。
 - テンプレの残りのテキストは常に英語で、セッション言語に関わらない。`<d>` 内は**元の言語**を保つ。
 
-**保存**：中国語の `video_prompt` を生成した後、上のテンプレで `video_prompt_full_ref` を記入し、1つの `update_storyboard` で両フィールドを保存（`storyboard_id`、`video_prompt`、`video_prompt_full_ref`）。
+**保存**：中国語の `video_prompt` を生成した後、上のテンプレで `video_prompt_full_ref` を記入し、1つの `update_storyboard` で両フィールドを保存（`storyboard_id`、`video_prompt`、`video_prompt_full_ref`）。

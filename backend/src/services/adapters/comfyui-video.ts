@@ -32,6 +32,23 @@ const MAX_IMAGES = 9
 const DEFAULT_SIZE = '576x320'
 const FPS = 24
 const DEFAULT_LENGTH = 124
+// 模型训练区间 124-362 帧（JZL 节点 tooltip：124 ≈ 5s，训练区间约 124-362）；超出就出训练区，取上界。
+const MIN_LENGTH = 124
+const MAX_LENGTH = 362
+
+/**
+ * 分镜时长（秒）→ 模型帧数。两个硬约束：
+ *  1. 帧数必须吸附到 17k+5 网格（节点 align_frame_count 是同款向上取整）。喂非对齐帧数**不报错**，
+ *     会被 VAE 静默补帧（重复末帧）——表现成「尾巴卡住」，很容易误判成模型问题。
+ *  2. 夹进训练区间 124-362（5.2-15.1s）。12s→294 帧(12.25s)，9s→226(9.42s)，8s→192(8.00s)。
+ * 给不出秒数时退回默认 124 —— 与旧行为一致。
+ */
+export function framesForDuration(seconds?: number | null): number {
+  if (!seconds || seconds <= 0) return DEFAULT_LENGTH
+  let n = Math.round(seconds * FPS)
+  while (n % 17 !== 5) n++
+  return Math.min(MAX_LENGTH, Math.max(MIN_LENGTH, n))
+}
 
 export class ComfyUIVideoAdapter implements VideoProviderAdapter {
   provider = 'comfyui'
@@ -60,7 +77,7 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
         prompt,
         model: (record.model || config.model || 'minimax-h3-ref2v') || 'minimax-h3-ref2v',
         size: DEFAULT_SIZE,
-        length: DEFAULT_LENGTH,
+        length: framesForDuration(record.duration),
         images,
         ref_scale: 2.0,
         first_frame: firstFrameFile,

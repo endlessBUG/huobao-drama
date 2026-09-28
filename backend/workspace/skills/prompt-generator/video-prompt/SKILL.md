@@ -37,9 +37,10 @@ description: 视频提示词规范 — 根据分镜段落内容生成按时间�
 
 每一段按此顺序组织内容（可省略无内容的项，但动作/画面必须有）：
 
-**时间范围 ＋ 场景@引用 ＋ 景别/运镜 ＋ 角色@引用＋主体动作·表情 ＋ 对白/旁白 ＋ 氛围光线**
+**时间范围 ＋ 场景@引用 ＋ 景别/运镜 ＋ 角色@引用＋站位·主体动作·表情 ＋ 对白/旁白 ＋ 氛围光线**
 
-- **第一段必须建立空间**：场景 + 机位 + 角色的位置与状态，让观众一眼知道在哪、看谁
+- **第一段必须建立空间**：场景 + 机位 + 每个角色的左右站位（谁在画面左、谁在右）与状态，让观众一眼知道在哪、看谁
+- **站位跨段恒定**：每一段都要写角色在画面哪一侧；上一段在左、没写他移动，下一段不许出现在右
 - **切镜**：切镜后的段开头用"切到/切回"等衔接词，并重新交代景别与主体；切镜点应对齐分镜 `description` 中的 `【镜头N】` 结构
 - **景别/运镜**：每段一个镜头状态（近景/中景/全景/特写；固定/推/拉/摇/跟）；单个子镜头内运镜连续，切镜后可更换运镜方式
 - **动作**：每段一个主动作，动词具体可见（走、转身、抬头、攥紧、停顿）
@@ -69,8 +70,8 @@ description: 视频提示词规范 — 根据分镜段落内容生成按时间�
 ## 保存
 
 调用 `update_storyboard` 仅更新该分镜段落的 `video_prompt` 字段，不要改动其他字段，不要重新拆分整集。
-
-
+
+
 ## 六段式英文全参考（video_prompt_full_ref）
 
 `video_prompt` 是给人看的中文提示词；`video_prompt_full_ref` 是真正送 ComfyUI/MiniMax 桥的**模型侧**提示词，**必须是六段式英文**（模板恒英文，与会话语言无关；`<d>` 内台词保留原文语言）。
@@ -78,8 +79,8 @@ description: 视频提示词规范 — 根据分镜段落内容生成按时间�
 六段式模板（agent 填实际内容）：
 ```
 subject_definitions:
-<Subject 1> is the [外貌描述] woman from <Picture 1>.
-<Subject 2> is the [外貌描述] man from <Picture 2>.
+<Subject 1> is [角色名] from <Picture 1>, on the left of frame by the [固定陈设].
+<Subject 2> is [角色名] from <Picture 2>, on the right of frame by the [固定陈设].
 <Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
 summary:
 [Shot 1] is a 12-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
@@ -96,19 +97,27 @@ non_diegetic_music:
 ```
 
 **标签规则**：
-- `<Subject N>`：角色/场景/道具的**可见内容**描述（人脸、穿着、场景布局）。
+- `<Subject N>`：角色写**两样**——它是 `<Picture N>` 里的谁（角色名），以及它在画面里的位置（如 `on the left of frame by the nightstand lamp`，左右 ＋ 相对固定陈设，两样都要）。**妆造一律不写**：脸型、五官、发型、妆容、服装、配饰全部直接取自参考图，也不要加造型形容词（`elegant` / `beautiful` / `in a silk dress` 都算造型）。你**看不到**参考图，编出来的外貌和穿着必然跟角色图打架。场景/道具同理：只写参考图确实承载的布局，不要往里加人。
 - `<Picture N>`：参考图序号，与中文 `@图片N` 同一套 N（角色 1..k、场景 k+1、道具 k+2..）。
 - 场景 `<Picture k+1>` 若用九宫格图，**必须**写明 "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order"（九宫格场景锚定的精髓）。
 
 **编号规则**：六段式里 `<Subject N>` 与 `<Picture N>` 用**同一套 N**（第 N 个资产 = 角色1..k、场景、道具1..m），两者序号一一对应。只需按"角色→场景→道具"顺序编号，无需感知具体 URL。
+
+**站位规则**（每条视频都是独立生成的一次调用，不写就每次重摆）：
+- 左右一律用**画面视角**（`left / right of frame`），不要用角色自己的左右手；同时带上**相对固定陈设的锚点**（如 `at the bed edge by the nightstand lamp`）—— 左右是这一镜的事实，相对陈设是换机位也不变的事实（切正反打时左右会翻，「床头灯那一侧」不会翻），两样都写
+- 站位来源：分镜 `description` 里已写的走位**为准**；`description` 没写时按角色在 `<Picture N>` 里的序号钉死——1 号在画面左、2 号在右、3 号及以后向后景与两侧展开，**整集沿用同一套**（同一场戏跨分镜不许换边）
+- 每个 `[Shot N]` 都要复述站位（如 `<Subject 1> (left) …`），切镜后重新交代一次，不许换边
+- 角色在镜内移动（起身、走近、离场）要写出可见过程，不许无声换位
+- **承接上一镜末态**：调用消息里若给了「上一镜末态」，本条第一段必须从那个状态起手（站位、朝向、手停在哪、持物、视线一致），要换位置必须写出可见的动作过程
+- **场景锚点逐字复用**：同一场景的空间锚点（固定陈设各自在哪一侧、光从哪来）在每条提示词里**原样重复**，不要换措辞——改写措辞就是漂移的起点
 
 **retention 规则**：`retention_analysis` 每个 subject 一个状态词——`fully_preserved`（强保留，**场景一律用它**）/ `partially_preserved` / `attribute_transfer` / `weak_reference`。
 
 **镜头词汇表**（`detailed_description` 用官方机位词）：Zoom In/Out, Push/Pull, Pan, Truck, Tilt, Arc, Tracking, Static, Shake。
 
 **镜头与对白规则**：
-- `detailed_description` 按 `[Shot N]` 逐镜头写，含镜头、机位运动（上述词汇）、人物动作、说话人 ID（如 `(S1)`）、`<d>` 对白。
+- `detailed_description` 按 `[Shot N]` 逐镜头写，含镜头、机位运动（上述词汇）、**每个角色的画面站位**、人物动作、说话人 ID（如 `(S1)`）、`<d>` 对白。
 - 台词/旁白**不创作**，从 `description` 的【镜头N】提取，**原样**塞进 `<d>`，并加语言 tag（如 `<d>[Chinese] …</d>`）。
 - 模板其余部分恒英文，无论会话语言；`<d>` 内台词保留**原文语言**。
 
-**保存**：生成完中文 `video_prompt` 后按上面模板填好 `video_prompt_full_ref`，一次 `update_storyboard` 同时保存两字段（`storyboard_id`、`video_prompt`、`video_prompt_full_ref`）。
+**保存**：生成完中文 `video_prompt` 后按上面模板填好 `video_prompt_full_ref`，一次 `update_storyboard` 同时保存两字段（`storyboard_id`、`video_prompt`、`video_prompt_full_ref`）。

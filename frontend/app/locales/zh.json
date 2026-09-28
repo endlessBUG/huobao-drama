@@ -681,6 +681,8 @@
       "videoPromptSection": "视频提示词",
       "regenPrompt": "重新生成",
       "aiGenerate": "AI 生成",
+      "fullRefGenerated": "分镜 #{n} 全参考提示词已生成",
+      "fullRefEmpty": "尚未生成 —— 点右上「AI 生成」由提示词 Agent 创作（模型实际使用的就是这份）",
       "videoPromptCopy": "根据当前分镜的画面描述（含台词/旁白）与氛围生成",
       "videoPromptPlaceholder": "用 {'@'}角色名 / {'@'}场景名 引用参考素材，按 3 秒一段换行描述画面运动与镜头；也可点 AI 生成由提示词 Agent 自动创作…",
       "breaking": "正在拆分分镜...",

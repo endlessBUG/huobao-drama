@@ -481,8 +481,11 @@ async function handleVideoComplete(record: SysTaskRecord, videoUrl: string, dura
   logTaskSuccess('VideoTask', 'downloaded', { id: record.id, localPath, storyboardId: record.storyboardId, duration })
 
   if (record.storyboardId) {
+    // 不要回写 duration：它是**创作意图**，同时是 length 的输入（comfyui-video.ts framesForDuration）。
+    // 回写会自锁——生成 5.2s 就把「这条要拍 12s」改成 5.2s，下一轮按 5.2s 算 length，永久锁死 5.2s。
+    // 实测：09-25 首轮拆解出的 12/12/12/12/8，在第一次渲染成功后全被覆写成 5.1667，此后再没出过 5 秒以上的片子。
     await db.update(schema.storyboards)
-      .set({ videoUrl: localPath, duration: duration || undefined, updatedAt: now() })
+      .set({ videoUrl: localPath, updatedAt: now() })
       .where(eq(schema.storyboards.id, record.storyboardId))
   }
 }

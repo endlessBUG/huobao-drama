@@ -361,11 +361,14 @@
       "extractor": "角色场景提取",
       "storyboardBreaker": "分镜拆解",
       "promptGenerator": "提示词",
+      "characterPromptOptimizer": "角色提示词优化",
       "langFallback": "跟随中文",
       "followContentLang": "编辑语言跟随：{lang}（在「通用 → AI 内容语言」切换）"
     },
     "skills": {
       "agentList": "Agent 列表",
+      "allSkills": "全部技能",
+      "skillOrphan": "未被任何 Agent 使用",
       "desc": "Skills 仅作为 Agent 的高级提示词层使用，不影响工作台常规功能入口。",
       "add": "新增 Skill",
       "emptyTitle": "暂无 Skill",

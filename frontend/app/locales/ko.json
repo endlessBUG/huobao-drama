@@ -361,11 +361,14 @@
       "extractor": "캐릭터·장면 추출",
       "storyboardBreaker": "스토리보드 분해",
       "promptGenerator": "프롬프트 생성",
+      "characterPromptOptimizer": "캐릭터 프롬프트 최적화",
       "langFallback": "중국어로 폴백",
       "followContentLang": "편집 언어: {lang} (일반 → AI 콘텐츠 언어에서 전환)"
     },
     "skills": {
       "agentList": "Agent 목록",
+      "allSkills": "전체 스킬",
+      "skillOrphan": "어떤 에이전트도 사용하지 않음",
       "desc": "Skills는 Agent의 고급 프롬프트 레이어로만 사용되며, 워크벤치의 일반 기능 진입점에는 영향을 주지 않습니다.",
       "add": "Skill 추가",
       "emptyTitle": "Skill이 없습니다",

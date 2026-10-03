@@ -50,6 +50,11 @@ const AGENT_SKILL_MAP: Record<string, string[]> = {
   character_prompt_optimizer: ['prompt-generator/character-prompt'],
 }
 
+/** 技能相对路径（不带 skills/ 前缀）是否落在某组前缀下。
+ *  Workspace 注册、技能注入、反向映射三处共用同一套语义 —— 谁改了匹配规则，三边一起变。 */
+const skillMatches = (relPath: string, prefixes: string[]): boolean =>
+  prefixes.some(prefix => relPath === prefix || relPath.startsWith(`${prefix}/`))
+
 /** 每个 Agent 的 Workspace（filesystem 工作目录 + 原生技能注册）
  *  skills 用动态解析器按目录前缀匹配：设置页新建的子技能无需重启即可被发现 */
 export const skillWorkspaces: Record<string, Workspace> = Object.fromEntries(
@@ -59,11 +64,18 @@ export const skillWorkspaces: Record<string, Workspace> = Object.fromEntries(
       id: `workspace-${agentType}`,
       name: `${agentType} workspace`,
       filesystem: localFilesystem(),
-      skills: () => scanSkillPaths().filter(p =>
-        prefixes.some(prefix => p === `skills/${prefix}` || p.startsWith(`skills/${prefix}/`))),
+      skills: () => scanSkillPaths().filter(p => skillMatches(p.replace(/^skills\//, ''), prefixes)),
     }),
   ]),
 )
+
+/** 反向映射：某技能被哪些 Agent 使用（设置页「技能 → Agent」视图的数据源）。
+ *  不新增表、不落库，直接由 AGENT_SKILL_MAP 前缀算出。返回空数组 = 没有任何 Agent 引用它。 */
+export function agentsUsingSkill(relPath: string): string[] {
+  return Object.entries(AGENT_SKILL_MAP)
+    .filter(([, prefixes]) => skillMatches(relPath, prefixes))
+    .map(([agentType]) => agentType)
+}
 
 /** 递归扫描 workspace/skills/ 下所有含 SKILL.md 的目录（相对 workspace 根的路径） */
 function scanSkillPaths(): string[] {
@@ -126,8 +138,7 @@ export async function loadAgentSkills(agentType: string, lang?: string | null): 
   if (!workspace || !prefixes.length) return ''
 
   const allPaths = scanSkillPaths().map(p => p.replace(/^skills\//, ''))
-  const relPaths = allPaths.filter(p =>
-    prefixes.some(prefix => p === prefix || p.startsWith(prefix + '/')))
+  const relPaths = allPaths.filter(p => skillMatches(p, prefixes))
 
   const useLocalized = Boolean(lang && lang !== 'zh')
   const contents: string[] = []

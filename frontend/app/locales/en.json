@@ -361,11 +361,14 @@
       "extractor": "Asset Extractor",
       "storyboardBreaker": "Storyboard Breaker",
       "promptGenerator": "Prompt Generator",
+      "characterPromptOptimizer": "Character Prompt Optimizer",
       "langFallback": "Falls back to Chinese",
       "followContentLang": "Editing language: {lang} (switch in General → AI Content Language)"
     },
     "skills": {
       "agentList": "Agents",
+      "allSkills": "All Skills",
+      "skillOrphan": "Not used by any agent",
       "desc": "Skills act as an advanced prompt layer for Agents and do not affect the regular workbench entry points.",
       "add": "Add Skill",
       "emptyTitle": "No skills yet",

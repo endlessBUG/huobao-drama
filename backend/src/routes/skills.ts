@@ -4,7 +4,7 @@
  */
 import { Hono } from 'hono'
 import { success, badRequest } from '../utils/response.js'
-import { refreshSkillWorkspaces, skillsManagerWorkspace } from '../agents/skills.js'
+import { refreshSkillWorkspaces, skillsManagerWorkspace, agentsUsingSkill } from '../agents/skills.js'
 
 const app = new Hono()
 const fsm = () => skillsManagerWorkspace.filesystem!
@@ -32,7 +32,8 @@ app.get('/', async (c) => {
       if (n) name = n
       if (d) description = d
     }
-    out.push({ id, name, description })
+    // agents：哪些 Agent 引用这个技能（由 AGENT_SKILL_MAP 前缀算，空数组 = 无人引用）
+    out.push({ id, name, description, agents: agentsUsingSkill(id) })
   }
   return success(c, out)
 })

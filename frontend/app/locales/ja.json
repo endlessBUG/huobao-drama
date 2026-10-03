@@ -361,11 +361,14 @@
       "extractor": "キャラクター・シーン抽出",
       "storyboardBreaker": "分镜分解",
       "promptGenerator": "プロンプト生成",
+      "characterPromptOptimizer": "キャラクター・プロンプト最適化",
       "langFallback": "中国語にフォールバック",
       "followContentLang": "編集言語：{lang}（「一般 → AI コンテンツ言語」で切替）"
     },
     "skills": {
       "agentList": "Agent 一覧",
+      "allSkills": "すべてのスキル",
+      "skillOrphan": "どの Agent も使用していません",
       "desc": "Skills は Agent の高度なプロンプトレイヤーとしてのみ使用され、ワークベンチの通常の機能入口には影響しません。",
       "add": "Skill を追加",
       "emptyTitle": "Skill がありません",

@@ -341,6 +341,15 @@
           <!-- Agent 左侧 tab 列表 -->
           <aside class="skills-agent-list">
             <div class="skills-agent-title">{{ t('settings.skills.agentList') }}</div>
+            <!-- 技能 → Agent 反向视图：跨 Agent 平铺全部技能，卡片上标出引用它的 Agent -->
+            <button
+              :class="['skills-agent-item', { active: isAllSkills }]"
+              @click="selectAgent(ALL_SKILLS)"
+            >
+              <span class="agent-type-badge">🗂</span>
+              <span class="skills-agent-label">{{ t('settings.skills.allSkills') }}</span>
+              <span v-if="allSkills.length" class="skill-count-badge">{{ allSkills.length }}</span>
+            </button>
             <button
               v-for="a in agentDefs"
               :key="a.type"
@@ -359,19 +368,19 @@
               <span class="agent-type-badge skills-head-badge">{{ selectedAgentIcon }}</span>
               <div class="skills-head-copy">
                 <h2 class="settings-title">{{ selectedAgentLabel }}</h2>
-                <div class="dim" style="font-size:12px;margin-top:2px;display:flex;align-items:center;gap:6px">
+                <div v-if="!isAllSkills" class="dim" style="font-size:12px;margin-top:2px;display:flex;align-items:center;gap:6px">
                   {{ selectedAgentType }}
                   <span v-if="getAgentCfg(selectedAgent) && !getAgentCfg(selectedAgent).is_default" class="tag tag-success">{{ t('settings.common.custom') }}</span>
                   <span v-else class="tag">{{ t('common.default') }}</span>
                 </div>
               </div>
-              <button v-if="agentPane === 'skills'" class="btn btn-primary btn-sm ml-auto" @click="startAddSkill">
+              <button v-if="agentPane === 'skills' && !isAllSkills" class="btn btn-primary btn-sm ml-auto" @click="startAddSkill">
                 <Plus :size="13" /> {{ t('settings.skills.add') }}
               </button>
             </div>
 
             <!-- Prompt 面板（子 tab 作为卡片头，与卡片同宽对齐） -->
-            <div v-if="agentPane === 'prompt'" class="card agent-card">
+            <div v-if="agentPane === 'prompt' && !isAllSkills" class="card agent-card">
               <div class="agent-pane-tabs">
                 <div class="agent-pane-tabs-nav">
                   <button :class="['agent-pane-tab', { active: agentPane === 'prompt' }]" @click="agentPane = 'prompt'">System Prompt</button>
@@ -408,7 +417,7 @@
               <div class="agent-pane-tabs-wrap card">
                 <div class="agent-pane-tabs">
                   <div class="agent-pane-tabs-nav">
-                    <button :class="['agent-pane-tab', { active: agentPane === 'prompt' }]" @click="agentPane = 'prompt'">System Prompt</button>
+                    <button v-if="!isAllSkills" :class="['agent-pane-tab', { active: agentPane === 'prompt' }]" @click="agentPane = 'prompt'">System Prompt</button>
                     <button :class="['agent-pane-tab', { active: agentPane === 'skills' }]" @click="agentPane = 'skills'">
                       Skills<template v-if="agentSkillCount(selectedAgent) > 0"> ({{ agentSkillCount(selectedAgent) }})</template>
                     </button>
@@ -437,6 +446,11 @@
                     <div style="flex:1;min-width:0">
                       <div style="font-weight:600;font-size:13px">{{ s.name }}</div>
                       <div class="dim" style="font-size:11px">{{ s.description }}</div>
+                    </div>
+                    <!-- 全部技能视图：标出引用该技能的 Agent（后端 AGENT_SKILL_MAP 前缀算出的归属） -->
+                    <div v-if="isAllSkills" style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:45%">
+                      <span v-for="a in s.agents" :key="a" class="tag tag-accent" style="font-size:10px">{{ agentLabelOf(a) }}</span>
+                      <span v-if="!s.agents?.length" class="tag" style="font-size:10px;color:var(--action-danger)">{{ t('settings.skills.skillOrphan') }}</span>
                     </div>
                     <button class="btn btn-danger btn-icon btn-sm" style="margin-right:4px" @click.stop="skillToDelete = s.id">
                       <Trash2 :size="13" />
@@ -923,6 +937,9 @@ const agentDefs = computed(() => [
   { type: 'extractor', label: t('settings.agents.extractor'), icon: '🔍' },
   { type: 'storyboard_breaker', label: t('settings.agents.storyboardBreaker'), icon: '🎬' },
   { type: 'prompt_generator', label: t('settings.agents.promptGenerator'), icon: '🖼' },
+  // 第 5 个 Agent 只在后端 AGENT_SKILL_MAP 里存在（技能 prompt-generator/character-prompt）。
+  // 之前设置页没有它 → 它的技能在界面上无处可管，还被前端按目录名猜算到了 prompt_generator 名下
+  { type: 'character_prompt_optimizer', label: t('settings.agents.characterPromptOptimizer'), icon: '✨' },
 ])
 
 function getAgentCfg(type) {
@@ -936,6 +953,7 @@ async function loadAgents() {
 }
 
 async function loadAgentPrompt(type) {
+  if (type === ALL_SKILLS) return   // 全部技能视图没有 system prompt
   try {
     const cfg = await promptAPI.get(type, editLang.value)
     if (selectedAgent.value === type) {
@@ -978,8 +996,10 @@ async function saveAgentCfg(type) {
 }
 
 // ===== Skills =====
-const selectedAgent = ref('script_rewriter')
-const allSkills = ref([])   // { id, name, description }[]
+// 左侧伪条目：全部技能（技能 → Agent 反向视图）。不属于任何 Agent，不加载 system prompt
+const ALL_SKILLS = '__all__'
+const selectedAgent = ref(ALL_SKILLS)
+const allSkills = ref([])   // { id, name, description, agents }[]
 const editingSkill = ref(null)
 const skillContent = ref('')
 const skillSaving = ref(false)
@@ -988,8 +1008,11 @@ const addSkillDialog = ref(false)
 const newSkillForm = reactive({ id: '', name: '', description: '' })
 
 const selectedAgentType = computed(() => selectedAgent.value)
-const selectedAgentLabel = computed(() => agentDefs.value.find(a => a.type === selectedAgent.value)?.label || '')
-const selectedAgentIcon = computed(() => agentDefs.value.find(a => a.type === selectedAgent.value)?.icon || '')
+const isAllSkills = computed(() => selectedAgent.value === ALL_SKILLS)
+const selectedAgentLabel = computed(() =>
+  isAllSkills.value ? t('settings.skills.allSkills') : agentDefs.value.find(a => a.type === selectedAgent.value)?.label || '')
+const selectedAgentIcon = computed(() =>
+  isAllSkills.value ? '🗂' : agentDefs.value.find(a => a.type === selectedAgent.value)?.icon || '')
 
 // ===== 通用：AI 内容语言（全局设置，与界面语言相互独立） =====
 const contentLanguage = ref('zh')
@@ -1036,18 +1059,23 @@ onMounted(loadContentLanguage)
 
 // agent type 用下划线（script_rewriter），skill 目录按 Mastra 规范用连字符（script-rewriter）
 const skillDirOf = (type) => type.replace(/_/g, '-')
-const skillBelongsTo = (skillId, type) => {
-  const dir = skillDirOf(type)
-  return skillId === dir || skillId.startsWith(dir + '/')
-}
+
+// 技能归属以服务端 GET /skills 的 agents 字段为准（后端由 AGENT_SKILL_MAP 前缀算出，唯一口径）。
+// 前端曾自己猜 `${skillDirOf(type)}/`：对 character_prompt_optimizer 必然算错——它的技能目录是
+// prompt-generator/character-prompt，不是 character-prompt-optimizer；而且那个技能会被误挂到
+// prompt_generator 名下（前缀命中）。别把这段猜测搬回前端。
+const skillBelongsTo = (skill, type) => (skill.agents || []).includes(type)
 
 function agentSkillCount(type) {
-  return allSkills.value.filter(s => skillBelongsTo(s.id, type)).length
+  return allSkills.value.filter(s => skillBelongsTo(s, type)).length
 }
 
 const currentSkills = computed(() =>
-  allSkills.value.filter(s => skillBelongsTo(s.id, selectedAgent.value))
+  isAllSkills.value ? allSkills.value : allSkills.value.filter(s => skillBelongsTo(s, selectedAgent.value))
 )
+
+/** 技能卡片角标上的 Agent 名（agentDefs 里没有的类型直接显示 type，不吞掉） */
+const agentLabelOf = (type) => agentDefs.value.find(a => a.type === type)?.label || type
 
 async function loadAllSkills() {
   try { allSkills.value = await skillsAPI.list(editLang.value) }
@@ -1059,6 +1087,7 @@ async function selectAgent(type) {
     selectedAgent.value = type
     editingSkill.value = null
   }
+  if (type === ALL_SKILLS) { agentPane.value = 'skills'; return }
   await loadAgentPrompt(type)
 }
 

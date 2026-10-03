@@ -337,6 +337,11 @@ export const stylePresetSeeds = [
     description: '国风动画/仙侠剧质感，2.5D 半写实',
   },
   {
+    name: '仙侠·天宫', value: 'xianxia-celestial', sortOrder: 6,
+    prompt: 'cinematic Eastern xianxia celestial-realm style, high-end 3D CG animation still with game-engine render quality, monumental heavenly-palace and cloud-sea scale, luminous high-key lighting with selective rich chroma and clean color separation, near-neutral pale jade cloud and stone highlights with restrained gilding accents, transparent cool blue-grey or violet-grey shadows, refined jade lacquer bronze silk and carved-timber material behavior, layered aerial depth from foreground to extreme distance with progressively softer contrast, motivated volumetric backlight with delicate rim light, elegant Eastern bracket-and-beam architecture and floating terraces, semi-realistic refined characters with flowing layered costumes, consistent character design across shots, rich depth of field, polished film color grading, sharp focus, avoid grey veil or muddy grading, avoid global orange-gold cast, avoid crushed black shadows, avoid flat 2D cel shading, avoid low-poly blurry look, avoid plastic waxy skin',
+    description: '东方仙侠天宫：云海仙阙与巨构天宫，通透发光、选择性高饱和',
+  },
+  {
     name: '韩系网漫', value: 'webtoon', sortOrder: 8,
     prompt: 'Korean webtoon manhwa style, clean digital painting with soft gradient shading, slim elegant character proportions, large expressive eyes with detailed highlights, soft glowing skin rendering, romantic dreamy lighting, modern pastel-to-vivid color palette, detailed fashion and fabric rendering, webtoon key visual quality, consistent character design across shots, avoid heavy black ink outlines, avoid halftone dots, avoid 3D render look, avoid watercolor paper texture, avoid chibi proportions',
     description: '韩国条漫/网漫精致上色风',

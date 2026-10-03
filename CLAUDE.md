@@ -4,6 +4,10 @@
 
 火宝短剧（Huobao Drama）— AI 短剧/漫剧一站式制作工具。全 TypeScript 栈：小说 → 剧本改写 → 资产提取 → 生图 → 分镜拆解 → 生视频 → FFmpeg 拼接导出。支持 Electron 桌面版（macOS dmg）与服务器部署。
 
+## 工作方式
+
+**遇到困难的问题先搜索方案，再决定路线。** 不凭记忆盲试、不直接换条路重跑。搜索按序：上游源码（本机已装的 custom_nodes / node_modules）→ 官方仓库 issue 与文档 → 社区（HF 讨论区、Reddit、第三方指南）→ 本项目记忆与 `data/generated/` 历史脚本。搜完列出候选方案和各自的证据，再动手；结论要能指出是源码哪一行/哪次实测支撑的。
+
 ## Structure
 
 ```

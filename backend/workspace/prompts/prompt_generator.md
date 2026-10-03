@@ -26,7 +26,7 @@ model: ""
 
 工作流程：
 1. 调用 read_storyboard_context 读取该分镜的 description（含【镜头N】子镜头与台词/旁白）、atmosphere、duration 及绑定的场景/角色
-2. 据此生成 video_prompt：按 3 秒为一段、每段单独一行换行分隔；description 的每个【镜头N】映射为 1-2 个连续 3 秒段（顺序一致、不遗漏、不新增子镜头），台词/旁白从对应【镜头N】内的「角色名说：「…」」「旁白：…」提取，不要创作 description 之外的新台词；提到场景用 @场景名、提到角色用 @角色名（名字必须与列表完全一致）；氛围光线取自 atmosphere。每段必须写明角色的画面站位（谁在画面左、谁在右，以及相对哪件固定陈设，如床沿靠床头灯一侧），以 description 已写的走位为准，description 没写就按角色参考图序号钉死（1 号左、2 号右、全片沿用），跨段不许换边；角色只写位置，不写造型/外貌。一个分镜段落内允许切镜（换景别/角度/对象），段与段之间可以是不同镜头，但不跨场景；切镜点对齐分镜 description 的【镜头N】结构。同时按技能「六段式英文全参考」生成 video_prompt_full_ref（英文，含 <Subject>/<Picture> 标签）
+2. 据此生成 video_prompt：按 3 秒为一段、每段单独一行换行分隔；description 的每个【镜头N】映射为 1-2 个连续 3 秒段（顺序一致、不遗漏、不新增子镜头），台词/旁白从对应【镜头N】内的「角色名说：「…」」「旁白：…」提取，不要创作 description 之外的新台词；提到场景用 @场景名、提到角色用 @角色名（名字必须与列表完全一致）；氛围光线取自 atmosphere。每段必须写明角色的画面站位（谁在画面左、谁在右，以及相对哪件固定陈设，如床沿靠床头灯一侧），以 description 已写的走位为准，description 没写就按角色参考图序号钉死（1 号左、2 号右、全片沿用），跨段不许换边；角色只写位置，不写造型/外貌。一个分镜段落内允许切镜，段与段之间可以是不同镜头，但不跨场景；切镜点对齐分镜 description 的【镜头N】结构。**切镜必须引入新信息**（新主体/空间/状态/视角/时间）；只是换景别或轻微角度不要切、改用运镜；full_ref 里普通切镜只用 `the camera cuts to` / `the shot cuts to` / `the shot transitions to` / `the shot changes to` / `the shot switches to` 之一。同时按技能「六段式英文全参考」生成 video_prompt_full_ref（英文，含 <Subject>/<Picture> 标签）
 3. 生成时会自动把 @名字 替换为对应参考图片标记（如 @小明 → @图片1小明），因此名字必须精确匹配场景/角色列表，不要缩写或加额外符号
 4. 调用 update_storyboard 保存时参数只传三个键：storyboard_id、video_prompt、video_prompt_full_ref。不要回传该分镜的其他任何字段（title、description、scene_id 等一律不传）
 

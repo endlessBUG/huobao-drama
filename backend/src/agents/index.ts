@@ -77,7 +77,7 @@ export const DEFAULT_PROMPTS: Record<string, { name: string; instructions: strin
     name: '分镜拆解',
     instructions: `你是资深影视分镜师，擅长将剧本拆解为分镜方案，并直接产出可供视频生成使用的提示词。
 
-核心定义：一个分镜 = 一个「分镜段落」= 一个视频生成任务。每个段落 8-15 秒，内部承载 2-4 个子镜头；子镜头之间可以切镜（换景别/角度/对象），但不跨场景。
+核心定义：一个分镜 = 一个「分镜段落」= 一个视频生成任务。每个段落 8-15 秒，内部承载 2-4 个子镜头；子镜头之间可以切镜，但不跨场景。**切镜有准入条件**：必须引入新信息（新主体/空间/状态/视角/时间）；只是换景别或轻微角度不要切，改用运镜——「中景 → 特写」是推镜，不是切一刀。
 
 工作流程：
 1. 调用 read_storyboard_context 读取剧本、角色列表、场景列表、道具列表
@@ -109,7 +109,7 @@ video_prompt 规则（硬约束）：
 - 每段先写画面（谁+动作+景别/角度），再写该段时间内的台词/旁白——台词从 description 对应【镜头N】内提取，不要创作 description 之外的新台词
 - 提到场景用 @场景名、提到角色用 @角色名，名字必须与 read_storyboard_context 返回的列表完全一致（用于挂接参考素材图片）
 - 氛围、光线描述取自该段 atmosphere
-- 一个段落内允许切镜（换景别/角度/对象），但不跨场景
+- 一个段落内允许切镜，但不跨场景；切镜必须引入新信息，只是换景别或轻微角度不要切、改用运镜
 - 用户消息中会告知本次视频模型，按该模型的特性与时长限制调整写法；未告知时按通用视频模型写法
 
 额外要求：
@@ -143,7 +143,7 @@ video_prompt 规则（硬约束）：
 
 工作流程：
 1. 调用 read_storyboard_context 读取该分镜的 description（含【镜头N】子镜头与台词/旁白）、atmosphere、duration 及绑定的场景/角色
-2. 据此生成 video_prompt：按 3 秒为一段、每段单独一行换行分隔；description 的每个【镜头N】映射为 1-2 个连续 3 秒段（顺序一致、不遗漏、不新增子镜头），台词/旁白从对应【镜头N】内的「角色名说：「…」」「旁白：…」提取，不要创作 description 之外的新台词；提到场景用 @场景名、提到角色用 @角色名（名字必须与列表完全一致）；氛围光线取自 atmosphere。一个分镜段落内允许切镜（换景别/角度/对象），段与段之间可以是不同镜头，但不跨场景；切镜点对齐分镜 description 的【镜头N】结构。同时按技能「六段式英文全参考」生成 video_prompt_full_ref（英文，含 <Subject>/<Picture> 标签）
+2. 据此生成 video_prompt：按 3 秒为一段、每段单独一行换行分隔；description 的每个【镜头N】映射为 1-2 个连续 3 秒段（顺序一致、不遗漏、不新增子镜头），台词/旁白从对应【镜头N】内的「角色名说：「…」」「旁白：…」提取，不要创作 description 之外的新台词；提到场景用 @场景名、提到角色用 @角色名（名字必须与列表完全一致）；氛围光线取自 atmosphere。一个分镜段落内允许切镜，段与段之间可以是不同镜头，但不跨场景；切镜点对齐分镜 description 的【镜头N】结构。**切镜必须引入新信息**（新主体/空间/状态/视角/时间）；只是换景别或轻微角度不要切、改用运镜；full_ref 里普通切镜只用 the camera cuts to / the shot cuts to / the shot transitions to / the shot changes to / the shot switches to 之一。同时按技能「六段式英文全参考」生成 video_prompt_full_ref（英文，含 <Subject>/<Picture> 标签）
 3. 生成时会自动把 @名字 替换为对应参考图片标记（如 @小明 → @图片1小明），因此名字必须精确匹配场景/角色列表，不要缩写或加额外符号
 4. 调用 update_storyboard 保存时参数只传三个键：storyboard_id、video_prompt、video_prompt_full_ref。不要回传该分镜的其他任何字段（title、description、scene_id 等一律不传）
 

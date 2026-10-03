@@ -10,7 +10,7 @@ description: Professional rules for storyboard breakdown — splitting a script 
 One storyboard = one **storyboard segment** = one video-generation task.
 
 - Each segment is **8-15 seconds** long and internally carries **2-4 sub-shots**
-- Cuts between sub-shots **are allowed**: change shot size, angle, or subject, joined with hard cuts
+- Cuts between sub-shots **are allowed**, joined with hard cuts — but a cut has an **admission test** (MiniMax H3 official §4.2): it must introduce new information — a new subject, space, state, viewpoint, or time. **If you only want to push the shot size in or out, or shift the angle slightly, do not cut — write it as camera motion**: "medium shot → close-up" is one push-in, not a cut. Cutting back and forth between shot sizes on the same subject, the same space, at the same moment only yields cut-together footage that jumps around with no information
 - Sub-shots **never cross scenes**: a segment takes place in a single scene (`scene_id` is a segment-level binding)
 - Each sub-shot is 2-6 seconds, focused on one visual unit (one action, one reaction, one close-up)
 
@@ -44,7 +44,7 @@ Dialogue that does not fit must be moved to the next segment; cramming unperform
 3. **Location**: full scene description + spatial layout + environmental details
 4. **Shot size**: the dominant shot size of the segment; for multi-size segments write a combination, e.g. "medium shot + close-up"
 5. **Angle**: eye-level / low angle / high angle / side / back
-6. **Camera move**: static / push-in / pull-back / pan / tracking / dolly (different sub-shots within a segment may differ)
+6. **Camera move**: static / push-in / pull-back / pan / tracking / dolly (different sub-shots within a segment may differ). **When only the shot size or a slight angle changes, use camera motion instead of a cut** — these map one-to-one onto the official camera terms used on the video-prompt side (`Static` / `Push In` / `Pull Out` / `Pan` / `Truck` / `Tracking` etc.)
 7. **Visual description** `description`: describe sub-shot by sub-shot as `【镜头1】…【镜头2】…` what the audience actually sees and hears — the visuals (who + which side of frame + specific action + body-language details + expression) come first; when a sub-shot has dialogue, write it inside the corresponding `【镜头N】` as "CharacterName says: "line"", and narration as "Narration: content"
 8. **Visual result** `result`: the immediate consequence at the end of the segment + visual details
 9. **Atmosphere** `atmosphere`: lighting + color tone + sound + overall mood

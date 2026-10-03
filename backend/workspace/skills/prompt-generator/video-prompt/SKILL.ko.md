@@ -5,7 +5,7 @@ description: 비디오 프롬프트 규범 — 스토리보드 구간 내용을 
 
 # 비디오 프롬프트(스토리보드 구간 → video_prompt)
 
-단일 스토리보드 구간의 description(【镜头N】 서브 컷 구조와 대사/내레이션 포함)/ atmosphere / duration 을 바탕으로, AI 비디오 생성을 구동하는 `video_prompt` 를 생성합니다. **하나의 스토리보드 구간 = 8-15초짜리 비디오 한 편이며, 내부에서 컷 전환이 허용됩니다**: 구간과 구간 사이는 서로 다른 컷(화면 크기/앵글/대상 변경)일 수 있고 하드 컷으로 연결합니다; 단 **전체 구간이 장면을 넘나들지 않으며**, 플래시백도 없습니다.
+단일 스토리보드 구간의 description(【镜头N】 서브 컷 구조와 대사/내레이션 포함)/ atmosphere / duration 을 바탕으로, AI 비디오 생성을 구동하는 `video_prompt` 를 생성합니다. **하나의 스토리보드 구간 = 8-15초짜리 비디오 한 편이며, 내부에서 컷 전환이 허용됩니다**: 구간과 구간 사이는 서로 다른 컷일 수 있고 하드 컷으로 연결합니다; 단 **전체 구간이 장면을 넘나들지 않으며**, 플래시백도 없습니다. **컷에는 진입 조건이 있습니다** — 새로운 정보를 도입해야 합니다. 화면 크기나 약간의 앵글만 바뀌는 경우에는 컷하지 말고 카메라 무빙을 쓰세요(아래 「컷 진입 조건」 참조).
 
 ## 형식
 
@@ -42,7 +42,8 @@ description: 비디오 프롬프트 규범 — 스토리보드 구간 내용을 
 - **첫 구간은 반드시 공간을 설정해야 함**: 장면 + 카메라 위치 + 각 캐릭터의 화면 좌우(누가 왼쪽, 누가 오른쪽)와 상태로, 관객이 한눈에 어디인지, 누구를 보는지 알게 합니다
 - **위치는 구간을 넘어 불변**: 각 구간에서 캐릭터가 화면 어느 쪽인지 씁니다. 앞 구간에서 왼쪽에 있었고 이동을 쓰지 않았다면, 다음 구간에서 오른쪽에 나타나면 안 됩니다
 - **컷 전환**: 전환 후 구간의 시작에 "~로 전환", "~로 되돌아온다" 같은 연결어를 쓰고, 화면 크기와 주체를 새로 밝힙니다; 컷 전환 지점은 스토리보드 `description` 의 `【镜头N】` 구조에 맞춰야 합니다
-- **화면 크기/카메라 무빙**: 구간마다 하나의 컷 상태(근경/미디엄샷/전경/클로즈업; 고정/푸시인/풀백/팬/팔로우); 하나의 서브 컷 내에서는 무빙이 연속되고, 컷 전환 후에는 무빙 방식을 바꿀 수 있습니다
+- **컷 진입 조건(하드 룰, MiniMax H3 공식 §4.2)**: 컷은 **새로운 정보**를 도입해야 합니다 — 새로운 주체·공간·상태·시점·시간. **거리(화면 크기)나 약간의 앵글만 바뀌는 경우에는 컷하지 말고 카메라 무빙을 쓰세요**: `미디엄 → 클로즈업` 은 `The camera pushes in with small amplitude at slow speed...` 로 쓰고, 두 구간 사이에 컷을 넣지 않습니다. 동일 주체·동일 공간·동일 시점에서 화면 크기를 왕복하는 것은 「자르기 위한 컷」이며, 모델은 그대로 따르고 결과물은 정보량 없는 전환의 연속이 됩니다
+- **화면 크기/카메라 무빙**: 구간마다 하나의 컷 상태(근경/미디엄샷/전경/클로즈업; 카메라 무빙은 아래 full_ref 절의 공식 어휘를 사용); 하나의 서브 컷 내에서는 무빙이 연속되고, 컷 전환 후에는 무빙 방식을 바꿀 수 있습니다
 - **동작**: 구간마다 하나의 주된 동작. 동사는 구체적이고 보이는 것으로 씁니다(걷기, 몸 돌리기, 고개 들기, 움켜쥐기, 멈칫하기)
 - **감정은 모두 보이는 묘사로 전환**: "그는 슬프다/분위기가 긴장된다" 같은 추상적인 표현 대신, "그가 고개를 숙이고, 손가락이 컵 가장자리를 움켜쥐며, 숨이 거칠어진다"처럼 씁니다
 - **대사/내레이션**: 「캐릭터명이 말한다: 「대사」」로 쓰고, 내레이션은 「내레이션: 내용」으로 씁니다; 3초 안에 다 말할 수 없는 긴 대사는 여러 구간으로 나눕니다; 대사가 없는 구간은 환경음/동작음을 쓸 수 있습니다(예: "기계가 계속 윙윙거린다")
@@ -63,6 +64,7 @@ description: 비디오 프롬프트 규범 — 스토리보드 구간 내용을 
 ## 금지 사항
 
 - 장면을 넘나드는 전환, 플래시백(한 구간은 하나의 장면 안에서만 일어남)
+- **화면 크기/약간의 앵글을 바꾸기 위한 컷**(카메라 무빙을 사용); 동일 주체·동일 공간·동일 시점에서 화면 크기를 왕복하는 컷
 - 목록 밖의 장면/캐릭터명 참조
 - 추상적인 심리 묘사, 문학적 비유(모델은 보이는 화면만 인식함)
 - 세션 언어 지시와 맞지 않는 언어
@@ -89,7 +91,7 @@ retention_analysis:
 <Subject 2> fully_preserved
 <Subject 3> fully_preserved   # 场景锁定
 detailed_description:
-[Shot 1] Live-action, cinematic, a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] and says: <d>[Chinese] 台词原文</d> [Shot 2] At 00:03.000, the camera cuts to...
+[Shot 1] a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] and says: <d>[Chinese] 台词原文</d> [Shot 2] At 00:03.000, the camera cuts to...
 overall_soundscape:
 [环境音描述]
 non_diegetic_music:
@@ -97,9 +99,10 @@ non_diegetic_music:
 ```
 
 **태그 규칙**:
+- **화풍 단어 금지**: `detailed_description`에 매체/화풍 단어(`Live-action` / `photoreal` / `anime` / `2D` / `3D`)를 쓰지 않는다. 화풍은 호출자가 프롬프트 맨 앞에 주입하는 프로젝트 프리셋이 결정한다. 스스로 쓰면 프리셋과 충돌한다.
 - `<Subject N>`: 캐릭터는 **두 가지**를 쓴다 — `<Picture N>` 의 누구인지(캐릭터 이름)와 화면 안에서의 위치(예: `on the left of frame by the nightstand lamp` — 좌우 + 고정 집기, 둘 다 씀). **스타일링은 절대 쓰지 않는다**: 헤어스타일·메이크업·의상·액세서리는 전부 참조 이미지에서 직접 가져오고, 스타일링 형용사(`elegant` / `beautiful` / `in a silk dress` 모두 스타일링)도 붙이지 않는다. 참조 이미지를 **볼 수 없으므로** 쓴 내용은 반드시 캐릭터 설정과 충돌한다. 장면/소품도 마찬가지: 참조 이미지가 실제로 담고 있는 레이아웃만 쓰고 인물을 더하지 않는다.
 - `<Picture N>`: 참조 이미지 번호, 중국어 `@이미지N`과 동일한 번호 체계(캐릭터 1..k, 장면 k+1, 소품 k+2..).
-- 장면 `<Picture k+1>` 이 9격 격자 이미지를 쓸 경우, **반드시** "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order" 라고 명시(장면 고정的本質).
+- 장면 `<Picture k+1>` 이 9격 격자 이미지를 쓸 경우, **반드시** "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order" 라고 명시(장면 고정의 본질). 하나의 참조가 여러 샷을 앵커할 때는 공식 표기대로 병기합니다: "is a storyboard reference for [Shot 1] and [Shot 2], defining their viewpoint, subject placement, and shot order".
 
 **번호 규칙**: 6단절 안의 `<Subject N>` 과 `<Picture N>` 은 **동일 번호 체계**(N번째 에셋 = 캐릭터1..k, 장면, 소품1..m)로 1:1 대응. "캐릭터→장면→소품" 순으로 번호만 매기면 된다. URL 불필요.
 
@@ -113,7 +116,19 @@ non_diegetic_music:
 
 **retention 규칙**: `retention_analysis` 의 각 subject에 상태말어 1개 — `fully_preserved`(강한 보존, **장면은 반드시 이걸 사용**)/ `partially_preserved` / `attribute_transfer` / `weak_reference`.
 
-**샷 용어**( `detailed_description` 에서 공식 카메라 용어 사용): Zoom In/Out, Push/Pull, Pan, Truck, Tilt, Arc, Tracking, Static, Shake.
+**샷 용어**(공식 §4.3, 13가지 전체): `Zoom In` / `Zoom Out`, `Push In` / `Pull Out`, `Pan Left` / `Pan Right`, `Truck Left` / `Truck Right`, `Tilt Up` / `Tilt Down`, `Pedestal Up` / `Pedestal Down`, `Arc Shot`, `Tracking Shot`, `Static Shot`, `Shake Slightly` / `Shake Strongly`, `POV`, `Roll Clockwise` / `Roll Counterclockwise`.
+
+**카메라 무빙 작성법**: 세 가지 차원 = 동작 유형 + `with small amplitude` / `with large amplitude` + `at slow speed` / `at fast speed`(중간 진폭과 보통 속도는 보통 생략). 샷 문장 안의 **자연스러운 영어 동작**으로 써야 하며, 문장 끝에 라벨처럼 나열하지 않습니다. 공식 예시:
+`The camera pushes in with small amplitude at slow speed toward the folded letter in her hands.`
+`The camera holds a static shot as the runner exits the frame.`
+
+**컷 작성법(공식 §4.2, 하드 룰)**:
+- **`[Shot 1]` 에는 타임스탬프를 붙이지 않습니다**; 이후는 `[Shot N] At MM:SS.mmm, ...` 로 쓰고, 컷 지점은 **엄격히 증가하며 길이를 넘지 않아야 합니다**
+- 일반 컷은 다음 다섯 가지 중 하나만: `the camera cuts to`, `the shot cuts to`, `the shot transitions to`, `the shot changes to`, `the shot switches to`. **디졸브/페이드/와이프는 사용자가 명시적으로 요청할 때만**, 기본은 하드 컷
+- 「切回」에 **공식 대응어가 없습니다**. `cuts back to` 로 직역하지 마세요. 대신 **이전 컷을 회지(回指)** 하며 주체를 다시 밝힙니다. 예:
+  `[Shot 2] At 00:03.000, the shot cuts to a close-up of <Subject 4> (S2), the young man in the dark-grey hoodie from Shot 1, ...`
+- **거리나 약간의 앵글 변경만을 위해 컷하지 마세요 — 카메라 무빙을 쓰세요**(위 「컷 진입 조건」 참조)
+- 대사가 컷을 가로지를 때: 컷 지점 **양쪽 모두**에 `<scenetrans>` 를 붙이고 오디오가 연속됨을 명시합니다 — `continues seamlessly across the cut` / `continues uninterrupted into the next shot` / `carries over from the previous shot` / `remains audible across the transition`. 길이 끝에서 대사가 잘리는 경우 `<cutoff>`
 
 **샷과 대사의 규칙**:
 - `detailed_description` 은 `[Shot N]` 에 따라 샷별로 작성하며 샷, 카메라 움직임(상기 용어), **각 캐릭터의 화면 위치**, 캐릭터 동작, 화자 ID(예: `(S1)`), `<d>` 대사를 기록한다.

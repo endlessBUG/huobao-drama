@@ -5,7 +5,7 @@ description: 動画プロンプト仕様 — 絵コンテパラグラフの内�
 
 # 動画プロンプト（絵コンテパラグラフ → video_prompt）
 
-1つの絵コンテパラグラフの description（【镜头N】のサブカット構造とセリフ／ナレーションを含む）／ atmosphere ／ duration に基づき、AI動画生成を駆動する `video_prompt` を生成する。**1つの絵コンテパラグラフ = 1本の8〜15秒の動画で、内部でのカット切り替えは許可される**：区間と区間の間は異なるカット（ショットサイズ／アングル／被写体の変更）でよく、ハードカットでつなぐ。ただし**全編を通じてシーンをまたがず**、フラッシュバックもしない。
+1つの絵コンテパラグラフの description（【镜头N】のサブカット構造とセリフ／ナレーションを含む）／ atmosphere ／ duration に基づき、AI動画生成を駆動する `video_prompt` を生成する。**1つの絵コンテパラグラフ = 1本の8〜15秒の動画で、内部でのカット切り替えは許可される**：区間と区間の間は異なるカットでよく、ハードカットでつなぐ。ただし**全編を通じてシーンをまたがず**、フラッシュバックもしない。**カットには准入条件がある**——新しい情報を持ち込むこと。ショットサイズやわずかなアングルの変更だけであれば、カットせずカメラワークを使う（下記「カットの准入」参照）。
 
 ## フォーマット
 
@@ -42,7 +42,8 @@ description: 動画プロンプト仕様 — 絵コンテパラグラフの内�
 - **最初の区間は必ず空間を確立する**：シーン ＋ カメラ位置 ＋ 各キャラクターの画面左右（誰が左、誰が右）と状態で、観客が一目で「どこか、誰を見るか」を把握できるようにする
 - **立ち位置は区間をまたいで不変**：各区間でキャラクターが画面のどちら側かを書く。前の区間で左にいて移動を書いていないなら、次の区間で右に現れてはならない
 - **カット切り替え**：切り替え後の区間の冒頭は「切り替わる／戻る」などの接続語を使い、ショットサイズと主体を改めて示す。カットの切り替え位置は絵コンテ `description` の `【镜头N】` 構造に揃える
-- **ショットサイズ／カメラワーク**：各区間1つのショット状態（近景／ミディアム／全景／クローズアップ；固定／プッシュイン／プルバック／パン／フォロー）。1つのサブカット内ではカメラワークは連続し、カット切り替え後に変更できる
+- **カットの准入（ハードルール、MiniMax H3 公式 §4.2）**：カットは**新しい情報**を持ち込まなければならない——新しい主体・空間・状態・視点・時間。**距離（ショットサイズ）やわずかなアングルの変更だけなら、カットせずカメラワークを使う**：`ミディアム → クローズアップ` は `The camera pushes in with small amplitude at slow speed...` と書き、2つの区間の間にカットを入れない。同一主体・同一空間・同一時点でショットサイズを往復するのは「切るためのカット」であり、モデルはそのまま従い、成片は情報量のない切り替えの連続になる
+- **ショットサイズ／カメラワーク**：各区間1つのショット状態（近景／ミディアム／全景／クローズアップ；カメラワークは下記 full_ref 節の公式語彙を使う）。1つのサブカット内ではカメラワークは連続し、カット切り替え後に変更できる
 - **動作**：各区間1つの主な動作。動詞は具体的で目に見えるものにする（歩く、振り返る、顔を上げる、握り締める、間を置く）
 - **感情はすべて目に見える描写に変換する**：「彼は悲しい／空気が張り詰めている」のような抽象語は使わず、「彼はうつむき、指がカップの縁を握り締め、呼吸が重くなる」と書く
 - **セリフ／ナレーション**：「キャラクター名は言う：「セリフ」」と書き、ナレーションは「ナレーション：内容」と書く。3秒で読み切れない長いセリフは複数区間に分割する。セリフのない区間には環境音／動作音を書いてよい（例：「機械が轟音を立て続けている」）
@@ -63,6 +64,7 @@ description: 動画プロンプト仕様 — 絵コンテパラグラフの内�
 ## 禁止事項
 
 - シーンをまたぐ切り替え、フラッシュバック（1つのパラグラフは1つのシーン内でのみ起こる）
+- **ショットサイズ／わずかなアングルを変えるためのカット**（カメラワークを使う）；同一主体・同一空間・同一時点でショットサイズを往復するカット
 - リスト外のシーン／キャラクター名の参照
 - 抽象的な心理描写、文学的な比喩（モデルは目に見える画面だけを認識する）
 - セッションの言語指令に合致しない言語
@@ -89,7 +91,7 @@ retention_analysis:
 <Subject 2> fully_preserved
 <Subject 3> fully_preserved   # 场景锁定
 detailed_description:
-[Shot 1] Live-action, cinematic, a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] and says: <d>[Chinese] 台词原文</d> [Shot 2] At 00:03.000, the camera cuts to...
+[Shot 1] a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] and says: <d>[Chinese] 台词原文</d> [Shot 2] At 00:03.000, the camera cuts to...
 overall_soundscape:
 [环境音描述]
 non_diegetic_music:
@@ -97,9 +99,10 @@ non_diegetic_music:
 ```
 
 **ラベル規則**：
+- **画风词を書かない**：`detailed_description` に媒介・画风语（`Live-action` / `photoreal` / `anime` / `2D` / `3D`）を一切書かない。画风は呼び出し側がプロンプト先頭に注入するプロジェクトプリセットが決める。自分で書くとプリセットと冲突する。
 - `<Subject N>`：キャラクターは**2つ**書く——`<Picture N>` の誰か（キャラクター名）と、画面内の位置（例：`on the left of frame by the nightstand lamp`——左右＋固定調度品、両方書く）。**造型は一切書かない**：髪型・メイク・服装・装飾品はすべて参照画像から直接取り、造型の形容詞（`elegant` / `beautiful` / `in a silk dress` はいずれも造型）も付けない。あなたは参照画像を**見られない**ので、書けば必ずキャラクター設定と食い違う。シーン／小物も同様：参照画像が実際に持つレイアウトだけを書き、人物を足さない。
 - `<Picture N>`：参照画像の番号。中国語の `@画像N` と同じ番号体系（キャラ 1..k、シーン k+1、小物 k+2..）。
-- 九宮格画像をシーン `<Picture k+1>` で使う場合、**必ず** "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order" と明記（シーン固定の本質）。
+- 九宮格画像をシーン `<Picture k+1>` で使う場合、**必ず** "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order" と明記（シーン固定の本質）。1つの参照が複数のショットをアンカーする場合は公式の書き方で並記する："is a storyboard reference for [Shot 1] and [Shot 2], defining their viewpoint, subject placement, and shot order"。
 
 **番号規則**：六段式内の `<Subject N>` と `<Picture N>` は**同一番号体系**（N番目 Asset ＝ キャラ 1..k、シーン、小物 1..m）で 1:1 対応。「キャラ→シーン→小物」の順で番号付けするだけでよい。URL は不要。
 
@@ -113,7 +116,19 @@ non_diegetic_music:
 
 **retention 規則**：`retention_analysis` の各 subject に状態語を 1つ — `fully_preserved`（強い保持、**シーンは必ずこれ**）/ `partially_preserved` / `attribute_transfer` / `weak_reference`。
 
-**ショット語彙**（`detailed_description` で公式のカメラ用語を使う）：Zoom In/Out, Push/Pull, Pan, Truck, Tilt, Arc, Tracking, Static, Shake。
+**ショット語彙**（公式 §4.3、13 類すべて）：`Zoom In` / `Zoom Out`、`Push In` / `Pull Out`、`Pan Left` / `Pan Right`、`Truck Left` / `Truck Right`、`Tilt Up` / `Tilt Down`、`Pedestal Up` / `Pedestal Down`、`Arc Shot`、`Tracking Shot`、`Static Shot`、`Shake Slightly` / `Shake Strongly`、`POV`、`Roll Clockwise` / `Roll Counterclockwise`。
+
+**カメラワークの書き方**：三次元 = 動作タイプ ＋ `with small amplitude` / `with large amplitude` ＋ `at slow speed` / `at fast speed`（中程度の振幅と通常速度は通常省略）。ショット文の中の**自然な英語の動作**として書くこと。文末にラベルとして並べない。公式例：
+`The camera pushes in with small amplitude at slow speed toward the folded letter in her hands.`
+`The camera holds a static shot as the runner exits the frame.`
+
+**カットの書き方（公式 §4.2、ハードルール）**：
+- **`[Shot 1]` にはタイムスタンプを付けない**；以降は `[Shot N] At MM:SS.mmm, ...` とし、カット点は**厳密に増加し、尺を超えない**
+- 通常のカットはこの5つのいずれか：`the camera cuts to`、`the shot cuts to`、`the shot transitions to`、`the shot changes to`、`the shot switches to`。**ディゾルブ／フェード／ワイプはユーザーが明示的に要求した場合のみ**、既定はハードカット
+- 「切回」に**公式の対応語はない**。`cuts back to` と直訳しないこと。代わりに**前のカットを回指**して主体を再提示する。例：
+  `[Shot 2] At 00:03.000, the shot cuts to a close-up of <Subject 4> (S2), the young man in the dark-grey hoodie from Shot 1, ...`
+- **距離やわずかなアングルの変更のためだけにカットしない——カメラワークを使う**（上記「カットの准入」参照）
+- セリフがカットをまたぐ場合：カット点の**両側に** `<scenetrans>` を付け、音声が連続していることを明記する——`continues seamlessly across the cut` / `continues uninterrupted into the next shot` / `carries over from the previous shot` / `remains audible across the transition`。尺の終端でセリフが切れる場合は `<cutoff>`
 
 **ショットと対話の規則**：
 - `detailed_description` は `[Shot N]` ごとに各ショットで記述し、ショット、カメラの動き（上記語彙）、**各キャラクターの画面位置**、キャラクターの動作、話者 ID（例：`(S1)`）、`<d>` 対話を記述する。

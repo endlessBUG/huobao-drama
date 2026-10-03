@@ -10,10 +10,32 @@ export function posterPathFor(relativePath: string): string {
   return relativePath.replace(/\.[^./]+$/, '_poster.jpg')
 }
 
-/**
- * 抽取视频 0.5s 处画面作为海报帧（宽 640，等比缩放，与原视频同目录）。
- * 失败返回 null，不阻断主流程。
- */
+/** 段间接力用：抽末帧（static/videos/x.mp4 → static/videos/x_last.png）。失败返回 null。 */
+export function lastFramePathFor(relativePath: string): string {
+  return relativePath.replace(/\.[^./]+$/, '_last.png')
+}
+
+export async function extractLastFrame(relativePath: string): Promise<string | null> {
+  try {
+    const { ffmpeg: ffmpegOk } = await checkFfmpegSuite()
+    if (!ffmpegOk) return null
+
+    const outRel = lastFramePathFor(relativePath)
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(getAbsolutePath(relativePath))
+        .inputOptions(['-sseof', '-0.2'])
+        .outputOptions(['-frames:v', '1'])
+        .save(getAbsolutePath(outRel))
+        .on('end', () => resolve())
+        .on('error', reject)
+    })
+    return outRel
+  } catch (err) {
+    console.warn(`[video-poster] 末帧提取失败 ${relativePath}:`, (err as Error).message)
+    return null
+  }
+}
+/** 抽取视频 0.5s 处画面作为海报帧（宽 640，等比缩放，与原视频同目录）。失败返回 null，不阻断主流程。 */
 export async function extractVideoPoster(relativePath: string): Promise<string | null> {
   try {
     // ffmpeg 二进制损坏（跨平台拷贝 node_modules / 下载不完整）时静默跳过，

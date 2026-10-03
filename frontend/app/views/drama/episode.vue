@@ -2646,12 +2646,13 @@ function batchVideos() {
 function retryFailedVideos() {
   openBatchVideoConfirm(sbs.value.filter(s => videoTaskState(s) === 'failed'))
 }
-function confirmBatchVideos() {
+async function confirmBatchVideos() {
   const targets = [...batchVideoConfirm.value.targets]
   batchVideoConfirm.value = { open: false, targets: [] }
   if (!targets.length) return
   const ids = targets.map(s => s.id)
-  targets.forEach(sb => genVid(sb, { silent: true }))
+  // 按分镜顺序逐条发：接力帧来自上一段的成片，并发发就会拿不到（后端 videoChains 按入队顺序排）
+  for (const sb of targets) await genVid(sb, { silent: true })
   toast.success(t('episode.vid.batchStarted', { n: ids.length }))
   watchAsyncResult(() => ids.every(id => {
     const target = sbs.value.find(s => s.id === id)
@@ -3889,6 +3890,9 @@ async function genVid(sb, opts = {}) {
     model: bareModelName(videoModel.value) || undefined,
     config_id: ownerConfigId(videoModelOptions.value, videoModel.value),
     reference_image_urls: referenceImages,
+    // 接力走「额外参考图」而不是 first_frame，正是为了不踩上面那条互斥：身份行保住，上一段末帧
+    // 只当第 10 个参考槽（超 9 会被适配器截断）。段必须按顺序跑（见 generation.ts 的 videoChains）。
+    chain: true,
     // 不传 first_frame_url：comfyui 桥一收到首帧就改走 fl2va 分支（_wf_fl2va），
     // ref_image_0~8 槽位全部丢弃 → 角色完全重生成（实测同一分镜两个人一个都不像）。
     // 底层 JZL_MiniMaxH3ReferenceToVideo2 没有 first_frame、JZL_MiniMaxH3ImageToVideoDual 没有 ref 槽位，

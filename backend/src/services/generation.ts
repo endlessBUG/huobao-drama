@@ -3,11 +3,11 @@
  * 创建(processing) → 适配器构建请求 → 同步完成或异步轮询 → 下载落盘 → 回写业务表
  */
 import { db, getInsertId, schema } from '../db/index.js'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { getActiveConfig, getConfigById } from './ai.js'
 import { now } from '../utils/response.js'
 import { downloadFile, fetchImageAsCompressedDataUrl, generateImageThumb, readImageAsCompressedDataUrl, saveBase64Image } from '../utils/storage.js'
-import { extractVideoPoster } from '../utils/video-poster.js'
+import { extractVideoPoster, extractLastFrame } from '../utils/video-poster.js'
 import { getImageAdapter, getVideoAdapter } from './adapters/registry'
 import type { AIConfig } from './adapters/types'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess, logTaskWarn, redactUrl } from '../utils/task-logger.js'
@@ -22,9 +22,14 @@ const taskLabel = (type: TaskType) => (type === 'image' ? 'ImageTask' : 'VideoTa
 // 8G 显存扛不住 qwen 的模型（日志里 unet 只装进 4.5G / 12G，text encoder 8.9G 全在 CPU），
 // 一直在 host↔device 搬运 —— python 进程烧 CPU、步速 7~30s/it，单张 6.6 分钟到 20+ 分钟不等。
 // 视频本来就没有墙钟上限。
+/** 链式生成按集串起来（段 N 依赖段 N-1 的成片） */
+const videoChains = new Map<number, Promise<void>>()
+
 const POLL_PROFILES: Record<TaskType, { attempts: number; intervalMs: number; maxDurationMs: number | null }> = {
   image: { attempts: 360, intervalMs: 5000, maxDurationMs: null },
-  video: { attempts: 300, intervalMs: 10_000, maxDurationMs: null },
+  // 243 帧的 SelfLift 实测 47:26（含解码），300 次 × 10s = 50 分钟正好卡在边界上：
+  // 任务 128 就是被「polling attempts exhausted」判失败的，而 ComfyUI 那边其实还在跑。
+  video: { attempts: 600, intervalMs: 10_000, maxDurationMs: null },
 }
 
 interface GenerateImageParams {
@@ -64,6 +69,8 @@ interface GenerateVideoParams {
   promptExtend?: boolean
   watermark?: boolean
   configId?: number
+  /** 段间接力：把上一段成片的末帧当额外参考带进本段（见 relayLastFrame） */
+  chain?: boolean
 }
 
 export async function generateImage(params: GenerateImageParams): Promise<number> {
@@ -179,10 +186,24 @@ async function createTask(
   })
 
   const id = getInsertId(res)
-  processTask(id, config).catch(err => {
+  const run = () => processTask(id, config).catch(err => {
     logTaskError(taskLabel(type), 'process', { id, error: err.message })
     console.error(`${taskLabel(type)} ${id} failed:`, err)
   })
+
+  // 链式（连续拍）要求段按顺序跑：段 N 的接力帧来自段 N-1 的成片，不排队就会在上一段完成前取到 null。
+  // 桥那边本来就是一条条执行，这里补的是 params 快照的时序。
+  if (type === 'video' && params.chain && params.storyboardId) {
+    const sbId = Number(params.storyboardId)
+    const [sb] = await db.select({ episodeId: schema.storyboards.episodeId }).from(schema.storyboards)
+      .where(eq(schema.storyboards.id, sbId)).limit(1)
+    const key = sb?.episodeId ?? 0
+    const prev = videoChains.get(key) ?? Promise.resolve()
+    videoChains.set(key, prev.then(run))
+    return id
+  }
+
+  run()
   return id
 }
 
@@ -230,6 +251,18 @@ async function processTask(id: number, config: AIConfig) {
       const resolvedFirstFrameUrl = await normalizeVideoReferenceUrl(params.firstFrameUrl)
       const resolvedLastFrameUrl = await normalizeVideoReferenceUrl(params.lastFrameUrl)
       const resolvedReferenceImageUrls = await normalizeVideoReferenceUrls(params.referenceImageUrls)
+      // 段间接力（连续拍）：上一段的末帧当额外参考带进来。见 relayLastFrame 的注释。
+      let prompt = record.prompt
+      if (params.chain) {
+        const relay = await relayLastFrame(record.storyboardId)
+        // 适配器截到 9 槽（comfyui-video.ts MAX_IMAGES），超了接力帧根本进不了图，就别在提示词里
+        // 引一个不存在的 <Picture N>。
+        if (relay && resolvedReferenceImageUrls.length < 9) {
+          resolvedReferenceImageUrls.push(relay)
+          // 编号 = 追加后的位置（角色→场景→道具 之后），与 skill 的 <Picture N> 口径一致
+          prompt = `${prompt}\ncontinuity: <Picture ${resolvedReferenceImageUrls.length}> is the last frame of the previous shot — match its lighting, colour and camera position.`
+        }
+      }
       // 参考视频/音频文件较大，不适合 dataURL 内联，需解析为公网可访问 URL
       const resolvedReferenceVideoUrls = resolvePublicMediaUrls(params.referenceVideoUrls, 'video')
       const resolvedReferenceAudioUrls = resolvePublicMediaUrls(params.referenceAudioUrls, 'audio')
@@ -535,6 +568,26 @@ async function normalizeReferenceImages(refs: string[] | null | undefined): Prom
   }))
 
   return normalized.filter((item): item is string => !!item).slice(0, 6)
+}
+
+/** 段间接力（连续拍）：取上一段成片的末帧。
+ *  为什么是「参考图」而不是 first_frame：JZL ref2v 节点没有 first_frame 输入（输入表只有
+ *  ref_image_0~8 / ref_video / ref_audio），fl2va 节点没有 ref 槽位 —— 两者互斥，实测一收到
+ *  首帧就丢参考行、角色完全重生成（同一分镜两个人一个都不像）。带成参考图 = 保住身份，同时把
+ *  上一段的光线/色调/构图落点喂进去（社区 Seamless Chain 的 memory bank 是这条的完整版，实测
+ *  luma drift 1.055→1.022/hop、chroma 1.086→1.039）。
+ *  前提：段按顺序跑（上一段已完成），否则返回 null 退回纯参考图。 */
+async function relayLastFrame(storyboardId?: number | null): Promise<string | null> {
+  if (!storyboardId) return null
+  const [cur] = await db.select({ episodeId: schema.storyboards.episodeId, n: schema.storyboards.storyboardNumber })
+    .from(schema.storyboards).where(eq(schema.storyboards.id, storyboardId)).limit(1)
+  if (!cur) return null
+  const [prev] = await db.select({ id: schema.storyboards.id }).from(schema.storyboards)
+    .where(and(eq(schema.storyboards.episodeId, cur.episodeId), eq(schema.storyboards.storyboardNumber, cur.n - 1))).limit(1)
+  if (!prev) return null
+  const [t] = await db.select({ localPath: schema.sysTask.localPath }).from(schema.sysTask)
+    .where(and(eq(schema.sysTask.storyboardId, prev.id), eq(schema.sysTask.type, 'video'), eq(schema.sysTask.status, 'completed'))).limit(1)
+  return t?.localPath ? await extractLastFrame(t.localPath) : null
 }
 
 async function normalizeVideoReferenceUrl(value: string | null | undefined): Promise<string | null> {

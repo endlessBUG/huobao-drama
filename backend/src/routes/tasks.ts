@@ -193,6 +193,7 @@ app.post('/', async (c) => {
         seed: videoBody!.seed,
         promptExtend: videoBody!.prompt_extend,
         watermark: videoBody!.watermark,
+        chain: videoBody!.chain,
         configId,
       })
 

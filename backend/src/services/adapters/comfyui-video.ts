@@ -29,7 +29,17 @@ import { baseOf, stageReferenceImages, toInputDir } from './comfyui-common'
 
 // 工作流本身动态（JZL ref2v 支持 ref_image_0~8 / Autogrow max=9），不人为截断
 const MAX_IMAGES = 9
-const DEFAULT_SIZE = '576x320'
+// 2026-10-03 用户拍板：改走桥的 SelfLift 二采直出（body 带 selflift:true）。
+// 前 2 步在 0.5× 低分辨率跑、构图在那里定，后 2 步在目标分辨率真画 —— 所以「抬生成分辨率会毁站位」
+// 那条实测教训（352p/416p 优于 768p）在这里仍然成立：低分前缀保住了站位，高分段只补细节。
+// 判据（storyboards.id=19，124 帧，同 prompt/refs/seed，ArcFace 余弦）：F2 0.395 vs 超分臂 0.174，
+// 特写段右脸 0.542 > ref_a↔ref_b 基线 0.488（唯一越过噪声地板的臂）。锐度更低（18.2 vs 29.2）——
+// 赢在「像」不在「清」，所以不再叠 FlashVSR。
+// 代价：961s/条（低分 78s + 提升 4.4s + 高分 2×345s，8 瓦片）vs 旧链路 ≈7 分。
+// 回退 = DEFAULT_SIZE 改回 '576x320'、UPSCALE 改回 2、body 去掉 selflift。
+const DEFAULT_SIZE = '1152x640'
+const FL2VA_SIZE = '576x320'
+const UPSCALE = 0
 const FPS = 24
 const DEFAULT_LENGTH = 124
 // 模型训练区间 124-362 帧（JZL 节点 tooltip：124 ≈ 5s，训练区间约 124-362）；超出就出训练区，取上界。
@@ -76,10 +86,12 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
       body: {
         prompt,
         model: (record.model || config.model || 'minimax-h3-ref2v') || 'minimax-h3-ref2v',
-        size: DEFAULT_SIZE,
+        size: firstFrameFile ? FL2VA_SIZE : DEFAULT_SIZE,
         length: framesForDuration(record.duration),
         images,
         ref_scale: 2.0,
+        upscale: firstFrameFile ? 2 : UPSCALE,
+        selflift: !firstFrameFile,   // 首帧路径（fl2va）没跑过 SelfLift，保持旧口径 + 超分
         first_frame: firstFrameFile,
         seed: record.seed ?? undefined,
       },

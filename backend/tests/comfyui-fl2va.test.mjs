@@ -21,8 +21,8 @@ test('videos 路由：body 有 first_frame 时用 _wf_fl2va', () => {
 test('_selftest 覆盖 fl2va 悬空连线检查', () => {
   assert.match(bridge, /f = _wf_fl2va\("a cat", 576, 320, 124/)
   assert.match(bridge, /f\["302"\]\["inputs"\]\["upscale_scale"\]\s*==\s*1\.0/)
-  // 悬空连线检查覆盖全部工作流（a=base, im=image, rf=ref image, v=video, f=fl2va）
-  assert.match(bridge, /for g in \(a, im, rf, v, f\):/)
+  // 悬空连线检查覆盖全部工作流（a=base, im=image, rf=ref image, v=video, f=fl2va, v2=video+超分）
+  assert.match(bridge, /for g in \(a, im, rf, v, f, v2\):/)
 })
 
 test('adapter：firstFrameUrl 时 staging 首帧并传 first_frame', () => {

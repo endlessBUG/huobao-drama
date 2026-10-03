@@ -18,6 +18,15 @@ function toAbsPath(relativePath: string): string {
   return path.join(STORAGE_ROOT, relativePath)
 }
 
+// 成片统一落到 1080p。分镜本身是超分后的 1152x640，在这里一次性放大到交付尺寸。
+// 为什么放合并处而不是每条分镜各做一次：源和质量完全一样，但全片只算一遍，
+// 省掉每条分镜的重复缩放（分镜在 ComfyUI 里缩到 1080p 会让单条耗时从 4.3 分涨到 15 分，
+// 且是超线性的 —— 见 adapters/comfyui-video.ts 里 UPSCALE 的实测记录）。
+// increase + crop 是「先放满再居中裁」，不是拉伸：源是 1.8（1152/640）、1080p 是 1.7778，
+// 拉伸会把每帧横向压 1.25%，落在人脸上就是形变；裁只切掉左右各约 1.2%，肉眼无感。
+const OUT_W = 1920
+const OUT_H = 1080
+
 /**
  * 拼接一集的镜头视频。
  * 优先使用视频生成产物，兼容历史的 composedVideoUrl 数据。
@@ -108,6 +117,9 @@ async function doMerge(mergeId: number, episodeId: number, videos: string[]) {
       .inputOptions(['-f', 'concat', '-safe', '0'])
       .outputOptions([
         '-fflags', '+genpts',
+        // 放到交付尺寸（见 OUT_W/OUT_H 注释）。源已是同一pipeline 的产物，分辨率一致，
+        // concat 后再统一缩放，不必逐条分镜各做一次。
+        '-vf', `scale=${OUT_W}:${OUT_H}:force_original_aspect_ratio=increase,crop=${OUT_W}:${OUT_H}`,
         '-c:v', 'libx264',
         '-preset', 'medium',
         '-crf', '23',

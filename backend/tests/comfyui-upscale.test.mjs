@@ -83,6 +83,10 @@ test('adapter：SelfLift 直出 1152x640、不再超分；首帧路径（fl2va�
   assert.match(adapter, /selflift: !firstFrameFile/)
   assert.match(adapter, /size: firstFrameFile \? FL2VA_SIZE : DEFAULT_SIZE/)
   assert.match(adapter, /upscale: firstFrameFile \? 2 : UPSCALE/)
+  // 2026-10-03 拍板：transition_step=3（243 帧实测 914s vs t=2 的 2846s，−68%），
+  // 代价是身份 0.698→0.635。改回 2 必须带着新的实测理由，别静默回退。
+  assert.match(bridge, /"transition_step": 3/)
+  assert.match(bridge, /assert v3\["307"\]\["inputs"\]\["transition_step"\] == 3/)
   // 闸：SelfLift 与 FlashVSR 不能同时开 —— 1152x640 再 ×2 = 2304x1280，8G 必炸
   assert.match(bridge, /if upscale and not selflift:/)
 })

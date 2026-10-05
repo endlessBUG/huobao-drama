@@ -284,7 +284,7 @@ async function processTask(id: number, config: AIConfig) {
       const req = await adapter.buildGenerateRequest(config, {
         id: record.id,
         model: record.model,
-        prompt: record.prompt,
+        prompt,
         referenceMode: params.referenceMode,
         imageUrl: resolvedImageUrl,
         firstFrameUrl: resolvedFirstFrameUrl,

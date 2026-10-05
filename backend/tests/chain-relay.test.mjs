@@ -24,6 +24,9 @@ test('三态衔接：跨场景不接；同场景按 continuity 决定措辞', ()
   assert.match(bridge, /"frame_idx": 0[\s\S]*?"MiniMaxH3AddGuide"/)
   assert.match(bridge, /cond = "312"/)
   assert.match(adapter, /guide: guideFile/)
+  // 拼过 continuity 的那个 prompt 必须真的进 adapter：曾经写成 record.prompt，实测队列里
+  // 的 prompt 完全没有 continuity 行（1005）
+  assert.match(gen, /const req = await adapter\.buildGenerateRequest\(config, \{[\s\S]{0,400}?\r?\n        prompt,\r?\n/)
 })
 
 test('窗口 22 + 过渡 12：生成侧加 trim，落盘前裁段首（视频和音频一起）', () => {

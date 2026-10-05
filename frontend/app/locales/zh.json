@@ -802,7 +802,7 @@
       "durationHint": "修改即保存到分镜，列表与批量生成同步生效",
       "effective": "{model} · {res} · {dur}s",
       "boundRefs": "绑定参考图",
-      "chainRefs": "接力首帧（就是本段第 0 帧）",
+      "chainRefs": "接力帧（上一段末帧，本段从它的下一帧起）",
       "noBoundRefs": "暂无绑定素材（在中间「参考素材」区点击绑定）"
     },
     "tasks": {

@@ -802,7 +802,7 @@
       "durationHint": "Edits save to the storyboard instantly and apply to list and batch generation",
       "effective": "{model} · {res} · {dur}s",
       "boundRefs": "Bound References",
-      "chainRefs": "Chain First Frame (= this shot's frame 0)",
+      "chainRefs": "Chain Frame (previous shot's last frame; this shot starts at the next one)",
       "noBoundRefs": "No bound assets (bind in the center \"References\" panel)"
     },
     "tasks": {

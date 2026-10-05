@@ -802,7 +802,7 @@
       "durationHint": "Edits save to the storyboard instantly and apply to list and batch generation",
       "effective": "{model} · {res} · {dur}s",
       "boundRefs": "Bound References",
-      "chainRefs": "Chain Frame",
+      "chainRefs": "Chain Frame (window anchor, runway trimmed)",
       "noBoundRefs": "No bound assets (bind in the center \"References\" panel)"
     },
     "tasks": {

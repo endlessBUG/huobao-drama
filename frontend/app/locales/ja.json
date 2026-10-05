@@ -802,7 +802,7 @@
       "durationHint": "変更すると分镜に即時保存され、リストとバッチ生成にも反映されます",
       "effective": "{model} · {res} · {dur}秒",
       "boundRefs": "绑定参照画像",
-      "chainRefs": "継承フレーム",
+      "chainRefs": "継承フレーム（ウィンドウアンカー、先頭レールはカット）",
       "noBoundRefs": "绑定された素材なし（中央の「参照素材」で绑定）"
     },
     "tasks": {

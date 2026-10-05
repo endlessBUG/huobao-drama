@@ -55,7 +55,7 @@ test('video resolution is fixed per episode, editable, and locked into video tas
   const tasks = read('src/routes/tasks.ts')
   const service = read('src/services/generation.ts')
 
-  // 创建集时固定（默认 720p，仅接受 480p/720p）
+  // 创建集时固定（默认 480p，仅接受 480p/720p/1080p）
   assert.match(episodes, /\['480p', '720p', '1080p'\]\.includes\(body\.resolution\)/)
   // PUT 可修改，白名单校验
   assert.match(episodes, /'status', 'resolution'\]/)

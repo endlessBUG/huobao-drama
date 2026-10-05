@@ -585,7 +585,7 @@ const resolutionOptions = computed(() => ([
   { label: t('detail.ep.res720'), value: '720p' },
   { label: t('detail.ep.res480'), value: '480p' },
 ]))
-const newEpisodeResolution = ref('720p')
+const newEpisodeResolution = ref('480p')
 const epResMenuId = ref(null)
 
 function epResolution(ep) { return ep.resolution === '480p' ? '480p' : '720p' }
@@ -650,7 +650,7 @@ async function load() {
 
 function openAddEpisode() {
   newEpisodeTitle.value = ''
-  newEpisodeResolution.value = '720p'
+  newEpisodeResolution.value = '480p'
   addDialog.value = true
 }
 

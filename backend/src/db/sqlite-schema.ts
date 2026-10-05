@@ -39,7 +39,7 @@ export const sqliteSchemaStatements = [
     thumbnail TEXT,
     image_config_id INTEGER,
     video_config_id INTEGER,
-    resolution TEXT DEFAULT '720p',
+    resolution TEXT DEFAULT '480p',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT

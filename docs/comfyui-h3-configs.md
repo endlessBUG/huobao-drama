@@ -4,7 +4,7 @@
 CLAUDE.md 里只留一条引用，细节在这。
 **每次更新这份文档，同时更新下面「当前最优」——它必须是文档里第一个能读到的东西。**
 
-## 当前最优（2026-10-05 11:05）
+## 当前最优（2026-10-05 18:43）
 
 ### 配置详情
 
@@ -382,3 +382,9 @@ offload 三条都在跑：`Using async weight offloading with 2 streams`、两�
 - 窗口 clip **必须保留音轨**：VHS 返回懒加载音频 dict，ComfyUI 缓存扫描迭代它时若无音轨直接抛（`VHS failed to extract audio`）。而且插件口径本来就是视频+音频一起带过接缝 —— `AddGuide` 的 `audio` 输入现在只在 clip 路径上连（`LoadImage` 没有音频输出）
 
 窗口版比单帧锚慢（9.2 vs 8.4 min），因为生成侧多了 34 帧跑道。
+
+**走 huobao 流程本身（不是手搓图）的第一条：task 151，sb2，1005 18:33→18:43，9.6 min，交付 294 帧。** 链路 = `relayContext`（sb1 同场景 → 接）→ `extractLastFrames` 落盘 22 帧窗口 → adapter 传 `guide` + `trim=34` → 桥 `MiniMaxH3AddGuide`（frame_idx 0，连 `audio`/`audio_vae`）→ `ImageFromBatch batch_index 34` + `TrimAudioDuration start_index 1.4167`。队列里核对：生成 328、落盘 294、窗口 clip 带音轨。
+
+**这条之前有个真 bug：continuity 提示词从没送到模型。** `generation.ts:262` 把 continuity 行拼进局部 `prompt`，`:287` 传给 adapter 的却是 `record.prompt` —— 拼的那段白写。task 150 在队列里核对过，prompt 里没有 `continuity`。已修（`43d1498`），测试加断言锁住。修后 task 151 的 prompt 含：`continuity: [video continuation + keyframe completion] the opening 22 frames are carried from the end of the previous shot; match its lighting, colour and camera position.`
+
+接缝判据（放大后）：场景/服装/光线延续成立 —— 同一张床、同一扇窗、同一件白裙黑蕾丝、同一束暖光；sb1 末帧与 sb2 第 0 帧像素差 42.5（照搬跑道会是 <5，说明裁段首生效），段内逐 60 帧差 40–46（在演化，不是静止）。身份这一条**没法判**：这条分镜全程背身/侧后脑，没有正脸帧。

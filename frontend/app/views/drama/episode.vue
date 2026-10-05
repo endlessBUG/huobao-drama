@@ -586,6 +586,11 @@
                         <span class="video-task-loc truncate">{{ task.meta }}</span>
                       </template>
                     </div>
+                    <div v-for="c in [chainInfo(task.storyboard)]" v-if="c" :key="c.prev.id" class="video-task-chain">
+                      <img v-if="c.thumb" :src="c.thumb" alt="" loading="lazy" />
+                      <button type="button" class="video-task-chain-link" @click.stop="onVideoTaskRowClick(c.prev)">#{{ String(c.prev.storyboard_number ?? c.prev.storyboardNumber).padStart(2, '0') }}</button>
+                      <span>{{ c.mode === 'anchor' ? t('episode.sb.chainAnchor') : c.mode === 'reference' ? t('episode.sb.chainReference') : t('episode.sb.chainNone') }}</span>
+                    </div>
                     <div v-if="task.error" class="video-task-error" :title="task.error">
                       {{ mapError(task.error) }}
                       <div v-if="videoModerationHint(task.error)" class="video-task-error-hint">{{ videoModerationHint(task.error) }}</div>
@@ -619,8 +624,8 @@
                     </label>
                     <label class="field">
                       <span class="field-label">{{ t('episode.sb.continuity') }}</span>
-                      <span class="tag" :class="['tag', { 'tag-accent': (selectedSb.continuity || 'same_shot') === 'same_shot' }]" @click="updateField(selectedSb, 'continuity', 'same_shot')">same_shot</span>
-                      <span class="tag" :class="['tag', { 'tag-accent': selectedSb.continuity === 'cut' }]" @click="updateField(selectedSb, 'continuity', 'cut')">cut</span>
+                      <span class="tag" :class="['tag', { 'tag-accent': (selectedSb.continuity || 'same_shot') === 'same_shot' }]" :title="t('episode.sb.chainAnchor')" @click="updateField(selectedSb, 'continuity', 'same_shot')">{{ t('episode.sb.contSameShot') }}</span>
+                      <span class="tag" :class="['tag', { 'tag-accent': selectedSb.continuity === 'cut' }]" :title="t('episode.sb.chainReference')" @click="updateField(selectedSb, 'continuity', 'cut')">{{ t('episode.sb.contCut') }}</span>
                     </label>
                   </section>
 
@@ -3603,6 +3608,21 @@ function batchPropImages() {
 function getVideoUrl(s) { return s?.video_url || s?.videoUrl || s?.composed_video_url || s?.composedVideoUrl || null }
 function hasVid(s) { return !!getVideoUrl(s) }
 
+// 段间衔接：与后端 relayContext 同一个判据 —— 跨场景不接，同场景才带上一段末帧。
+// same_shot → 锚在第 0 帧；cut → 只当参考（追光照和色调，不追机位）。
+function chainInfo(sb) {
+  const n = sb?.storyboard_number ?? sb?.storyboardNumber
+  if (!n || n <= 1) return null
+  const prev = sbs.value.find(s => (s.storyboard_number ?? s.storyboardNumber) === n - 1)
+  if (!prev) return null
+  const sameScene = (sb.scene_id ?? sb.sceneId) === (prev.scene_id ?? prev.sceneId)
+  return {
+    prev,
+    mode: !sameScene ? 'none' : ((sb.continuity || 'same_shot') === 'same_shot' ? 'anchor' : 'reference'),
+    thumb: lastFrameOf('/' + getVideoUrl(prev)),
+  }
+}
+
 // ===== 分镜视频历史（一个分镜可能生成多个视频,sys_task 留存全部记录）=====
 const sbVideoHistory = ref([])
 const previewVideoUrl = ref('') // 正在预览的历史视频(相对路径);空 = 预览当前主视频
@@ -5678,6 +5698,32 @@ button.video-task-metric.on { box-shadow: 0 0 0 2px var(--accent); }
 }
 .video-task-loc {
   color: var(--text-2);
+}
+.video-task-chain {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.video-task-chain img {
+  width: 26px;
+  height: 15px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: var(--overlay-track);
+}
+.video-task-chain-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--text-2);
+  cursor: pointer;
 }
 .video-task-sep { color: var(--text-3); opacity: 0.5; }
 .video-task-error {

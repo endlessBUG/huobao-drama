@@ -706,7 +706,12 @@
       "batchDone": "動画プロンプトの一括生成が完了しました",
       "batchDoneFailed": "動画プロンプトの一括生成が完了しました（{n} 件失敗）",
       "batchFailed": "動画プロンプトの一括生成に失敗しました",
-      "promptGenerated": "分镜 #{n} の動画プロンプトを生成しました"
+      "promptGenerated": "分镜 #{n} の動画プロンプトを生成しました",
+      "contSameShot": "同一カット継続",
+      "contCut": "カット",
+      "chainAnchor": "前カットの最終フレームから続く（そのフレームは固定、再描画されない）",
+      "chainReference": "同一シーンでカット換え：照明と色調だけ追う、カメラ位置は追わない",
+      "chainNone": "引き継ぎなし（シーン跨ぎ）"
     },
     "ref": {
       "title": "参照素材",

@@ -706,7 +706,12 @@
       "batchDone": "영상 프롬프트 일괄 생성이 완료되었습니다",
       "batchDoneFailed": "영상 프롬프트 일괄 생성이 완료되었습니다({n}개 실패)",
       "batchFailed": "영상 프롬프트 일괄 생성에 실패했습니다",
-      "promptGenerated": "스토리보드 #{n}의 영상 프롬프트가 생성되었습니다"
+      "promptGenerated": "스토리보드 #{n}의 영상 프롬프트가 생성되었습니다",
+      "contSameShot": "같은 컷 계속",
+      "contCut": "컷 전환",
+      "chainAnchor": "앞 컷의 마지막 프레임에서 이어짐(그 프레임은 고정, 재연성되지 않음)",
+      "chainReference": "같은 장면에서 컷 변경: 조명과 색조만 추적, 카메라 위치는 추적하지 않음",
+      "chainNone": "인계 없음(장면 변경)"
     },
     "ref": {
       "title": "참조 소재",

@@ -28,3 +28,10 @@ export function posterOf(url: string): string {
   if (!/\.(mp4|webm|mov)$/i.test(url)) return ''
   return url.replace(/\.[^./]+$/, '_poster.jpg')
 }
+
+/** 视频地址 → 接力末帧地址（后端 extractLastFrame 落盘为 _last.png）；无法推导返回空串 */
+export function lastFrameOf(url: string): string {
+  if (!url || !url.includes('/static/')) return ''
+  if (!/\.(mp4|webm|mov)$/i.test(url)) return ''
+  return url.replace(/\.[^./]+$/, '_last.png')
+}

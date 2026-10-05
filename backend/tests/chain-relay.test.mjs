@@ -56,6 +56,12 @@ test('接力窗口来自上一段「实际交付的成片」，按 storyboard_nu
   assert.match(gen, /extractLastFrames\(ctx\.source, SEAM_WINDOW\)/)
 })
 
+test('前端的衔接显示与后端同一个判据：跨场景不接', () => {
+  assert.match(view, /const sameScene = \(sb\.scene_id \?\? sb\.sceneId\) === \(prev\.scene_id \?\? prev\.sceneId\)/)
+  assert.match(view, /c\.mode === 'anchor' \? t\('episode\.sb\.chainAnchor'\)/)
+  assert.match(gen, /ctx\?\.source && ctx\.sameScene/)
+})
+
 // 243 帧 SelfLift 实测 47:26（含解码），300 次 × 10s = 50 分钟正好卡边界：任务 128 就是被
 // 「polling attempts exhausted」判失败的，而 ComfyUI 那边其实还在跑。
 test('视频轮询上限盖得住 243 帧 SelfLift 的实测时长', () => {

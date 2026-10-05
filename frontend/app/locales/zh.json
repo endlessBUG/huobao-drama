@@ -706,7 +706,12 @@
       "batchDone": "视频提示词批量生成完成",
       "batchDoneFailed": "视频提示词批量生成完成，{n} 个失败",
       "batchFailed": "视频提示词批量生成失败",
-      "promptGenerated": "分镜 #{n} 视频提示词已生成"
+      "promptGenerated": "分镜 #{n} 视频提示词已生成",
+      "contSameShot": "同镜头继续",
+      "contCut": "切镜",
+      "chainAnchor": "从上一段末帧继续（那一帧被钉住，不重绘）",
+      "chainReference": "同场景换镜头：只追光照和色调，不追机位",
+      "chainNone": "不接（跨场景）"
     },
     "ref": {
       "title": "参考素材",

@@ -706,7 +706,12 @@
       "batchDone": "Batch video prompt generation complete",
       "batchDoneFailed": "Batch video prompt generation complete, {n} failed",
       "batchFailed": "Batch video prompt generation failed",
-      "promptGenerated": "Video prompt for shot #{n} generated"
+      "promptGenerated": "Video prompt for shot #{n} generated",
+      "contSameShot": "Same shot",
+      "contCut": "Cut",
+      "chainAnchor": "continues from the previous shot's last frame (that frame is pinned, not redrawn)",
+      "chainReference": "same scene, new shot: match lighting and colour only, not camera position",
+      "chainNone": "no carry (different scene)"
     },
     "ref": {
       "title": "Reference Assets",

@@ -127,6 +127,9 @@ export const storyboards = sqliteTable('storyboards', {
   soundEffect: text('sound_effect'),
   description: text('description'),
   duration: integer('duration').default(0),
+  // 段与段之间的衔接方式：'same_shot' = 直接延续上一镜（同机位同景别同空间）；'cut' = 硬切到新镜头。
+  // 是否真带上一段尾帧由 scene_id 决定（跨场景不带）—— 见 generation.ts。NULL 按 'same_shot' 处理。
+  continuity: text('continuity').default('same_shot'),
   composedImage: text('composed_image'),
   firstFrameImage: text('first_frame_image'),
   lastFrameImage: text('last_frame_image'),

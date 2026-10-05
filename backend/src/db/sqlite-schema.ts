@@ -397,6 +397,7 @@ export function initSqliteSchema(sqlite: Database.Database) {
   }
   // 幂等补列（新库 CREATE TABLE 已含列，此处 no-op；旧库补列）
   addColumnIfMissing(sqlite, 'storyboards', 'video_prompt_full_ref')
+  addColumnIfMissing(sqlite, 'storyboards', 'continuity')
   addColumnIfMissing(sqlite, 'scenes', 'grid_prompt')
   addColumnIfMissing(sqlite, 'scenes', 'grid_image_url')
   const insertSeed = sqlite.prepare(SEED_SQL)

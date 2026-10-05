@@ -8,12 +8,12 @@ const bridge = readFileSync('E:/AI/ComfyUI/custom_nodes/ComfyUI-OpenAI-Bridge/__
 const adapter = readFileSync(new URL('../src/services/adapters/comfyui-video.ts', import.meta.url), 'utf8')
 
 test('bridge：upscale 默认关，路由可覆盖', () => {
-  assert.match(bridge, /def _wf_video\(prompt, w, h, length, refs, seed, prefix, ref_scale=2\.0, upscale=0, selflift=False, sparse=False\):/)
+  assert.match(bridge, /def _wf_video\(prompt, w, h, length, refs, seed, prefix, ref_scale=2\.0, upscale=0, selflift=False, sparse=False, guide=None\):/)
   assert.match(bridge, /upscale = int\(b\.get\("upscale"\) or 0\)/)
   assert.match(bridge, /selflift = bool\(b\.get\("selflift"\)\)/)
   assert.match(bridge, /sparse = bool\(b\.get\("sparse", False\)\)/)
   // 路由把它透传进 _wf_video（第 9、10、11 个位置参数）
-  assert.match(bridge, /"openai\/h3_" \+ uuid\.uuid4\(\)\.hex\[:8\], ref_scale, upscale, selflift, sparse\)/)
+  assert.match(bridge, /"openai\/h3_" \+ uuid\.uuid4\(\)\.hex\[:8\], ref_scale, upscale, selflift, sparse,\s*b\.get\("guide"\) or None\)/)
 })
 
 test('bridge：超分拆 InitPipe + Adv 两段（加载权重与跑超分入参分开，便于单独调参）', () => {

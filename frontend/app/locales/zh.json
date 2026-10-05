@@ -680,6 +680,7 @@
       "descHint": "按【镜头1】【镜头2】…逐子镜头描述；台词写「角色名说：「台词」」，旁白写「旁白：内容」",
       "descPlaceholder": "分镜画面描述",
       "atmosphere": "氛围",
+      "continuity": "衔接（上一段）",
       "atmospherePlaceholder": "光线、色调、空气感、环境氛围",
       "videoPromptSection": "视频提示词",
       "regenPrompt": "重新生成",

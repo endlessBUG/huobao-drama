@@ -77,6 +77,9 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
 
     const inputDir = toInputDir(config)
     const images = await stageReferenceImages(parseUrlArray(record.referenceImageUrls), inputDir, MAX_IMAGES)
+    // 帧锚走桥的 MiniMaxH3AddGuide（不是 ref 槽）：ref_image_0~8 与 keyframe 在同一个
+    // cond_video_latents 里并存（comfy/model_base.py:2188-2196），不互斥。
+    const guideFile = record.guideUrl ? (await stageReferenceImages([record.guideUrl], inputDir, 1))[0] : undefined
     if (images.length === 0) {
       // 桥会把 images 填默认 qingyi.jpg / xueqi.jpeg；此处显式传空即可，
       // 但为明确起见传 []（桥内部 _wf_video 会对不足 2 张补空串）
@@ -103,6 +106,7 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
         upscale: firstFrameFile ? 2 : UPSCALE,
         selflift: !firstFrameFile,   // 分辨率提升靠 SelfLift 的 latent lift（不是 FlashVSR）；首帧路径保持旧口径 + 超分
         first_frame: firstFrameFile,
+        guide: guideFile,
         seed: record.seed ?? undefined,
       },
     }

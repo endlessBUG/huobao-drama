@@ -680,6 +680,7 @@
       "descHint": "【샷1】【샷2】…로 하위 샷마다 기술. 대사는 「캐릭터명의 대사: 「대사」」, 나레이션은 「나레이션: 내용」",
       "descPlaceholder": "스토리보드 화면 설명",
       "atmosphere": "분위기",
+      "continuity": "연결(앞 구간)",
       "atmospherePlaceholder": "조명, 색조, 공기감, 환경 분위기",
       "videoPromptSection": "영상 프롬프트",
       "regenPrompt": "다시 생성",

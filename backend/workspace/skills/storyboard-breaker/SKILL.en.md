@@ -50,6 +50,7 @@ Dialogue that does not fit must be moved to the next segment; cramming unperform
 9. **Atmosphere** `atmosphere`: lighting + color tone + sound + overall mood
 10. **Duration** `duration`: total segment duration 8-15 seconds, and it must satisfy the dialogue duration floor
 11. **Scene binding**: if it can be matched to an existing scene, `scene_id` must be filled in
+12. **Continuity** `continuity`: the relationship to the **previous segment**. Same camera, same shot size, same space continuing (one shot split into two segments) → `same_shot`; introducing new information (new subject, new space, new state, new viewpoint, or new time — the §4.2 cut gate above) → `cut`. The first segment of an episode is `same_shot` (there is no previous segment). This decides how generation chains: `same_shot` + same scene → the previous segment's last frame is both a reference and anchored at frame 0; `cut` + same scene → reference only (match lighting and colour, not camera position); different scene → no last-frame carry
 12. **Character binding**: fill in `character_ids`, binding 0 to multiple characters involved in this segment
 13. **Prop binding**: fill in `prop_ids`, binding 0 to multiple key props appearing in this segment
 

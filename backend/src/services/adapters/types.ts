@@ -106,6 +106,9 @@ export interface VideoGenerationRecord {
   referenceAudioUrls?: string | null
   referenceFileUrl?: string | null
   referenceLinkUrl?: string | null
+  // 帧锚（官方 §2.2 keyframe completion）：同一张图既当 <Picture N> 参考，又锚在目标视频的第 0 帧。
+  // 只有「同一个镜头继续」才成立 —— 见 generation.ts 的 relayContext。
+  guideUrl?: string | null
   generateAudio?: number | boolean | null
   duration?: number | null
   aspectRatio?: string | null

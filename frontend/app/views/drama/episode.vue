@@ -617,6 +617,11 @@
                       <span class="field-label">{{ t('episode.sb.atmosphere') }}</span>
                       <textarea :value="selectedSb.atmosphere || ''" class="textarea" rows="2" @blur="updateField(selectedSb, 'atmosphere', $event.target.value)" :placeholder="t('episode.sb.atmospherePlaceholder')" />
                     </label>
+                    <label class="field">
+                      <span class="field-label">{{ t('episode.sb.continuity') }}</span>
+                      <span class="tag" :class="['tag', { 'tag-accent': (selectedSb.continuity || 'same_shot') === 'same_shot' }]" @click="updateField(selectedSb, 'continuity', 'same_shot')">same_shot</span>
+                      <span class="tag" :class="['tag', { 'tag-accent': selectedSb.continuity === 'cut' }]" @click="updateField(selectedSb, 'continuity', 'cut')">cut</span>
+                    </label>
                   </section>
 
                   <section class="video-inspector-section">

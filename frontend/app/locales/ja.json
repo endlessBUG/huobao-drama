@@ -680,6 +680,7 @@
       "descHint": "【ショット1】【ショット2】…と子ショットごとに記述。セリフは「キャラクター名のセリフ：「セリフ」」、ナレーションは「ナレーション：内容」",
       "descPlaceholder": "分镜の画面説明",
       "atmosphere": "雰囲気",
+      "continuity": "つながり（前パラグラフ）",
       "atmospherePlaceholder": "光、色調、空気感、環境の雰囲気",
       "videoPromptSection": "動画プロンプト",
       "regenPrompt": "再生成",

@@ -680,6 +680,7 @@
       "descHint": "Describe each sub-shot as 【Shot 1】【Shot 2】…; dialogue as “Name says: 「line」”, narration as “Narrator: …”",
       "descPlaceholder": "Shot visual description",
       "atmosphere": "Atmosphere",
+      "continuity": "Continuity (previous segment)",
       "atmospherePlaceholder": "Lighting, color tone, air feel, ambience",
       "videoPromptSection": "Video Prompt",
       "regenPrompt": "Regenerate",

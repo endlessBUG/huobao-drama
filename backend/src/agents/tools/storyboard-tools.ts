@@ -240,6 +240,8 @@ const storyboardFields = z.object({
   bgm_prompt: z.string().optional(),
   sound_effect: z.string().optional(),
   duration: z.number().optional(),
+  // 与上一段的关系：same_shot = 同一个镜头继续；cut = 硬切到新镜头。判据见 video-prompt SKILL。
+  continuity: z.enum(['same_shot', 'cut']).optional(),
   scene_id: z.number().nullable().optional(),
   character_ids: z.array(z.number()).optional(),
   prop_ids: z.array(z.number()).optional(),
@@ -295,7 +297,7 @@ const saveStoryboards = createTool({
           atmosphere: sb.atmosphere, imagePrompt: sb.image_prompt,
           videoPrompt: sb.video_prompt, bgmPrompt: sb.bgm_prompt,
           soundEffect: sb.sound_effect,
-          sceneId: sb.scene_id, duration: sb.duration || 10,
+          sceneId: sb.scene_id, duration: sb.duration || 10, continuity: sb.continuity || 'same_shot',
           updatedAt: ts,
         }).where(eq(schema.storyboards.id, existingId))
         await syncStoryboardCharacters(existingId, sb.character_ids || [])
@@ -311,7 +313,7 @@ const saveStoryboards = createTool({
           atmosphere: sb.atmosphere, imagePrompt: sb.image_prompt,
           videoPrompt: sb.video_prompt, bgmPrompt: sb.bgm_prompt,
           soundEffect: sb.sound_effect,
-          sceneId: sb.scene_id, duration: sb.duration || 10,
+          sceneId: sb.scene_id, duration: sb.duration || 10, continuity: sb.continuity || 'same_shot',
           createdAt: ts, updatedAt: ts,
         })
         const newId = getInsertId(res)

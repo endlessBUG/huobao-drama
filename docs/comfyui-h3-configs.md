@@ -4,7 +4,7 @@
 CLAUDE.md 里只留一条引用，细节在这。
 **每次更新这份文档，同时更新下面「当前最优」——它必须是文档里第一个能读到的东西。**
 
-## 当前最优（2026-10-05 19:40）
+## 当前最优（2026-10-05 21:11）
 
 ### 配置详情
 
@@ -18,7 +18,7 @@ CLAUDE.md 里只留一条引用，细节在这。
 | 采样 | **4 步 / SelfLift 到 1.22 MP（1472×832）/ 243 帧（10 s）**，`res_multistep` + `simple`，cfg 1.0，`transition_step=3`、`lowres_scale=0.5`、`highres_tiling=true`；**TeaCache 不用**（见七） | — |
 | 超分 | **没有像素超分后处理**（`UPSCALE = 0`，不挂 FlashVSR）。但 SelfLift 本身含一步 **latent 升采样**（`minimax_h3_latent_upscaler_3d_conv_v1_bf16`，实测 10.9 s）—— 它只把低分 latent 对上目标尺寸，不添新细节；添细节的是最后那一步在目标分辨率上的**真前向**。所以准确说法是「细节是扩散算出来的，不是增强网络补的」。唯一例外：首帧路径（fl2va，有 `firstFrameFile`）仍 `upscale: 2` | — |
 | 帧数 | 243（硬约束，不动） | — |
-| 段间接力 | **单帧锚** —— 上一段末帧作 keyframe 钉在本段第 0 帧（`MiniMaxH3AddGuide` `frame_idx 0`），keyframe 行永不降噪 ⇒ 成片第 0 帧就是它；跨场景不接，同场景 `cut` 只追光照色调不追机位 | ✓ task 152 实测 8.0 min，落盘第 0 帧 vs 锚差 5.92（= VAE 往返损失） |
+| 段间接力 | **上一段 latent 的尾部窗口直传**（桥的 `BridgeSeamGuideFromLatent`，窗口 22 帧 = 7 token）—— 零 VAE 往返，窗口帧与上一段末 22 帧逐像素相同；落盘前只裁窗口 22 ⇒ chained 段落盘 272（11.33 s），不是 294。跨场景不接，同场景 `cut` 只追光照色调不追机位 | ✓ task 153/154 实测：接缝 3.58（段内运动 3.43）；文件不在时回退 pixel 路径 |
 | 实例 / 启动参数 | **6006 = cu130 venv**（`.venv-cu130`，torch 2.14.1+cu130）+ `--enable-dynamic-vram --fast-disk --disable-comfy-compiler`；**不开 `--enable-triton-backend`**（triton 是 opt-in override，会把 `int8_linear` 从 CUDA 后端抢走） | ✓ 已写进 `start_clean.ps1`；cu130 的价值就是 `quant_ops.py:26-27` 那个门开了（见九） |
 | sage block swap | 作者自己也是**关闭**（1141 里 `["关闭", 50]`） | — |
 
@@ -392,4 +392,18 @@ offload 三条都在跑：`Using async weight offloading with 2 streams`、两�
 
 **改回单帧锚（1005，用户要的是首尾帧效果）：task 152，sb2，8.0 min，落盘 294 帧。** 判据 = 落盘第 0 帧 vs 锚（`_last.png`）像素差 **5.92**（窗口版是 42.5）—— 5.92 就是 VAE 往返损失，不是构图差。放大核对：同一张床、同一束窗光、发丝位置逐条对得上。
 
-两条口径的取舍：窗口（22 帧）给模型的是**光照/色调的记忆**（社区 luma drift 1.055→1.022/hop），代价是段首 34 帧是照搬跑道、必须裁 ⇒ 成片第 0 帧不等于锚。单帧锚没有跑道 ⇒ 首尾帧直接对上，而且更快（8.0 vs 9.2 min）。**生产走单帧锚**；桥的 `trim` 通道留着（恒 0），要回窗口随时能开。
+两条口径的取舍：窗口（22 帧）给模型的是**光照/色调的记忆**（社区 luma drift 1.055→1.022/hop），代价是段首 34 帧是照搬跑道、必须裁 ⇒ 成片第 0 帧不等于锚。单帧锚没有跑道 ⇒ 首尾帧直接对上，而且更快（8.0 vs 9.2 min）。
+
+**最终走 latent 直传（1005 晚，用户要「效果好的、能做首尾帧的」）：task 153/154，sb1 7.5 min + sb2 8.0 min，sb2 落盘 272 帧。** 桥加两个节点（`custom_nodes/ComfyUI-OpenAI-Bridge/__init__.py`，仓库外，改完必须重启 6006）：`BridgeSaveAVLatent`（core 的 `SaveLatent` 对 nested tensor 会炸，`nodes.py:553`，所以自己 `torch.save` 两个 tensor）和 `BridgeSeamGuideFromLatent`（读上一段 latent 的尾部 **7 token + 37 音频步** 注入 keyframe）。文件在 → 零往返；不在 → 回退 pixel 路径。
+
+三条口径的接缝判据（同一分镜 sb1→sb2）：
+
+| 口径 | 接缝逐帧差 | 段内运动 | 落盘 |
+|---|---|---|---|
+| 单帧锚 | **39.5**（跳一下然后冻 10 帧） | 0.3–2.6 | 294 |
+| 窗口 + pixel 引导 | 18.9 | 均匀 | 294（要加 34 跑道） |
+| **窗口 + latent 直传** | **3.58** | 3.43 | **272** |
+
+3.58 ≈ 段内的正常运动步（3.43）⇒ 接缝看不出来。音画对齐核对：视频 11.333333 s / 音频 11.333344 s。
+
+代价说清楚：chained 段每条少 22 帧（窗口让给下一段），所以单条 11.33 s 而不是 12.25 s；整集总时长 = Σ段长 − 22×(段数−1)。这是插件口径本身（`nodes_asset_manager.py:3820` 的 tooltip 写的就是这个）。生产走这条；`continuity` 提示词里那句「the first 22 frames are carried」与它一致。

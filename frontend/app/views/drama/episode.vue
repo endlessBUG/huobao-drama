@@ -586,8 +586,8 @@
                         <span class="video-task-loc truncate">{{ task.meta }}</span>
                       </template>
                     </div>
-                    <div v-for="c in [chainInfo(task.storyboard)]" v-if="c" :key="c.prev.id" class="video-task-chain">
-                      <img v-if="c.thumb" :src="c.thumb" alt="" loading="lazy" />
+                    <div v-for="c in [chainInfo(task.storyboard)].filter(Boolean)" :key="c.prev.id" class="video-task-chain">
+                      <img v-if="c.thumb && c.mode !== 'none'" :src="c.thumb" alt="" loading="lazy" />
                       <button type="button" class="video-task-chain-link" @click.stop="onVideoTaskRowClick(c.prev)">#{{ String(c.prev.storyboard_number ?? c.prev.storyboardNumber).padStart(2, '0') }}</button>
                       <span>{{ c.mode === 'anchor' ? t('episode.sb.chainAnchor') : c.mode === 'reference' ? t('episode.sb.chainReference') : t('episode.sb.chainNone') }}</span>
                     </div>
@@ -812,7 +812,7 @@
                       </button>
                     </div>
                     <div v-else class="video-bound-refs-empty">{{ t('episode.inspector.noBoundRefs') }}</div>
-                    <div v-for="c in [chainInfo(selectedSb)]" v-if="c && c.thumb && c.mode !== 'none'" :key="c.prev.id" class="video-bound-refs">
+                    <div v-for="c in [chainInfo(selectedSb)].filter(c => c && c.thumb && c.mode !== 'none')" :key="c.prev.id" class="video-bound-refs">
                       <button type="button" class="video-bound-ref" :title="c.mode === 'anchor' ? t('episode.sb.chainAnchor') : t('episode.sb.chainReference')" @click="openImageViewer(c.thumb, `#${String(c.prev.storyboard_number ?? c.prev.storyboardNumber).padStart(2, '0')}`)">
                         <img :src="c.thumb" :alt="c.mode" loading="lazy" />
                         <small>{{ `#${String(c.prev.storyboard_number ?? c.prev.storyboardNumber).padStart(2, '0')} · ${c.mode === 'anchor' ? t('episode.sb.chainAnchor') : t('episode.sb.chainReference')}` }}</small>

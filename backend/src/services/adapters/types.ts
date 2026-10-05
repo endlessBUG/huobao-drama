@@ -109,6 +109,11 @@ export interface VideoGenerationRecord {
   // 帧锚（官方 §2.2 keyframe completion）：同一张图既当 <Picture N> 参考，又锚在目标视频的第 0 帧。
   // 只有「同一个镜头继续」才成立 —— 见 generation.ts 的 relayContext。
   guideUrl?: string | null
+  // 上一段的 AV latent 文件名（桥的 output/latents/<name>.pt）。存在则走零往返衔接；
+  // 不存在时桥回退到 guideUrl 的 pixel 路径。
+  prevLatent?: string | null
+  // 本段 latent 落盘名，供下一段用
+  saveName?: string | null
   // 段首跑道帧数（窗口 + 过渡）：生成侧加它，落盘前裁掉，交付帧数才等于设定值
   trimFrames?: number | null
   generateAudio?: number | boolean | null

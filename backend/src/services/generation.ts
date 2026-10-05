@@ -16,6 +16,9 @@ type TaskType = 'image' | 'video'
 
 const taskLabel = (type: TaskType) => (type === 'image' ? 'ImageTask' : 'VideoTask')
 
+// 段间衔接窗口（社区 SEAM_DEFAULT_WINDOW=22 = 17m+5，落在 token 边界上）。
+const SEAM_WINDOW = 22
+
 // 轮询节奏：图片 5s×120（上限 10 分钟）；视频 10s×300
 // 图片 360×5s = 30 分钟。原来卡死 10 分钟（120×5s），而本机 qwen 三视图单张实测跑过
 // 10 分钟（任务 55：后端判 failed、ComfyUI 还在算，算完的图没人取）。原因在本机的
@@ -253,19 +256,24 @@ async function processTask(id: number, config: AIConfig) {
       const resolvedFirstFrameUrl = await normalizeVideoReferenceUrl(params.firstFrameUrl)
       const resolvedLastFrameUrl = await normalizeVideoReferenceUrl(params.lastFrameUrl)
       const resolvedReferenceImageUrls = await normalizeVideoReferenceUrls(params.referenceImageUrls)
-      // 段间接力（连续拍）：上一段末帧作**单帧锚**。keyframe 行永不降噪（img_update=False），
-      // 每步重注入 ⇒ 成片第 0 帧就是那一帧 —— 首尾帧效果，没有跑道要裁。见 relayContext 的注释。
+      // 段间接力（连续拍）：上一段末帧作 keyframe 锚。keyframe 的 cond 行永不降噪（img_update=False）、
+      // 每步重注入 ⇒ 段首窗口是照搬的，落盘前裁掉，否则和上一段重复同 0.92 秒。见 relayContext 的注释。
       let prompt = record.prompt
       let guideUrl: string | null = null
+      let prevLatent: string | null = null
+      let trimFrames = 0
       if (params.chain) {
         const ctx = await relayContext(record.storyboardId)
         // 跨场景不接 —— 官方 §2.2 里 keyframe 是「具体帧锚」，只有内容真的延续时才成立；换场景靠角色图 + 场景图。
         if (ctx?.source && ctx.sameScene) {
-          const anchor = await extractLastFrame(ctx.source)
-          if (anchor) {
-            guideUrl = anchor
+          guideUrl = await extractLastFrame(ctx.source)
+          if (guideUrl) {
+            // 上一段的 AV latent 还在 → 桥走零往返路径（窗口帧与上一段末帧逐像素相同）；
+            // 不在 → 回退 pixel 路径（那张 PNG 既是兜底也是页面显示的那一帧）。
+            prevLatent = `sb${ctx.prevId}`
+            trimFrames = SEAM_WINDOW
             const mode = ctx.continuity === 'same_shot' ? 'lighting, colour and camera position' : 'lighting and colour'
-            prompt = `${prompt}\ncontinuity: [keyframe completion] the first frame is the last frame of the previous shot; match its ${mode}.`
+            prompt = `${prompt}\ncontinuity: [keyframe completion] the first ${SEAM_WINDOW} frames are carried from the end of the previous shot; match its ${mode}.`
           }
         }
       }
@@ -287,6 +295,9 @@ async function processTask(id: number, config: AIConfig) {
         referenceFileUrl: resolvedReferenceFileUrl,
         referenceLinkUrl: params.referenceLinkUrl,
         guideUrl,
+        prevLatent,
+        saveName: record.storyboardId ? `sb${record.storyboardId}` : null,
+        trimFrames,
         generateAudio: params.generateAudio,
         duration: params.duration,
         aspectRatio: params.aspectRatio,
@@ -584,7 +595,7 @@ async function normalizeReferenceImages(refs: string[] | null | undefined): Prom
  *  上一段的光线/色调/构图落点喂进去（社区 Seamless Chain 的 memory bank 是这条的完整版，实测
  *  luma drift 1.055→1.022/hop、chroma 1.086→1.039）。
  *  前提：段按顺序跑（上一段已完成），否则返回 null 退回纯参考图。 */
-async function relayContext(storyboardId?: number | null): Promise<{ source: string | null; sameScene: boolean; continuity: string } | null> {
+async function relayContext(storyboardId?: number | null): Promise<{ source: string | null; prevId: number; sameScene: boolean; continuity: string } | null> {
   if (!storyboardId) return null
   const [cur] = await db.select({ episodeId: schema.storyboards.episodeId, n: schema.storyboards.storyboardNumber,
     sceneId: schema.storyboards.sceneId, continuity: schema.storyboards.continuity })
@@ -599,7 +610,7 @@ async function relayContext(storyboardId?: number | null): Promise<{ source: str
   const source = prev.videoUrl || (await db.select({ localPath: schema.sysTask.localPath }).from(schema.sysTask)
     .where(and(eq(schema.sysTask.storyboardId, prev.id), eq(schema.sysTask.type, 'video'), eq(schema.sysTask.status, 'completed'))).limit(1))[0]?.localPath
   if (!source) return null
-  return { source, sameScene: cur.sceneId === prev.sceneId, continuity: cur.continuity || 'same_shot' }
+  return { source, prevId: prev.id, sameScene: cur.sceneId === prev.sceneId, continuity: cur.continuity || 'same_shot' }
 }
 
 async function normalizeVideoReferenceUrl(value: string | null | undefined): Promise<string | null> {

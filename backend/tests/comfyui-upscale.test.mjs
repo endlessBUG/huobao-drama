@@ -77,12 +77,14 @@ test('bridge _selftest 断言超分开/关两种形状', () => {
   assert.match(bridge, /assert not any\(n\["class_type"\] == "ImageScale" for n in v2\.values\(\)\)/)
 })
 
-test('adapter：SelfLift 直出 1152x640、不再超分；首帧路径（fl2va）保持旧口径', () => {
-  assert.match(adapter, /const DEFAULT_SIZE = '1152x640'/)
+test('adapter：480p 走 SelfLift 864x480（提升靠 latent lift，不叠 FlashVSR）；默认走 SelfLift 到 1.22 MP（1472x832）；首帧路径保持旧口径', () => {
+  assert.match(adapter, /const SIZE_480P = '864x480'/)
+  assert.match(adapter, /const DEFAULT_SIZE = '1472x832'/)
   assert.match(adapter, /const UPSCALE = 0/)
-  assert.match(adapter, /selflift: !firstFrameFile/)
-  assert.match(adapter, /size: firstFrameFile \? FL2VA_SIZE : DEFAULT_SIZE/)
+  assert.match(adapter, /const is480 = \(record\.resolution \|\| '480p'\) === '480p'/)
+  assert.match(adapter, /size: firstFrameFile \? FL2VA_SIZE : \(is480 \? SIZE_480P : DEFAULT_SIZE\)/)
   assert.match(adapter, /upscale: firstFrameFile \? 2 : UPSCALE/)
+  assert.match(adapter, /selflift: !firstFrameFile/)
   // 2026-10-03 拍板：transition_step=3（243 帧实测 914s vs t=2 的 2846s，−68%），
   // 代价是身份 0.698→0.635。改回 2 必须带着新的实测理由，别静默回退。
   assert.match(bridge, /"transition_step": 3/)

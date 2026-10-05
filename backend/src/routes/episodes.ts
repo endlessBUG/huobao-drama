@@ -34,7 +34,8 @@ app.post('/', async (c) => {
     imageConfigId,
     videoConfigId,
     // 视频分辨率在创建集时固定（480p/720p/1080p），后续可通过 PUT 修改；各视频适配器再映射为厂商档位
-    resolution: ['480p', '720p', '1080p'].includes(body.resolution) ? body.resolution : '720p',
+    // 默认 480p：comfyui 这条上 480p = SelfLift 到 864x480（不叠 FlashVSR）；720p 及以上 = SelfLift 到 1.22 MP（1472x832，2026-10-05 定案，约 34 min/条）
+    resolution: ['480p', '720p', '1080p'].includes(body.resolution) ? body.resolution : '480p',
     createdAt: ts,
     updatedAt: ts,
   })

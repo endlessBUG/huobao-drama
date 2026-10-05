@@ -37,7 +37,15 @@ const MAX_IMAGES = 9
 // 赢在「像」不在「清」，所以不再叠 FlashVSR。
 // 代价：961s/条（低分 78s + 提升 4.4s + 高分 2×345s，8 瓦片）vs 旧链路 ≈7 分。
 // 回退 = DEFAULT_SIZE 改回 '576x320'、UPSCALE 改回 2、body 去掉 selflift。
-const DEFAULT_SIZE = '1152x640'
+// 1003 改：默认 480p，分辨率提升靠 SelfLift 的 latent lift（432x240 前缀 → 864x480），不叠 FlashVSR。
+// 之前 adapter 完全不看 record.resolution（写死 1152x640），所以「480p」是空设置 —— 这条把它接上。
+const SIZE_480P = '864x480'
+// 2026-10-05 用户看片定案：SelfLift 到 1.22 MP（1472x832 / 243 帧）—— 同 prompt/refs/seed 单变量
+// 对照里它比 1.03 MP（1344x768）有结构（眼窝和上眼睑线在、鼻梁和嘴分得开、发丝成根），用户判「这次不错」。
+// 1 MP 那个上限（MAX_PIXELS=768*1344）只卡参考视频（nodes.py:165），不卡输出画布，所以 1.22 MP 照跑。
+// 代价：采样 514s vs 409s（+25.7%，正好是 token 多 22% 的量），整单约 34 min/条（冷跑）。
+// 直出这个画布在 243 帧会 OOM（墙是 token 数 = 画布 × 帧数），所以只能靠 SelfLift 的分块拿 —— selflift 必须为 true。
+const DEFAULT_SIZE = '1472x832'
 const FL2VA_SIZE = '576x320'
 const UPSCALE = 0
 const FPS = 24
@@ -79,6 +87,8 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
       ? (await stageReferenceImages([record.firstFrameUrl], inputDir, 1))[0]
       : undefined
 
+    const is480 = (record.resolution || '480p') === '480p'
+
     return {
       method: 'POST',
       url: `${baseOf(config.baseUrl)}/v1/videos/generations`,
@@ -86,12 +96,12 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
       body: {
         prompt,
         model: (record.model || config.model || 'minimax-h3-ref2v') || 'minimax-h3-ref2v',
-        size: firstFrameFile ? FL2VA_SIZE : DEFAULT_SIZE,
+        size: firstFrameFile ? FL2VA_SIZE : (is480 ? SIZE_480P : DEFAULT_SIZE),
         length: framesForDuration(record.duration),
         images,
         ref_scale: 2.0,
         upscale: firstFrameFile ? 2 : UPSCALE,
-        selflift: !firstFrameFile,   // 首帧路径（fl2va）没跑过 SelfLift，保持旧口径 + 超分
+        selflift: !firstFrameFile,   // 分辨率提升靠 SelfLift 的 latent lift（不是 FlashVSR）；首帧路径保持旧口径 + 超分
         first_frame: firstFrameFile,
         seed: record.seed ?? undefined,
       },

@@ -4,7 +4,7 @@
 CLAUDE.md 里只留一条引用，细节在这。
 **每次更新这份文档，同时更新下面「当前最优」——它必须是文档里第一个能读到的东西。**
 
-## 当前最优（2026-10-05 18:43）
+## 当前最优（2026-10-05 19:40）
 
 ### 配置详情
 
@@ -18,6 +18,7 @@ CLAUDE.md 里只留一条引用，细节在这。
 | 采样 | **4 步 / SelfLift 到 1.22 MP（1472×832）/ 243 帧（10 s）**，`res_multistep` + `simple`，cfg 1.0，`transition_step=3`、`lowres_scale=0.5`、`highres_tiling=true`；**TeaCache 不用**（见七） | — |
 | 超分 | **没有像素超分后处理**（`UPSCALE = 0`，不挂 FlashVSR）。但 SelfLift 本身含一步 **latent 升采样**（`minimax_h3_latent_upscaler_3d_conv_v1_bf16`，实测 10.9 s）—— 它只把低分 latent 对上目标尺寸，不添新细节；添细节的是最后那一步在目标分辨率上的**真前向**。所以准确说法是「细节是扩散算出来的，不是增强网络补的」。唯一例外：首帧路径（fl2va，有 `firstFrameFile`）仍 `upscale: 2` | — |
 | 帧数 | 243（硬约束，不动） | — |
+| 段间接力 | **单帧锚** —— 上一段末帧作 keyframe 钉在本段第 0 帧（`MiniMaxH3AddGuide` `frame_idx 0`），keyframe 行永不降噪 ⇒ 成片第 0 帧就是它；跨场景不接，同场景 `cut` 只追光照色调不追机位 | ✓ task 152 实测 8.0 min，落盘第 0 帧 vs 锚差 5.92（= VAE 往返损失） |
 | 实例 / 启动参数 | **6006 = cu130 venv**（`.venv-cu130`，torch 2.14.1+cu130）+ `--enable-dynamic-vram --fast-disk --disable-comfy-compiler`；**不开 `--enable-triton-backend`**（triton 是 opt-in override，会把 `int8_linear` 从 CUDA 后端抢走） | ✓ 已写进 `start_clean.ps1`；cu130 的价值就是 `quant_ops.py:26-27` 那个门开了（见九） |
 | sage block swap | 作者自己也是**关闭**（1141 里 `["关闭", 50]`） | — |
 
@@ -388,3 +389,7 @@ offload 三条都在跑：`Using async weight offloading with 2 streams`、两�
 **这条之前有个真 bug：continuity 提示词从没送到模型。** `generation.ts:262` 把 continuity 行拼进局部 `prompt`，`:287` 传给 adapter 的却是 `record.prompt` —— 拼的那段白写。task 150 在队列里核对过，prompt 里没有 `continuity`。已修（`43d1498`），测试加断言锁住。修后 task 151 的 prompt 含：`continuity: [video continuation + keyframe completion] the opening 22 frames are carried from the end of the previous shot; match its lighting, colour and camera position.`
 
 接缝判据（放大后）：场景/服装/光线延续成立 —— 同一张床、同一扇窗、同一件白裙黑蕾丝、同一束暖光；sb1 末帧与 sb2 第 0 帧像素差 42.5（照搬跑道会是 <5，说明裁段首生效），段内逐 60 帧差 40–46（在演化，不是静止）。身份这一条**没法判**：这条分镜全程背身/侧后脑，没有正脸帧。
+
+**改回单帧锚（1005，用户要的是首尾帧效果）：task 152，sb2，8.0 min，落盘 294 帧。** 判据 = 落盘第 0 帧 vs 锚（`_last.png`）像素差 **5.92**（窗口版是 42.5）—— 5.92 就是 VAE 往返损失，不是构图差。放大核对：同一张床、同一束窗光、发丝位置逐条对得上。
+
+两条口径的取舍：窗口（22 帧）给模型的是**光照/色调的记忆**（社区 luma drift 1.055→1.022/hop），代价是段首 34 帧是照搬跑道、必须裁 ⇒ 成片第 0 帧不等于锚。单帧锚没有跑道 ⇒ 首尾帧直接对上，而且更快（8.0 vs 9.2 min）。**生产走单帧锚**；桥的 `trim` 通道留着（恒 0），要回窗口随时能开。

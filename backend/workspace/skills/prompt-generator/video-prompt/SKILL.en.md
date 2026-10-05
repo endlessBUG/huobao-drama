@@ -133,6 +133,11 @@ non_diegetic_music:
 
 **Shot & dialogue rules**:
 - `detailed_description` is written shot by shot via `[Shot N]`, covering the shot, camera motion (terms above), **each character's screen side**, character actions, speaker IDs (e.g. `(S1)`), and `<d>` dialogue.
+- **Speaker rules (official §4.4)**: give `(Sx)` only to subjects who actually vocalize; subjects who never vocalize get **no** speaker ID. When multiple already-numbered speakers speak or sing **together**, use a compound ID such as `(S1,S2)`. A speaker keeps the same ID across shots. If it is unclear who is speaking, the model fills in the gap and both characters open their mouths at once.
+- On a speaker's **first appearance**, establish a stable identity (character type, age, gender, on-screen or off-screen, pitch, timbre, speaking rate, accent). Place the identifying phrase, ID, action and delivery **outside** `<d>`; inside `<d>` put only the language tag and the user's actual spoken content.
+- **The first 1 second of every segment must contain no `<d>` dialogue of any kind** (spoken line, voiceover, inner monologue all count) — the earliest dialogue timestamp is ≥ 1s; only visuals/ambience/action may occupy that second. The chain window (22 frames ≈ 0.92 s) is exactly this span — dialogue inside it collides with the previous segment's audio.
+- **Dialogue timing**: estimate at natural pace (Chinese ≈4–5 chars/sec, English ≈2–3 words/sec, including pauses) and make sure the shot lasts long enough to contain ALL of its dialogue. If it does not fit, extend that `[Shot N]`'s timestamp or split the line across adjacent shots with `<scenetrans>`. NEVER cram a long line into a too-short shot (breaks lip-sync and rhythm).
+- `AUDIO_INSTRUCTION.slots` order by **speaking order in this segment**: the first speaker is item 1 (= `<Audio 1>` = `ref_audio_0`), the second is item 2. NEVER order by slot name A/B/C. Write `<Audio N>` only when someone actually speaks in the segment.
 - **Never invent** lines; pull them verbatim from the `description`'s [Shot N] and drop them into `<d>` with a language tag (e.g. `<d>[Chinese] …</d>`).
 - The template's remaining text is always English, whatever the session language is; the line inside `<d>` keeps its **original language**.
 

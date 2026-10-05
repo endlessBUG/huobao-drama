@@ -91,7 +91,7 @@ retention_analysis:
 <Subject 2> fully_preserved
 <Subject 3> fully_preserved   # 场景锁定
 detailed_description:
-[Shot 1] a medium-wide shot frames... The camera [motion] as <Subject 1> [action] and says: <d>[Chinese] dialogue original</d> [Shot 2] At 00:03.000, the camera cuts to...
+[Shot 1] a medium-wide shot frames... The camera [motion] as <Subject 1> [action] — no `<d>` in this first second (the chain window is carried from the previous shot and must stay silent). [Shot 2] At 00:01.500, <Subject 1> (S1) says: <d>[Chinese] dialogue original</d> [Shot 3] At 00:03.000, the camera cuts to...
 overall_soundscape:
 [环境音描述]
 non_diegetic_music:

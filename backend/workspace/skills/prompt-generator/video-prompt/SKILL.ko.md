@@ -91,7 +91,7 @@ retention_analysis:
 <Subject 2> fully_preserved
 <Subject 3> fully_preserved   # 场景锁定
 detailed_description:
-[Shot 1] a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] and says: <d>[Chinese] 台词原文</d> [Shot 2] At 00:03.000, the camera cuts to...
+[Shot 1] a medium-wide shot frames... The camera [motion] as <Subject 1> [동작] —— 이 1초는 영상/동작만, `<d>`를 쓰지 않는다(연결 윈도우는 이전 세그먼트에서 이어지므로 무음이어야 한다). [Shot 2] At 00:01.500, <Subject 1> (S1) says: <d>[Chinese] 대사 원문</d> [Shot 3] At 00:03.000, the camera cuts to...
 overall_soundscape:
 [环境音描述]
 non_diegetic_music:

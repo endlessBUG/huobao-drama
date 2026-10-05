@@ -142,6 +142,8 @@ export async function generateVideo(params: GenerateVideoParams): Promise<number
     seed: params.seed,
     promptExtend: params.promptExtend,
     watermark: params.watermark,
+    // chain 必须进快照：processTask 读的是 DB 里的 params，不落盘接力就永远不触发（1003 A/B 实测 arm B 只有 3 张参考图）
+    chain: params.chain,
   })
 
   logTaskStart('VideoTask', 'enqueue', {
@@ -582,9 +584,12 @@ async function relayLastFrame(storyboardId?: number | null): Promise<string | nu
   const [cur] = await db.select({ episodeId: schema.storyboards.episodeId, n: schema.storyboards.storyboardNumber })
     .from(schema.storyboards).where(eq(schema.storyboards.id, storyboardId)).limit(1)
   if (!cur) return null
-  const [prev] = await db.select({ id: schema.storyboards.id }).from(schema.storyboards)
+  const [prev] = await db.select({ id: schema.storyboards.id, videoUrl: schema.storyboards.videoUrl }).from(schema.storyboards)
     .where(and(eq(schema.storyboards.episodeId, cur.episodeId), eq(schema.storyboards.storyboardNumber, cur.n - 1))).limit(1)
   if (!prev) return null
+  // 用「这条分镜实际交付的成片」，不是 sys_task 里第一条 completed：重roll 过的段会取到旧片，
+  // 接力帧就成了另一张构图（1003 A/B 实测：sb14 交付的是池景空镜，接力却取了早先的脸部特写）。
+  if (prev.videoUrl) return await extractLastFrame(prev.videoUrl)
   const [t] = await db.select({ localPath: schema.sysTask.localPath }).from(schema.sysTask)
     .where(and(eq(schema.sysTask.storyboardId, prev.id), eq(schema.sysTask.type, 'video'), eq(schema.sysTask.status, 'completed'))).limit(1)
   return t?.localPath ? await extractLastFrame(t.localPath) : null

@@ -802,7 +802,7 @@
       "durationHint": "수정 시 스토리보드에 즉시 저장되어 목록 및 배치 생성에도 적용됩니다",
       "effective": "{model} · {res} · {dur}초",
       "boundRefs": "바인딩 참조 이미지",
-      "chainRefs": "연결 프레임 (윈도우 앵커, 앞 레일 잘림)",
+      "chainRefs": "연결 첫 프레임 (= 이 컷의 0번 프레임)",
       "noBoundRefs": "바인딩된 에셋 없음（중앙 \"참조 에셋\"에서 바인딩）"
     },
     "tasks": {

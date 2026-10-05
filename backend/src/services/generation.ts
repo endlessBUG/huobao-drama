@@ -7,7 +7,7 @@ import { and, eq } from 'drizzle-orm'
 import { getActiveConfig, getConfigById } from './ai.js'
 import { now } from '../utils/response.js'
 import { downloadFile, fetchImageAsCompressedDataUrl, generateImageThumb, readImageAsCompressedDataUrl, saveBase64Image } from '../utils/storage.js'
-import { extractVideoPoster, extractLastFrame, extractLastFrames } from '../utils/video-poster.js'
+import { extractVideoPoster, extractLastFrame } from '../utils/video-poster.js'
 import { getImageAdapter, getVideoAdapter } from './adapters/registry'
 import type { AIConfig } from './adapters/types'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess, logTaskWarn, redactUrl } from '../utils/task-logger.js'
@@ -15,11 +15,6 @@ import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuc
 type TaskType = 'image' | 'video'
 
 const taskLabel = (type: TaskType) => (type === 'image' ? 'ImageTask' : 'VideoTask')
-
-// 段间衔接窗口（JZL/社区口径：SEAM_DEFAULT_WINDOW=22、SEAM_DEFAULT_SETTLE=12，都在 17k+5 网格上）。
-// 22 + 12 = 34 = 2×17，所以「生成 243+34、裁段首 34」落盘正好等于 243。
-const SEAM_WINDOW = 22
-const SEAM_SETTLE = 12
 
 // 轮询节奏：图片 5s×120（上限 10 分钟）；视频 10s×300
 // 图片 360×5s = 30 分钟。原来卡死 10 分钟（120×5s），而本机 qwen 三视图单张实测跑过
@@ -258,24 +253,19 @@ async function processTask(id: number, config: AIConfig) {
       const resolvedFirstFrameUrl = await normalizeVideoReferenceUrl(params.firstFrameUrl)
       const resolvedLastFrameUrl = await normalizeVideoReferenceUrl(params.lastFrameUrl)
       const resolvedReferenceImageUrls = await normalizeVideoReferenceUrls(params.referenceImageUrls)
-      // 段间接力（连续拍）：上一段尾巴的 22 帧窗口锚在本段第 0 帧。见 relayContext 的注释。
+      // 段间接力（连续拍）：上一段末帧作**单帧锚**。keyframe 行永不降噪（img_update=False），
+      // 每步重注入 ⇒ 成片第 0 帧就是那一帧 —— 首尾帧效果，没有跑道要裁。见 relayContext 的注释。
       let prompt = record.prompt
       let guideUrl: string | null = null
-      let trimFrames = 0
       if (params.chain) {
         const ctx = await relayContext(record.storyboardId)
         // 跨场景不接 —— 官方 §2.2 里 keyframe 是「具体帧锚」，只有内容真的延续时才成立；换场景靠角色图 + 场景图。
         if (ctx?.source && ctx.sameScene) {
-          const tail = await extractLastFrames(ctx.source, SEAM_WINDOW)
-          if (tail) {
-            guideUrl = tail
-            // 页面要显示接的是哪一帧：窗口是 22 帧 clip，另落一张末帧 PNG（前端 lastFrameOf 读它）
-            await extractLastFrame(ctx.source)
-            // 段首窗口是照搬的跑道（keyframe 行永不降噪），不裁就会和上一段重复；
-            // 插件口径是 落盘 = 生成 − (窗口 + 过渡)，所以生成侧要加 34 帧。
-            trimFrames = SEAM_WINDOW + SEAM_SETTLE
+          const anchor = await extractLastFrame(ctx.source)
+          if (anchor) {
+            guideUrl = anchor
             const mode = ctx.continuity === 'same_shot' ? 'lighting, colour and camera position' : 'lighting and colour'
-            prompt = `${prompt}\ncontinuity: [video continuation + keyframe completion] the opening ${SEAM_WINDOW} frames are carried from the end of the previous shot; match its ${mode}.`
+            prompt = `${prompt}\ncontinuity: [keyframe completion] the first frame is the last frame of the previous shot; match its ${mode}.`
           }
         }
       }
@@ -297,7 +287,6 @@ async function processTask(id: number, config: AIConfig) {
         referenceFileUrl: resolvedReferenceFileUrl,
         referenceLinkUrl: params.referenceLinkUrl,
         guideUrl,
-        trimFrames,
         generateAudio: params.generateAudio,
         duration: params.duration,
         aspectRatio: params.aspectRatio,

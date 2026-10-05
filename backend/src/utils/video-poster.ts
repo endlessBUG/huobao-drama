@@ -51,7 +51,8 @@ export async function extractLastFrame(relativePath: string): Promise<string | n
     await new Promise<void>((resolve, reject) => {
       ffmpeg(getAbsolutePath(relativePath))
         .inputOptions(['-sseof', '-0.2'])
-        .outputOptions(['-frames:v', '1'])
+        // 这张是列表里每行都要加载的图，不缩就是 1.7 MB × N 行
+        .outputOptions(['-frames:v', '1', '-vf', 'scale=640:-1'])
         .save(getAbsolutePath(outRel))
         .on('end', () => resolve())
         .on('error', reject)

@@ -269,6 +269,8 @@ async function processTask(id: number, config: AIConfig) {
           const tail = await extractLastFrames(ctx.source, SEAM_WINDOW)
           if (tail) {
             guideUrl = tail
+            // 页面要显示接的是哪一帧：窗口是 22 帧 clip，另落一张末帧 PNG（前端 lastFrameOf 读它）
+            await extractLastFrame(ctx.source)
             // 段首窗口是照搬的跑道（keyframe 行永不降噪），不裁就会和上一段重复；
             // 插件口径是 落盘 = 生成 − (窗口 + 过渡)，所以生成侧要加 34 帧。
             trimFrames = SEAM_WINDOW + SEAM_SETTLE

@@ -63,6 +63,9 @@ test('前端的衔接显示与后端同一个判据：跨场景不接', () => {
   assert.match(view, /const sameScene = \(sb\.scene_id \?\? sb\.sceneId\) === \(prev\.scene_id \?\? prev\.sceneId\)/)
   assert.match(view, /c\.mode === 'anchor' \? t\('episode\.sb\.chainAnchor'\)/)
   assert.match(gen, /ctx\?\.source && ctx\.sameScene/)
+  // 检查器「绑定参考图」下方也要显示接的那一帧；前端读 _last.png，所以后端接力时必须落它
+  assert.match(view, /v-for="c in \[chainInfo\(selectedSb\)\]"/)
+  assert.match(gen, /await extractLastFrame\(ctx\.source\)/)
 })
 
 // 243 帧 SelfLift 实测 47:26（含解码），300 次 × 10s = 50 分钟正好卡边界：任务 128 就是被

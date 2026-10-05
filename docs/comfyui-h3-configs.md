@@ -357,3 +357,19 @@ offload 三条都在跑：`Using async weight offloading with 2 streams`、两�
 - 环境已冻结：绝不升 torch。
 - 720p 及以上只能走 SelfLift（分块），8G 上 SelfLift 与 FlashVSR 互斥（1152×640 ×2 = 2304×1280 必炸）。
 - 量耗时必须换 seed，否则量到缓存。
+
+## 十二、keyframe（帧锚）与分块 —— 我们弄错了，社区有补丁
+
+**判据来源：** [facok/comfyui-SelfLift PR #14](https://github.com/facok/comfyui-SelfLift/pull/14)（open，未合并）。
+
+`_tile_payload()` 原来只在**没有 refs** 时刷新 `cond_video_latents`（`if not payload.get("refs")`）。refs 与 keyframe 共存时，payload 保留未切块的 keyframe 行，而 tile layout 只预留裁过的行 → `comfy/ldm/minimax/model.py:707` `all_video_rows[~img_update] = cond_video_rows` 报 shape mismatch。我们那条正是 3 refs + 1 keyframe，实测炸在这行（`[3640,96] vs [2600,96]`）。
+
+补丁 4 行（已打到本地 `custom_nodes/comfyui-SelfLift/h3_tiling.py`）：`cond_video_latents` 恒按 payload 顺序重建 = 本 tile 的 keyframes + 未切块的 refs。
+
+**修复后实测（1344×768 / 4 步 / 分块开 / keyframe 在 frame 0）：跑通，8.3 min。**
+
+**单帧锚实测（task 145，sb2，1.22 MP，LoRA 在，seed 800）：8.4 min，第 0 帧 = 上一段末帧，t=0.2/2/5 从同一坐姿继续，无跳变。** 采样账：低分 3 步 130.9 s（43.4 s/步）+ transition 12.8 s + 高分 1 步 229.9 s = **373.6 s**，比不带 keyframe 的 514 s **快 27%** —— 因为 keyframe 的 cond 行永不降噪（`img_update=False`），每步只重注入。
+
+**未验：** 这是单帧锚，是社区口径的退化情形。完整口径是 **22 帧窗口 + 裁掉段首 窗口+过渡 跑道**（`SEAM_DEFAULT_WINDOW=22`、`SEAM_DEFAULT_SETTLE=12`），且引导取上一段的**一采 latent**而非像素重编码（`nodes_asset_manager.py:1122`：同画布同 latent 空间 → 零往返损失、零累积漂移）。窗口版需要桥能收多帧输入 —— 桥的 `LoadImage` 只给单帧，VideoHelperSuite 在 cu130 venv 缺 `cv2` 没装上。
+
+**判据提醒：** 之前那条「画质超级差」的探针是**无 LoRA** 的（脚本从 `.q2k.mjs` 改来，LoRA 被摘掉了）—— 不能用来评 keyframe。带 LoRA 的这条才是可比的。

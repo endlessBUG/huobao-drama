@@ -15,6 +15,33 @@ export function lastFramePathFor(relativePath: string): string {
   return relativePath.replace(/\.[^./]+$/, '_last.png')
 }
 
+/** 窗口版接力：抽末 n 帧成一段小 mp4（桥的 AddGuide 需要多帧批次，LoadImage 只给单帧）。 */
+export function tailClipPathFor(relativePath: string, n: number): string {
+  return relativePath.replace(/\.[^./]+$/, `_tail${n}.mp4`)
+}
+
+export async function extractLastFrames(relativePath: string, n: number): Promise<string | null> {
+  try {
+    const { ffmpeg: ffmpegOk } = await checkFfmpegSuite()
+    if (!ffmpegOk) return null
+    const outRel = tailClipPathFor(relativePath, n)
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(getAbsolutePath(relativePath))
+        .inputOptions(['-sseof', `-${(n + 1) / 24}`])
+        // 不能加 -an：VHS_LoadVideoPath 的懒加载音频 dict 被缓存扫描迭代时，无音轨直接抛
+        // （而且插件口径本来就是视频+音频一起带过接缝）
+        .outputOptions(['-frames:v', String(n)])
+        .save(getAbsolutePath(outRel))
+        .on('end', () => resolve())
+        .on('error', reject)
+    })
+    return outRel
+  } catch (err) {
+    console.warn(`[video-poster] 尾窗口提取失败 ${relativePath}:`, (err as Error).message)
+    return null
+  }
+}
+
 export async function extractLastFrame(relativePath: string): Promise<string | null> {
   try {
     const { ffmpeg: ffmpegOk } = await checkFfmpegSuite()

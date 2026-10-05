@@ -7,7 +7,7 @@ import { and, eq } from 'drizzle-orm'
 import { getActiveConfig, getConfigById } from './ai.js'
 import { now } from '../utils/response.js'
 import { downloadFile, fetchImageAsCompressedDataUrl, generateImageThumb, readImageAsCompressedDataUrl, saveBase64Image } from '../utils/storage.js'
-import { extractVideoPoster, extractLastFrame } from '../utils/video-poster.js'
+import { extractVideoPoster, extractLastFrame, extractLastFrames } from '../utils/video-poster.js'
 import { getImageAdapter, getVideoAdapter } from './adapters/registry'
 import type { AIConfig } from './adapters/types'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess, logTaskWarn, redactUrl } from '../utils/task-logger.js'
@@ -15,6 +15,11 @@ import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuc
 type TaskType = 'image' | 'video'
 
 const taskLabel = (type: TaskType) => (type === 'image' ? 'ImageTask' : 'VideoTask')
+
+// 段间衔接窗口（JZL/社区口径：SEAM_DEFAULT_WINDOW=22、SEAM_DEFAULT_SETTLE=12，都在 17k+5 网格上）。
+// 22 + 12 = 34 = 2×17，所以「生成 243+34、裁段首 34」落盘正好等于 243。
+const SEAM_WINDOW = 22
+const SEAM_SETTLE = 12
 
 // 轮询节奏：图片 5s×120（上限 10 分钟）；视频 10s×300
 // 图片 360×5s = 30 分钟。原来卡死 10 分钟（120×5s），而本机 qwen 三视图单张实测跑过
@@ -253,25 +258,22 @@ async function processTask(id: number, config: AIConfig) {
       const resolvedFirstFrameUrl = await normalizeVideoReferenceUrl(params.firstFrameUrl)
       const resolvedLastFrameUrl = await normalizeVideoReferenceUrl(params.lastFrameUrl)
       const resolvedReferenceImageUrls = await normalizeVideoReferenceUrls(params.referenceImageUrls)
-      // 段间接力（连续拍）：上一段的末帧当额外参考带进来。见 relayContext 的注释。
+      // 段间接力（连续拍）：上一段尾巴的 22 帧窗口锚在本段第 0 帧。见 relayContext 的注释。
       let prompt = record.prompt
       let guideUrl: string | null = null
+      let trimFrames = 0
       if (params.chain) {
         const ctx = await relayContext(record.storyboardId)
         // 跨场景不接 —— 官方 §2.2 里 keyframe 是「具体帧锚」，只有内容真的延续时才成立；换场景靠角色图 + 场景图。
-        // 适配器截到 9 槽（comfyui-video.ts MAX_IMAGES），超了接力帧根本进不了图，就别在提示词里
-        // 引一个不存在的 <Picture N>。
-        if (ctx?.url && ctx.sameScene && resolvedReferenceImageUrls.length < 9) {
-          resolvedReferenceImageUrls.push(ctx.url)
-          // 编号 = 追加后的位置（角色→场景→道具 之后），与 skill 的 <Picture N> 口径一致
-          const n = resolvedReferenceImageUrls.length
-          if (ctx.continuity === 'same_shot') {
-            // 同一个镜头继续：这张图既是 <Picture N> 参考，也锚在 frame 0（社区 masked_av 的口径）
-            guideUrl = ctx.url
-            prompt = `${prompt}\ncontinuity: <Picture ${n}> is the last frame of the previous shot — match its lighting, colour and camera position.`
-          } else {
-            // 同场景换镜头（硬切）：只追外观与光照，不追机位 —— 社区 guide 的口径
-            prompt = `${prompt}\ncontinuity: <Picture ${n}> is the last frame of the previous shot — match its lighting and colour.`
+        if (ctx?.source && ctx.sameScene) {
+          const tail = await extractLastFrames(ctx.source, SEAM_WINDOW)
+          if (tail) {
+            guideUrl = tail
+            // 段首窗口是照搬的跑道（keyframe 行永不降噪），不裁就会和上一段重复；
+            // 插件口径是 落盘 = 生成 − (窗口 + 过渡)，所以生成侧要加 34 帧。
+            trimFrames = SEAM_WINDOW + SEAM_SETTLE
+            const mode = ctx.continuity === 'same_shot' ? 'lighting, colour and camera position' : 'lighting and colour'
+            prompt = `${prompt}\ncontinuity: [video continuation + keyframe completion] the opening ${SEAM_WINDOW} frames are carried from the end of the previous shot; match its ${mode}.`
           }
         }
       }
@@ -293,6 +295,7 @@ async function processTask(id: number, config: AIConfig) {
         referenceFileUrl: resolvedReferenceFileUrl,
         referenceLinkUrl: params.referenceLinkUrl,
         guideUrl,
+        trimFrames,
         generateAudio: params.generateAudio,
         duration: params.duration,
         aspectRatio: params.aspectRatio,
@@ -590,7 +593,7 @@ async function normalizeReferenceImages(refs: string[] | null | undefined): Prom
  *  上一段的光线/色调/构图落点喂进去（社区 Seamless Chain 的 memory bank 是这条的完整版，实测
  *  luma drift 1.055→1.022/hop、chroma 1.086→1.039）。
  *  前提：段按顺序跑（上一段已完成），否则返回 null 退回纯参考图。 */
-async function relayContext(storyboardId?: number | null): Promise<{ url: string | null; sameScene: boolean; continuity: string } | null> {
+async function relayContext(storyboardId?: number | null): Promise<{ source: string | null; sameScene: boolean; continuity: string } | null> {
   if (!storyboardId) return null
   const [cur] = await db.select({ episodeId: schema.storyboards.episodeId, n: schema.storyboards.storyboardNumber,
     sceneId: schema.storyboards.sceneId, continuity: schema.storyboards.continuity })
@@ -605,7 +608,7 @@ async function relayContext(storyboardId?: number | null): Promise<{ url: string
   const source = prev.videoUrl || (await db.select({ localPath: schema.sysTask.localPath }).from(schema.sysTask)
     .where(and(eq(schema.sysTask.storyboardId, prev.id), eq(schema.sysTask.type, 'video'), eq(schema.sysTask.status, 'completed'))).limit(1))[0]?.localPath
   if (!source) return null
-  return { url: await extractLastFrame(source), sameScene: cur.sceneId === prev.sceneId, continuity: cur.continuity || 'same_shot' }
+  return { source, sameScene: cur.sceneId === prev.sceneId, continuity: cur.continuity || 'same_shot' }
 }
 
 async function normalizeVideoReferenceUrl(value: string | null | undefined): Promise<string | null> {

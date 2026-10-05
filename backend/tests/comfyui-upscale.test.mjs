@@ -8,12 +8,12 @@ const bridge = readFileSync('E:/AI/ComfyUI/custom_nodes/ComfyUI-OpenAI-Bridge/__
 const adapter = readFileSync(new URL('../src/services/adapters/comfyui-video.ts', import.meta.url), 'utf8')
 
 test('bridge：upscale 默认关，路由可覆盖', () => {
-  assert.match(bridge, /def _wf_video\(prompt, w, h, length, refs, seed, prefix, ref_scale=2\.0, upscale=0, selflift=False, sparse=False, guide=None\):/)
+  assert.match(bridge, /def _wf_video\(prompt, w, h, length, refs, seed, prefix, ref_scale=2\.0, upscale=0, selflift=False, sparse=False, guide=None, trim=0\):/)
   assert.match(bridge, /upscale = int\(b\.get\("upscale"\) or 0\)/)
   assert.match(bridge, /selflift = bool\(b\.get\("selflift"\)\)/)
   assert.match(bridge, /sparse = bool\(b\.get\("sparse", False\)\)/)
   // 路由把它透传进 _wf_video（第 9、10、11 个位置参数）
-  assert.match(bridge, /"openai\/h3_" \+ uuid\.uuid4\(\)\.hex\[:8\], ref_scale, upscale, selflift, sparse,\s*b\.get\("guide"\) or None\)/)
+  assert.match(bridge, /"openai\/h3_" \+ uuid\.uuid4\(\)\.hex\[:8\], ref_scale, upscale, selflift, sparse,\s*b\.get\("guide"\) or None, int\(b\.get\("trim"\) or 0\)/)
 })
 
 test('bridge：超分拆 InitPipe + Adv 两段（加载权重与跑超分入参分开，便于单独调参）', () => {
@@ -50,8 +50,9 @@ test('bridge：超分精度用节点默认 bf16（同 2 字节，指数域和 fp
 test('bridge：超分插在 VAEDecode 与 CreateVideo 之间，音频旁路', () => {
   assert.match(bridge, /frames_src = "308"/)
   assert.match(bridge, /frames_src = "3081"/)
-  assert.match(bridge, /"images":\s*\[frames_src, 0\], "audio":\s*\["309", 0\]/)
+  assert.match(bridge, /"images":\s*\[frames_src, 0\], "audio":\s*\[audio_src, 0\]/)
   // 视频侧进超分，音频侧仍直取 latent 解码结果 —— 音画不会因超分错位
+  assert.match(bridge, /audio_src = "309"/)
   assert.match(bridge, /"frames":\s*\["308", 0\]/)
   assert.match(bridge, /g\["309"\] = \{"class_type": "VAEDecodeAudio", "inputs": \{"samples": \["307", 0\]/)
 })

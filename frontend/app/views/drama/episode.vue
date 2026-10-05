@@ -812,11 +812,14 @@
                       </button>
                     </div>
                     <div v-else class="video-bound-refs-empty">{{ t('episode.inspector.noBoundRefs') }}</div>
-                    <div v-for="c in [chainInfo(selectedSb)].filter(c => c && c.thumb && c.mode !== 'none')" :key="c.prev.id" class="video-bound-refs">
-                      <button type="button" class="video-bound-ref" :title="c.mode === 'anchor' ? t('episode.sb.chainAnchor') : t('episode.sb.chainReference')" @click="openImageViewer(c.thumb, `#${String(c.prev.storyboard_number ?? c.prev.storyboardNumber).padStart(2, '0')}`)">
-                        <img :src="c.thumb" :alt="c.mode" loading="lazy" />
-                        <small>{{ `#${String(c.prev.storyboard_number ?? c.prev.storyboardNumber).padStart(2, '0')} · ${c.mode === 'anchor' ? t('episode.sb.chainAnchor') : t('episode.sb.chainReference')}` }}</small>
-                      </button>
+                    <div v-for="c in [chainInfo(selectedSb)].filter(c => c && c.thumb && c.mode !== 'none')" :key="c.prev.id">
+                      <div class="video-inspector-prompt-head"><span class="video-inspector-label">{{ t('episode.inspector.chainRefs') }}</span></div>
+                      <div class="video-bound-refs">
+                        <button type="button" class="video-bound-ref" :title="c.mode === 'anchor' ? t('episode.sb.chainAnchor') : t('episode.sb.chainReference')" @click="openImageViewer(c.thumb, `#${String(c.prev.storyboard_number ?? c.prev.storyboardNumber).padStart(2, '0')}`)">
+                          <img :src="c.thumb" :alt="c.mode" loading="lazy" />
+                          <small>{{ `#${String(c.prev.storyboard_number ?? c.prev.storyboardNumber).padStart(2, '0')} · ${c.mode === 'anchor' ? t('episode.sb.chainAnchor') : t('episode.sb.chainReference')}` }}</small>
+                        </button>
+                      </div>
                     </div>
                   </section>
                 </div>

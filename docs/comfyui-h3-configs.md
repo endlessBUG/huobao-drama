@@ -373,3 +373,12 @@ offload 三条都在跑：`Using async weight offloading with 2 streams`、两�
 **未验：** 这是单帧锚，是社区口径的退化情形。完整口径是 **22 帧窗口 + 裁掉段首 窗口+过渡 跑道**（`SEAM_DEFAULT_WINDOW=22`、`SEAM_DEFAULT_SETTLE=12`），且引导取上一段的**一采 latent**而非像素重编码（`nodes_asset_manager.py:1122`：同画布同 latent 空间 → 零往返损失、零累积漂移）。窗口版需要桥能收多帧输入 —— 桥的 `LoadImage` 只给单帧，VideoHelperSuite 在 cu130 venv 缺 `cv2` 没装上。
 
 **判据提醒：** 之前那条「画质超级差」的探针是**无 LoRA** 的（脚本从 `.q2k.mjs` 改来，LoRA 被摘掉了）—— 不能用来评 keyframe。带 LoRA 的这条才是可比的。
+
+**端到端实测（task 149，sb2，1.22 MP / LoRA / 分块 / 22 帧窗口 + 裁 34）：9.2 min，交付 294 帧 = 12.25 s。** 裁剪生效；交付第 0 帧是从上一段末态平滑继续的（不是照搬跑道，也没有跳变）。
+
+三个踩过的坑（都已修）：
+- `ImageFromBatch` 的入参是 `image` / `batch_index` / `length`，不是 `image_batch` / `start_index`
+- `VHS_LoadVideoPath` 要**完整路径**，适配器之前只传文件名 → `Invalid file path`
+- 窗口 clip **必须保留音轨**：VHS 返回懒加载音频 dict，ComfyUI 缓存扫描迭代它时若无音轨直接抛（`VHS failed to extract audio`）。而且插件口径本来就是视频+音频一起带过接缝 —— `AddGuide` 的 `audio` 输入现在只在 clip 路径上连（`LoadImage` 没有音频输出）
+
+窗口版比单帧锚慢（9.2 vs 8.4 min），因为生成侧多了 34 帧跑道。

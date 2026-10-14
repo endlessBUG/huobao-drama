@@ -6,9 +6,11 @@ CLAUDE.md 里只留一条引用，细节在这。
 
 > **历史已删（1012，用户「删掉历史台账 只留最新的」）**：§一–二十七（1006–1011 的 VOSR2/SeedVR2/fast-disk/`--reserve-vram`/aimdo×Blackwell 四死/#15424 mmap AV 结案等，约 1100 行）不在文件里了；要翻旧账：`git log -- docs/comfyui-h3-configs.md` 取删除前的版本，或看记忆文件（`comfyui-launch-args-video-vs-qwen` / `comfyui-mmap-av-15424-fixed` / `comfyui-blackwell-aimdo-trap` / `vosr2-upscale-8gb-verdict` / `h3-sharpness-route-1mp-5s`）。
 
-## 当前最优（2026-10-13 00:5x）
+## 当前最优（2026-10-15 01:0x）
 
-**生成：1472×832×5s（124 帧）= 原生 MiniMax-H3 节点 + Veda 学习稀疏注意力（1012 用户「除了NVFP4 全部换他的」，已进桥为默认 `graph:"native"`）** —— 内核热、权重在盘缓存时整单 **302 s**（task 323，history 口径 49.4 s/步 ×4 + 解码存盘）；进程首发含 triton 编译/首次冷读 13+32 GB 权重时 **430–510 s**（322=507、321=432、331=449、334=450）。老 JZL+kitchen sol-attn 暖跑 270 s 的账已被这条路取代（JZL 不发 GUI 步数、且用户点名换）。**超分：RTX VSR ×2 → 2944×1664 = 0.68 s/帧（「质量优先」档，比速度档还快 26%）**，243 帧整条 224.4 s ✓ 10 min 内；已知副作用暗 ~1.3%、黑电平压 2 格，两档同幅 ⇒ 不是档位旋钮，要拉回只有交付端 `eq`（未加，等看片定）。**平台进度：真步数已通**（task 328 起 `params.progress = {pct, real:true}`，来源 = 桥旁听 ComfyUI ws 的 `progress_state`）。全链外推：5s 条 ≈ 302+114 ≈ 7 min；10s 条（243 帧，未实测）≈ 600+224 ≈ 13.7 min；**12 s 档（294 帧）已实测整单 682 s**（task 339，无超分）。T8 BlockCache 已判不启用（4 步 turbo 下 0 命中，强制命中损细节，详见排除项）。RTX VSR **还没接进 adapter**（只在探针跑通，没走平台流程）；自启仍停用。
+**1015 新目标「10s @ 1024×768 ≤ 300 s」= 达成（执行口径）** —— Veda tile 预算 **24**（`HUOBAO_H3_SPARSITY`，已写进 `_restart_6006_nofd.ps1` = 现役）：热跑 **283 s / 287 s**（seed 10/11 两条，破全图缓存 —— 同 seed 同输入 run2 只 5.47 s，那是缓存不是计算，1015 差点被它骗过去）；同档 sp32 = **314.4 s**（1015 实测，1472×832 那条 302 s 锚的 243 帧外推 ≈590 已被真数取代）；进程首发 **540 s**（含 24-tile 内核首编，不作数）。墙钟 285/300 s（15 s 轮询粒度）。图已原样导出成 API 工作流：`data/generated/h3_1024x768_sp24_api.json`（18 节点，GUI 可直接开）。片子在 `test/sp24_seed10.mp4` / `sp24_seed11.mp4`。**未结两条**：① 参考绑定 —— 两女都走了 qingyi、xueqi 没进画面，第二个 `<Subject>` 被模型发明成**裸体男人**（抽帧 f1/f6 为证；换序对照没跑）② 1015 撞回 #14142 那类 AV，但这次是**健康卸载路径**（`load_models_gpu→free_memory→model_unload→detach→unpatch_model` 的 `.to()` walk，`comfy_kitchen/tensor/base.py:427`），1013 补丁只挡了 `partially_load` 异常分支 —— 崩前系统剩 24 GB free，说明是进程内 commit 挤压不是整机。
+
+**生成：1472×832×5s（124 帧）= 原生 MiniMax-H3 节点 + Veda 学习稀疏注意力（1012 用户「除了NVFP4 全部换他的」，已进桥为默认 `graph:"native"`）** —— 内核热、权重在盘缓存时整单 **302 s**（task 323，history 口径 49.4 s/步 ×4 + 解码存盘）；进程首发含 triton 编译/首次冷读 13+32 GB 权重时 **430–510 s**（322=507、321=432、331=449、334=450）。老 JZL+kitchen sol-attn 暖跑 270 s 的账已被这条路取代（JZL 不发 GUI 步数、且用户点名换）。**超分：RTX VSR ×2 → 2944×1664 = 0.68 s/帧（「质量优先」档，比速度档还快 26%）**，243 帧整条 224.4 s ✓ 10 min 内；已知副作用暗 ~1.3%、黑电平压 2 格，两档同幅 ⇒ 不是档位旋钮，要拉回只有交付端 `eq`（未加，等看片定）。**平台进度：真步数已通**（task 328 起 `params.progress = {pct, real:true}`，来源 = 桥旁听 ComfyUI ws 的 `progress_state`）。12 s 档（294 帧）已实测整单 682 s（task 339，无超分，sp32 口径）。T8 BlockCache 已判不启用（4 步 turbo 下 0 命中，强制命中损细节，详见排除项）。RTX VSR **还没接进 adapter**（只在探针跑通，没走平台流程）；自启仍停用。
 
 ### 配置详情（现役）
 

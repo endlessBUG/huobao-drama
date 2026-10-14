@@ -77,6 +77,7 @@ configs/   — 遗留死配置，代码零引用
   - ComfyUI 已加**单实例锁**（`start_clean.ps1` 等启动脚本）。多实例并发会 OOM 并互相抢输出
   - `tsx watch` 在 5679 上跑：改后端源码会**杀掉正在跑的视频任务**，报"服务重启，生成任务中断，请重试"。改代码前先等任务跑完，或改完重启 6006
 - **启动与自启**: 开发服务用 `data/generated/Start-Huobao.ps1`（后台无窗口，自动探测 5679/3013 是否已监听跳过，日志/`pid` 写 `data/generated/`）。`data/generated/` 下各脚本已改为**路径无关**（以仓库根解析），可任意目录直接 `node` 跑（如 `node data/generated/.dbq.cjs`）
+- **速度实验纪律（1015，做 A/B 前必读）**: ① 判耗时 = history 的 `execution_start→execution_success`（v0.39 把这两个时间戳塞在 `status.messages` 里，条目顶层没有；逐节点时长 history/meta 也不给，阶段拆分用**差分法**：`exec = F + steps×T`，跑 steps=1/2/4 解出固定项 F）② **同 seed 同输入会被 ComfyUI 全图缓存**（1015 实测 run2 只 5.47 s = 缓存不是计算）⇒ 任何 A/B 必须换 seed ③ 系统 free <2 GB 时执行数被 paging 污染（steps2 曾报 427 s > 4 步基线 284 s）⇒ 每批发一条基线对照，对照漂了整批作废 ④ 已判死的杠杆：Veda tile 24→16→12→8 全程只省 5 s（attention 早不是大头，地板 = MLP+权重搬运，作者 README 原话）；`--disable-comfy-compiler` A/B 零收益（286 vs 283，flag 保持关）⑤ 社区出处：Veda-on-ComfyUI issue **#3**（固定 tile 不随段长缩放：1344×768 下 32 tiles 5.2 s≈89%、14.4 s≈96%，远超训练分布；提案 `32/T37` 按 latent T 线性，未实现）、**#7**（4060 Ti 16 GB 实测 68.6→50.97 s/it ≈1.3×，不是 README 的 2.9×；另有用户报零增益）、ComfyUI **#15312**（H3 VAE 编码视频 OOM = 解码侧已知）。现役数与目标线见 [docs/comfyui-h3-configs.md](docs/comfyui-h3-configs.md)「当前最优」：10s@1024×768 热跑 **283/287 s**（sp24，≤300 达成），150 s 未达成
 
 ## Database
 SQLite 单文件（默认 `data/huobao.sqlite3`，桌面版在 userData）。启动时 `initSqliteSchema` 幂等建表 + 风格预设种子。MySQL→SQLite 一次性迁移：`cd backend && npx tsx scripts/import-mysql-to-sqlite.ts [--force]`（逐表行数校验、写前备份）。

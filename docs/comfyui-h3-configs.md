@@ -6,9 +6,21 @@ CLAUDE.md 里只留一条引用，细节在这。
 
 > **历史已删（1012，用户「删掉历史台账 只留最新的」）**：§一–二十七（1006–1011 的 VOSR2/SeedVR2/fast-disk/`--reserve-vram`/aimdo×Blackwell 四死/#15424 mmap AV 结案等，约 1100 行）不在文件里了；要翻旧账：`git log -- docs/comfyui-h3-configs.md` 取删除前的版本，或看记忆文件（`comfyui-launch-args-video-vs-qwen` / `comfyui-mmap-av-15424-fixed` / `comfyui-blackwell-aimdo-trap` / `vosr2-upscale-8gb-verdict` / `h3-sharpness-route-1mp-5s`）。
 
-## 当前最优（2026-10-15 01:0x）
+## 当前最优（2026-10-15 03:2x）
 
-**1015 新目标「10s @ 1024×768 ≤ 300 s」= 达成（执行口径）** —— Veda tile 预算 **24**（`HUOBAO_H3_SPARSITY`，已写进 `_restart_6006_nofd.ps1` = 现役）：热跑 **283 s / 287 s**（seed 10/11 两条，破全图缓存 —— 同 seed 同输入 run2 只 5.47 s，那是缓存不是计算，1015 差点被它骗过去）；同档 sp32 = **314.4 s**（1015 实测，1472×832 那条 302 s 锚的 243 帧外推 ≈590 已被真数取代）；进程首发 **540 s**（含 24-tile 内核首编，不作数）。墙钟 285/300 s（15 s 轮询粒度）。图已原样导出成 API 工作流：`data/generated/h3_1024x768_sp24_api.json`（18 节点，GUI 可直接开）。片子在 `test/sp24_seed10.mp4` / `sp24_seed11.mp4`。**未结两条**：① 参考绑定 —— 两女都走了 qingyi、xueqi 没进画面，第二个 `<Subject>` 被模型发明成**裸体男人**（抽帧 f1/f6 为证；换序对照没跑）② 1015 撞回 #14142 那类 AV，但这次是**健康卸载路径**（`load_models_gpu→free_memory→model_unload→detach→unpatch_model` 的 `.to()` walk，`comfy_kitchen/tensor/base.py:427`），1013 补丁只挡了 `partially_load` 异常分支 —— 崩前系统剩 24 GB free，说明是进程内 commit 挤压不是整机。
+### 当前最快（10s @ 1024×768，243 帧，native+Veda，history 执行口径）
+
+| 档 | 秒数 | 条件与画质 |
+|---|---|---|
+| **4 步（画质基准线，你判「四步画质好」）** | **283 / 287 s**（热，free 16 GB 时测）；新进程首发 **349 s** | sp24 + nvfp4 pruned + `--disable-comfy-compiler`；≤300 ✓、**≤150 ✗** |
+| 2 步 | **160 s**（`ab3_steps2b`，干净） | 同图同权重，`test/ab3_steps2b.mp4`；离 150 差 10 s，画质未获你确认 |
+| 1 步 | **97 s**（`ab3_steps1`，干净） | `test/ab3_steps1.mp4`；你对比后选了四步 ⇒ 当备胎记 |
+
+**判数纪律（1015 三条血证立的）**：① `free@submit ≥8 GB` 才采信，跑完一条物理就被抽干（base 跑完 free 3.8、下一条 1.7 起跑 = 作废）② 同 seed 同输入 = 全图缓存（5.47 s 那条是缓存不是计算）③ 差分公式 `exec = 36 s + steps × 62 s/步`（steps1/2/4 三条干净数解出，F=TE+参考编码+VAE 解码+存盘）。**150@4步 = 要把 T 从 62 压到 ≤28.5 s/步（2.2×）**，归因三条（norefs 参考总税 / refsp8 参考注意力税 / Singularity-int8 权重税，作者 14.0 s/步用的是 int8_convrot 不是 nvfp4）正按「每变体独立重启、都当进程第一条」的协议在跑，锚 = 349 s。
+
+### 1015 目标线（≤300 已达成）
+
+**1015 新目标「10s @ 1024×768 ≤ 300 s」= 达成（执行口径）** —— Veda tile 预算 **24**（`HUOBAO_H3_SPARSITY`，已写进 `_restart_6006_nofd.ps1` = 现役）：热跑 **283 s / 287 s**（seed 10/11 两条，破全图缓存 —— 同 seed 同输入 run2 只 5.47 s，那是缓存不是计算，1015 差点被它骗过去）；同档 sp32 = **314.4 s**（1015 实测，1472×832 那条 302 s 锚的 243 帧外推 ≈590 已被真数取代）；进程首发 **540 s**（含 24-tile 内核首编，不作数）。墙钟 285/300 s（15 s 轮询粒度）。图已原样导出成 API 工作流：`data/generated/h3_1024x768_sp24_api.json`（18 节点，GUI 可直接开）。片子在 `test/sp24_seed10.mp4` / `sp24_seed11.mp4`。**未结两条**：① 参考绑定 —— 两女都走了 qingyi、xueqi 没进画面，第二个 `<Subject>` 被模型发明成**裸体男人**（抽帧 f1/f6 为证；换序对照没跑）② #14142 那类 AV 1015 撞了两次，第二次钉死调用点 = **健康卸载路径**（`load_models_gpu→free_memory→model_unload→detach→unpatch_model:1163` 的 `.to()` walk，`comfy_kitchen/tensor/base.py:427`）：第一次崩在连发第二条后（free 1.4 GB），第二次崩在把 unet 换成 21 GB Singularity int8 时（换权重必走这条 unload）。**已打 [huobao-1015] 补丁**（`comfy/model_management.py` model_unload 传 `skip_model_to=True` + `TypeError` 兜底保子类；`comfy/model_patcher.py` 跳过 walk 时 device 记账照写）——升级 ComfyUI 后与 `[huobao-1013]` 一起重贴（`rg '\[huobao-' comfy/`）。**测量纪律 1015 血证**：free <2 GB 时执行数被 paging 污染（`ab2_steps2` 报 427、`ab3_norefs_hot` 415、`ab3_refsp8` 486 全是假高，均 > 同形状 4 步基线 284，不合物理）——`ab5` 批次每条附带 free 读数，判数前先验这条。差分已解出 `exec = 36s + steps×62s`（steps2b 160 / steps1 97 两条干净数），150 的路只剩「砍每步 62 s」或「你接受 2 步（160 s）/1 步（97 s）画质」，四步画质你已判好 ⇒ 主攻每步成本（int8 权重对照 + 参考侧税在跑）。
 
 **生成：1472×832×5s（124 帧）= 原生 MiniMax-H3 节点 + Veda 学习稀疏注意力（1012 用户「除了NVFP4 全部换他的」，已进桥为默认 `graph:"native"`）** —— 内核热、权重在盘缓存时整单 **302 s**（task 323，history 口径 49.4 s/步 ×4 + 解码存盘）；进程首发含 triton 编译/首次冷读 13+32 GB 权重时 **430–510 s**（322=507、321=432、331=449、334=450）。老 JZL+kitchen sol-attn 暖跑 270 s 的账已被这条路取代（JZL 不发 GUI 步数、且用户点名换）。**超分：RTX VSR ×2 → 2944×1664 = 0.68 s/帧（「质量优先」档，比速度档还快 26%）**，243 帧整条 224.4 s ✓ 10 min 内；已知副作用暗 ~1.3%、黑电平压 2 格，两档同幅 ⇒ 不是档位旋钮，要拉回只有交付端 `eq`（未加，等看片定）。**平台进度：真步数已通**（task 328 起 `params.progress = {pct, real:true}`，来源 = 桥旁听 ComfyUI ws 的 `progress_state`）。12 s 档（294 帧）已实测整单 682 s（task 339，无超分，sp32 口径）。T8 BlockCache 已判不启用（4 步 turbo 下 0 命中，强制命中损细节，详见排除项）。RTX VSR **还没接进 adapter**（只在探针跑通，没走平台流程）；自启仍停用。
 

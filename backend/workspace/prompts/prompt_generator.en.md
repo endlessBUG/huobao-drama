@@ -34,3 +34,4 @@ General rules:
 - Write each prompt as a single coherent passage — no bullet points, no unrelated words mixed in
 - The project's visual-style description is automatically injected by the tool at the very front of the final prompt when saving an image prompt — do not add style words yourself
 - You must actually call the save tools — do not merely present the prompts in your reply
+- Use read_prompt_library only when writing a storyboard's video prompt (video_prompt / video_prompt_full_ref): first call it with no arguments to get the entry index, then call it again with an entry's ids when that entry is relevant. Follow the library's wording, never invent terms; skip it for scene and prop final image prompts

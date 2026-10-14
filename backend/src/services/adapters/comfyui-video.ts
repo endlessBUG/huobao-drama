@@ -46,6 +46,17 @@ const SIZE_480P = '864x480'
 // 代价：采样 514s vs 409s（+25.7%，正好是 token 多 22% 的量），整单约 34 min/条（冷跑）。
 // 直出这个画布在 243 帧会 OOM（墙是 token 数 = 画布 × 帧数），所以只能靠 SelfLift 的分块拿 —— selflift 必须为 true。
 const DEFAULT_SIZE = '1472x832'
+// 2026-10-07 加：以前 `is480` 之外全走 DEFAULT_SIZE，所以选「1080p」和选「720p」出图完全一样（空设置）。
+// 1007 实测完：1920×1080 会被吸到 **1920×1072**（1080 不是 16 的倍数，H3 VAE 空间下采 = 16）= 2.07 MP，
+// 不 OOM 但每条 **117.64 min**（vs 1.22 MP 的 9.94 min = 11.8×）、每像素信息只 1.18–1.39×（13 s 反而 0.96）
+// ⇒ 涨的是微观纹理不是结构，而且边缘带 1–2 px 阶梯（锯齿）。用户 1007 判「1080 可以了」⇒ 采样停在 1.22 MP，
+// 1080p 只是交付尺寸（`ffmpeg-merge` 的 OUT_W/OUT_H）。判据在 docs/comfyui-h3-configs.md §十七/§二十。
+const SIZE_1080P = '1920x1080'
+// 1007 下午：`record.resolution` 现在也可以直接写画布（`1728x960` 这种），走下面的 rawSize 分支。
+// 挑 1728x960 而不是 1728x972 是有原因的：960/16=60、1728/16=108 都是**双数** ⇒ SelfLift 的 latent lift
+// 正好 2.0；而 1920x1080 的 1080/16=67.5 被吸到 67（单数）⇒ 纵向 lift = 67/34 = 1.9706，那条非整数重采样
+// 是 1080p 直采带阶梯的嫌疑来源之一。1.66 MP 介于已量的两档之间（1.22 MP = 9.94 min 常驻区、
+// 2.07 MP = 117.64 min 换页区）⇒ 这一档是「更高分辨率 + 时间还能接受」唯一还没量过的活口。
 const FL2VA_SIZE = '576x320'
 const UPSCALE = 0
 const FPS = 24
@@ -68,12 +79,54 @@ export function framesForDuration(seconds?: number | null): number {
   return Math.min(MAX_LENGTH, Math.max(MIN_LENGTH, n))
 }
 
+// 社区 LoRA 的登记表：触发词口径 + 「它是干什么的」。note 直接显示在工作台那个下拉的名字后面
+// （用户要求「lora 后面要写上 lora 的作用」），措辞与数抄各家 README / 我们自己的实测，不是编的。
+// 没登记的文件 = 只显示文件名、不塞触发词。登记了就必须写 note（测试锁这条）。
+export const LORA_REGISTRY: Record<string, { t?: string; replace?: RegExp; note: string }> = {
+  'h3-realism-people-t2v-i2v-r2v.safetensors': { t: 'r34l1sm',
+    note: '真人质感·去塑料光泽（实测：画面暗 10%、形状不变）' },
+  // 作者 README 原话（繁体中文+英文对照）：「正強度偏向 2d 動漫風格，負強度則為寫實」，
+  // 且「一開始訓練此 lora 的目的其實是因為 H3 的 2d 動漫風格比較偏向 3d，不夠平面化」——
+  // 也就是说这条天生就是治「半 3D 质感」的。推荐区间 -5~5、±3 就足以定风格（不是我们默认的 1.0）。
+  // 落点实测 208/208 全中（qkv_proj/out_proj/fc1/fc2，与现役 turbo 同一套目标），无触发词。
+  'H3_Ref2V_Anime_Slider_v1.safetensors': {
+    note: '2D 动画 ↔ 真人 风格滑杆（正强度偏 2D、负偏写实；作者说 ±3 才定风格、默认 1.0 太弱；无需触发词；落点 208/208 实测）' },
+  // HMInnie 的 README 原话：触发词「replaces the word "pussy" in your prompt rather than sitting
+  // in front of it」，并且每条训练 caption 都以机位子句开头（我们的六段式本来就有 close-up / framing 子句）。
+  // 只换独立成词的 pussy：pussy lips / pussy juice / pussy focus 这些复合词留着（它们是库里验过的实词，
+  // 换掉会变成「inniepussy juice」这种没人写过的东西）。
+  'HMInnie_v1_e50.safetensors': { t: 'inniepussy', replace: /\bpussy\b(?!\s+(lips|juice|focus|presentation))/gi,
+    note: 'innie 形状四轴（实测：结构最可读，但暗 24%）' },
+  'Vagina_minimax-h3_epoch20.safetensors': {
+    note: '通用解剖 HMPussy V1（训练分布就是 fingering/spreading/show-off）' },
+  'HMNSFW-AIO-V2.5.safetensors': { t: 'hmmotion',
+    note: '动作姿态 AIO V2.5（作者建议强度 0.5–0.9，只动 mlp）' },
+  'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors': {
+    note: '4 步蒸馏 —— 桥已默认挂在第一层，再选它等于挂两遍' },
+  'minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors': {
+    note: '8 步蒸馏（768p 版）—— 换它要连采样步数一起改' },
+  'minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors': {
+    note: 'fl2v（首帧那条）用的 4 步 —— ref2v 别选' },
+  'minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors': {
+    note: 'fl2v 8 步 —— ref2v 别选' },
+  'minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy_resized_avg_rank_21_bf16.safetensors': {
+    note: '第三方 lightx2v 重定量的 fl2v 4 步（rank 21）—— ref2v 别选' },
+  'Qwen-Image-2.1-viggle-turbo-4step-r64-comfyui-T8.safetensors': {
+    note: 'Qwen-Image-2.1 生图的 LoRA，对 H3 视频无效（键名对不上，会被静默跳过）' },
+  'lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors': {
+    note: 'Wan 14B 的蒸馏 LoRA，对 H3 视频无效' },
+}
+
 export class ComfyUIVideoAdapter implements VideoProviderAdapter {
   provider = 'comfyui'
 
   async buildGenerateRequest(config: AIConfig, record: VideoGenerationRecord): Promise<ProviderRequest> {
-    const prompt = (record.prompt || '').trim()
-    if (!prompt) throw new Error('ComfyUI 视频生成要求必须提供提示词（prompt）')
+    const base = (record.prompt || '').trim()
+    if (!base) throw new Error('ComfyUI 视频生成要求必须提供提示词（prompt）')
+    const tr = record.lora && record.loraTrigger !== false ? LORA_REGISTRY[record.lora] : undefined
+    // 只有登记了 t 的才碰词。HMPussy V1 的触发词就是普通词 pussy（我们提示词里本来就有 12 处），
+    // 前置一遍是重复 —— 所以它只登记 note、不登记 t，prompt 一字不改（D 臂实测就是这么跑的）。
+    const prompt = !tr?.t ? base : tr.replace ? base.replace(tr.replace, tr.t) : `${tr.t} ${base}`
 
     const inputDir = toInputDir(config)
     const images = await stageReferenceImages(parseUrlArray(record.referenceImageUrls), inputDir, MAX_IMAGES)
@@ -91,6 +144,9 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
       : undefined
 
     const is480 = (record.resolution || '480p') === '480p'
+    // `resolution` 直接是画布（`1728x960`）时绕过所有档位名 —— JZL 节点自己把宽高吸到 32 网格，
+    // 所以这里不校验，只透传。加这一条是为了量分辨率档位不用每次改代码（1007）。
+    const rawSize = /^\d+x\d+$/.test((record.resolution || '').toLowerCase()) ? (record.resolution as string).toLowerCase() : null
 
     return {
       method: 'POST',
@@ -99,17 +155,25 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
       body: {
         prompt,
         model: (record.model || config.model || 'minimax-h3-ref2v') || 'minimax-h3-ref2v',
-        size: firstFrameFile ? FL2VA_SIZE : (is480 ? SIZE_480P : DEFAULT_SIZE),
+        size: firstFrameFile ? FL2VA_SIZE : (is480 ? SIZE_480P : (rawSize || (record.resolution === '1080p' ? SIZE_1080P : DEFAULT_SIZE))),
         length: framesForDuration(record.duration),
         images,
         ref_scale: 2.0,
         upscale: firstFrameFile ? 2 : UPSCALE,
-        selflift: !firstFrameFile,   // 分辨率提升靠 SelfLift 的 latent lift（不是 FlashVSR）；首帧路径保持旧口径 + 超分
+        // 1008 用户定案「720p 直采 → VOSR2 ×2 → 2K」⇒ 二采（SelfLift 的 latent lift + 高分那一步）不再做。
+        // 账（台账 §当前最优，243 帧 @1.22 MP）：整单 514 s = 低分 3 步 192.8 + transition 12.3 +
+        // 高分 1 步 8 块 308.9 ⇒ 下掉省的是 321 s/条，代价是画布掉到 1280×720、细节改由交付端 VOSR2 补
+        // （`ffmpeg-merge` 的 `body.upscale="vosr2"`）。回退 = 这行改回 `!firstFrameFile`。
+        selflift: false,
         first_frame: firstFrameFile,
         guide: guideFile,
         prev_latent: record.prevLatent || undefined,
         save_name: record.saveName || undefined,
         trim: record.trimFrames || 0,
+        lora: record.lora || undefined,
+        lora_strength: record.lora ? (record.loraStrength ?? 1.0) : undefined,
+        // 不传 = 桥里那格整段不出现，图与老行为逐字节一致（和 lora 同一个口径）
+        sparse: record.sparse ? true : undefined,
         seed: record.seed ?? undefined,
       },
     }
@@ -133,7 +197,9 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
   parsePollResponse(result: any): VideoPollResponse {
     const status = (result.status || '').toLowerCase()
     if (status === 'queued' || status === 'running' || status === 'pending') {
-      return { status: 'processing' }
+      // 桥 1012 起带真步数（ws 旁听 ComfyUI 的 progress 事件）；老桥没这个键就是 undefined
+      const pr = result.progress && Number.isFinite(result.progress.pct) ? result.progress.pct : undefined
+      return { status: 'processing', progress: pr }
     }
     if (status === 'succeeded') {
       return { status: 'completed', videoUrl: result.url, duration: (result.length || DEFAULT_LENGTH) / FPS }
@@ -143,5 +209,20 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
 
   extractVideoUrl(result: any): string | null {
     return result.url || null
+  }
+
+  // 1012 暖跑实测锚（history `execution_start→execution_success`，124 帧整单、含解码+存盘）：
+  // 576x320 = 126 s（1.016 s/帧）· 864x480 = 364 s（2.936）· 1472x832 = 270 s（2.177，NVFP4）。
+  // 1920x1080 没测过，按像素比从 1472x832 外推（3.70 s/帧）—— 冷跑/排队/装载都不在锚里，进度只是估算，
+  // 上限 95%，真完成由 poll 的 succeeded 定。
+  progressHint(record: VideoGenerationRecord): number | undefined {
+    const frames = framesForDuration(record.duration)
+    const rawSize = /^\d+x\d+$/.test((record.resolution || '').toLowerCase()) ? (record.resolution as string).toLowerCase() : null
+    const size = record.firstFrameUrl
+      ? FL2VA_SIZE
+      : rawSize || (record.resolution === '1080p' ? SIZE_1080P : (record.resolution || '480p') === '480p' ? SIZE_480P : DEFAULT_SIZE)
+    const secPerFrame: Record<string, number> = { '576x320': 1.016, '864x480': 2.936, '1472x832': 2.177, '1920x1080': 3.70 }
+    const spf = secPerFrame[size]
+    return spf ? Math.round(frames * spf) : undefined
   }
 }

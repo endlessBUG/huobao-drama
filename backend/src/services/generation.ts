@@ -74,6 +74,12 @@ interface GenerateVideoParams {
   configId?: number
   /** 段间接力：把上一段成片的末帧当额外参考带进本段（见 relayLastFrame） */
   chain?: boolean
+  /** 第二层 LoRA 文件名（comfyui 桥专属，空 = 不挂）+ 强度，默认 1.0；loraTrigger=false = 只要权重不碰触发词 */
+  lora?: string | null
+  loraStrength?: number | null
+  loraTrigger?: boolean | null
+  /** 桥的块稀疏注意力 sol-attn（comfyui 桥专属，见 adapters/types.ts 的注释：cu130 才有内核、挂 LoRA 出伪影） */
+  sparse?: boolean | null
 }
 
 export async function generateImage(params: GenerateImageParams): Promise<number> {
@@ -147,6 +153,10 @@ export async function generateVideo(params: GenerateVideoParams): Promise<number
     watermark: params.watermark,
     // chain 必须进快照：processTask 读的是 DB 里的 params，不落盘接力就永远不触发（1003 A/B 实测 arm B 只有 3 张参考图）
     chain: params.chain,
+    lora: params.lora,
+    loraStrength: params.loraStrength,
+    loraTrigger: params.loraTrigger,
+    sparse: params.sparse,   // 必须进快照：processTask 读的是 DB 里的 params，不进就等于从没传过
   })
 
   logTaskStart('VideoTask', 'enqueue', {
@@ -305,6 +315,10 @@ async function processTask(id: number, config: AIConfig) {
         seed: params.seed,
         promptExtend: params.promptExtend,
         watermark: params.watermark,
+        lora: params.lora,
+        loraStrength: params.loraStrength,
+        loraTrigger: params.loraTrigger,
+        sparse: params.sparse,
       })
       ;({ url, method, headers, body } = req)
     }
@@ -456,6 +470,38 @@ async function pollTask(record: SysTaskRecord, config: AIConfig, taskId: string)
         // 上游明确失败（如内容审核拦截）属终态：立即落库，不重试不等待超时
         await failTask(record.id, pollResp.error || 'Generation failed')
         return
+      }
+
+      // 进度写回（1012）：不加列不迁移，塞进现成的 params JSON。优先用上游透出的真步数
+      // （comfyui 桥从 ws 抓的 pct），没有才用 adapter.progressHint 的暖跑锚估算；
+      // 估算上限 95%，真完成由 succeeded 定。写失败不影响轮询。
+      // ⚠️ progressHint 要的是 adapter 的 record 形状（resolution/duration 在顶层），
+      // 而这里手里是 sys_task 行 —— 那些字段埋在 params JSON 里，1012 第一版直接传行
+      // 导致永远落进 480p 档（expected=364 而不是 270）。从 params 还原视图再传。
+      let hint: number | undefined
+      if (type === 'video' && typeof (adapter as any).progressHint === 'function') {
+        try {
+          const pp = JSON.parse(record.params || '{}')
+          hint = (adapter as any).progressHint({
+            prompt: record.prompt || '',
+            duration: pp.duration,
+            resolution: pp.resolution,
+            firstFrameUrl: pp.firstFrameUrl || pp.first_frame_url,
+          })
+        } catch { hint = undefined }
+      }
+      const real = typeof pollResp.progress === 'number' ? pollResp.progress : undefined
+      if (real != null || hint) {
+        const elapsed = Math.round((Date.now() - startedAt) / 1000)
+        const pct = real != null ? Math.min(99, real) : Math.min(95, Math.round((elapsed / (hint || 1)) * 100))
+        try {
+          const params = JSON.parse(record.params || '{}')
+          params.progress = { pct, elapsed, ...(hint ? { expected: hint } : {}), ...(real != null ? { real: true } : {}) }
+          record.params = JSON.stringify(params)
+          await db.update(schema.sysTask)
+            .set({ params: record.params, updatedAt: now() })
+            .where(eq(schema.sysTask.id, record.id))
+        } catch { /* 进度是装饰 */ }
       }
     } catch (err: any) {
       const exhausted = i === profile.attempts - 1
@@ -675,5 +721,8 @@ function normalizeStoredVideoResolution(resolution: string | null | undefined): 
   const value = String(resolution || '').trim().toLowerCase()
   if (value === '480p' || value === '720p' || value === '1080p') return value
   if (value === '2k') return '2K'
+  // 1007 加：允许直接写画布（例 `1728x960`）。分辨率实验以前每加一档就要改一次适配器映射，
+  // 现在只要改库里的 episodes.resolution 即可 —— 画布由 comfyui 适配器直接吃（节点自己会吸到 32 网格）。
+  if (/^\d+x\d+$/.test(value)) return value
   return undefined
 }

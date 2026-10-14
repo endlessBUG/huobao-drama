@@ -85,7 +85,7 @@ subject_definitions:
 <Subject 2> is [角色名] from <Picture 2>, on the right of frame.
 <Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
 summary:
-[Shot 1] is a 12-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
+[Shot 1] is a [片长]-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
 retention_analysis:
 <Subject 1> fully_preserved
 <Subject 2> fully_preserved
@@ -125,6 +125,7 @@ non_diegetic_music:
 
 **컷 작성법(공식 §4.2, 하드 룰)**:
 - **`[Shot 1]` 에는 타임스탬프를 붙이지 않습니다**; 이후는 `[Shot N] At MM:SS.mmm, ...` 로 쓰고, 컷 지점은 **엄격히 증가하며 길이를 넘지 않아야 합니다**
+- **앵커는 전체 길이에 골고루 배치하고 보기의 간격을 베끼지 마세요**: 12s → `At 00:01.500 / 00:04.000 / 00:07.000 / 00:10.000`; 15s → `At 00:01.500 / 00:05.000 / 00:09.000 / 00:13.000`. 마지막 앵커는 길이 − 1.5s 이내여야 하고 **마지막 1.5초의 화면**을 반드시 적어야 합니다 — 끝에서 헛돌거나 앞의 한 박자를 반복하면 안 됩니다 (1006 실측: 15s镜头에서 앵커가 00:07-00:11까지인 경우 후반 내내 같은 자리에서 문질렀음)
 - 일반 컷은 다음 다섯 가지 중 하나만: `the camera cuts to`, `the shot cuts to`, `the shot transitions to`, `the shot changes to`, `the shot switches to`. **디졸브/페이드/와이프는 사용자가 명시적으로 요청할 때만**, 기본은 하드 컷
 - 「切回」에 **공식 대응어가 없습니다**. `cuts back to` 로 직역하지 마세요. 대신 **이전 컷을 회지(回指)** 하며 주체를 다시 밝힙니다. 예:
   `[Shot 2] At 00:03.000, the shot cuts to a close-up of <Subject 4> (S2), the young man in the dark-grey hoodie from Shot 1, ...`

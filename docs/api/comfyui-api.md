@@ -62,6 +62,24 @@
 | `seed` | integer | ✗ | 随机 | 随机种子 |
 | `wait` | boolean | ✗ | `false` | **本桥专有**（OpenAI 无此字段）：`true` 则同步等待至完成/失败再返回 |
 
+**本桥专有字段（OpenAI 没有，都是工作流旋钮；实测数与理由在 [台账](../comfyui-h3-configs.md)）**
+
+| 字段 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `ref_scale` | number | `2.0` | 参考行强度（进 `JZL_MiniMaxH3ReferenceToVideo2`） |
+| `upscale` | integer | `0` | 0 = 不挂 FlashVSR；2/3/4 = 放大倍数（与 `selflift` 互斥，1 MP 上叠起来 8G 必炸） |
+| `selflift` | boolean | `false` | true = SelfLift 二采直出：`size` 就是目标分辨率，细节靠最后一步在高分辨率上真前向，不再叠超分 |
+| `sparse` | boolean | `false` | 块稀疏注意力（本机实测净亏 ⇒ 默认关，只当 A/B 仪表） |
+| `first_frame` | string | — | 给了就改走 fl2va 分支（`_wf_fl2va`），`images` 的 9 个参考槽全部作废 |
+| `guide` | string | — | 上一段末帧文件名（pixel 路径衔接，走 `MiniMaxH3AddGuide`） |
+| `prev_latent` | string | — | 上一段 AV latent 名（`output/latents/<name>.pt`）—— 零 VAE 往返的真无缝，优先于 `guide` |
+| `save_name` | string | — | 本段 latent 落盘名，供下一段接 |
+| `trim` | integer | `0` | 段首裁掉的跑道帧数（音频同步裁，否则音画错位 `trim/24` 秒） |
+| `lora` | string | — | **1006 加**：第二层 `LoraLoaderModelOnly` 的文件名，挂在 turbo 之后、注意力后端之前（`97` 的 model 改吃 `2b`）。不传 = 图与老行为逐字节一致 |
+| `lora_strength` | number | `1.0` | 上面那层的强度；只在 `lora` 存在时才进图 |
+
+> 触发词是 LoRA 自己的事，桥不管 —— 由后端 adapter 的 `LORA_TRIGGERS` 表在 prompt 句首塞（`r34l1sm` 这类），没登记的 LoRA 不塞词、照样挂权重。
+
 **响应**
 
 - `wait=false`（默认）：HTTP `202 Accepted`

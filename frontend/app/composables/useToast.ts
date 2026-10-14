@@ -17,9 +17,13 @@ export const MODERATION_RE = /sensitive|moderation|真人|人脸|real[\s_-]?pers
 
 const NETWORK_RE = /failed to fetch|network ?error|load failed|network request failed|fetch failed/i
 const NONJSON_RE = /unexpected token|not valid json|failed to parse/i
-const SERVER5XX_RE = /(^|\D)5\d{2}(\D|$)|internal server error|服务器内部错误/i
-const AUTH_RE = /(^|\D)40[13](\D|$)|unauthorized|forbidden|invalid[\s_-]?api[\s_-]?key|authentication|鉴权/i
-const RATELIMIT_RE = /(^|\D)429(\D|$)|rate[\s_-]?limit|too many requests|quota|额度不足|insufficient/i
+// 数字特征必须**不在 JSON 的 token 位置**上才算：ComfyUI 的 error_msg 里带一串 executed 节点 id
+// （`…"400", "304", "312", "2b", "3", "401"]…`），旧写法 `(^|\D)40[13](\D|$)` 会把里面那个 `"401"`
+// 当成 HTTP 401 ⇒ 一条 shape mismatch 崩给用户的却是「鉴权失败，请检查 API Key 配置」（1010 实测踩到）。
+// 排除 引号/逗号/方括号/花括号 做前导字符，`{"status":401}`、`HTTP 401`、裸 `401`（走下面 line 55）都还认。
+const SERVER5XX_RE = /(^|[^0-9"'\]},])5\d{2}(\D|$)|internal server error|服务器内部错误/i
+const AUTH_RE = /(^|[^0-9"'\]},])40[13](\D|$)|unauthorized|forbidden|invalid[\s_-]?api[\s_-]?key|authentication|鉴权/i
+const RATELIMIT_RE = /(^|[^0-9"'\]},])429(\D|$)|rate[\s_-]?limit|too many requests|quota|额度不足|insufficient/i
 const TIMEOUT_RE = /timeout|timed out|polling exceeded|超时/i
 /** 技术特征：出现即判定不可直接透传给用户 */
 const TECHY_RE = /[{}\[\]<>]|https?:\/\/|\b(error|errno|exception|code|stack|undefined|null)\b|[a-z]+_[a-z]+/i

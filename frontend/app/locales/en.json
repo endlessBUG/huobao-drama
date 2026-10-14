@@ -233,6 +233,7 @@
       "general": "General",
       "ai": "AI Services",
       "styles": "Style Presets",
+      "library": "Prompt Library",
       "storage": "Storage",
       "about": "About & Updates",
       "agents": "Agent Config"
@@ -438,6 +439,33 @@
       "pickFailed": "Failed to pick a directory",
       "failed": "Migration failed; the original storage location was restored"
     },
+    "library": {
+      "title": "Prompt Library",
+      "desc": "Global, text-only, no images. When the agent writes a storyboard's video prompt it first calls read_prompt_library with no arguments to get the entry index, and calls it again with an entry's ids only when that entry is needed — the index is cheap and the bodies are pulled on demand, so adding an entry does not raise the tokens of every call. It is not used for scene or prop final image prompts. Entries whose details were fetched get hits + 1 and the list sorts by most used.",
+      "allTitle": "All entries",
+      "count": "{active} active · {total} total",
+      "searchPlaceholder": "Search title / text / note",
+      "hits": "fetched {n} times",
+      "expand": "show full text ({n} chars)",
+      "empty": "No entries yet"
+    },
+    "libDialog": {
+      "tag": "Prompt Library",
+      "sub": "Store only wording proven by a real run that is not already in a SKILL — the same rule kept in two places drifts",
+      "addTitle": "New library entry",
+      "editTitle": "Edit library entry",
+      "group": "Group",
+      "groupPlaceholder": "e.g. Anatomy · Close-up",
+      "title": "Title",
+      "text": "Prompt text",
+      "textHint": "The wording itself, for the AI to use (video prompts are written in English)",
+      "note": "Note",
+      "required": "Group, title and text are required"
+    },
+    "libDelete": {
+      "title": "Delete entry",
+      "message": "Delete “{name}”? The library is global, so no drama's agent will fetch it any more. Use Disable if you only want it out of the way."
+    },
     "styleDelete": {
       "title": "Delete Style Preset",
       "message": "Delete style “{name}”? Projects already using it are unaffected, but a deleted built-in style may be restored on restart — consider disabling instead."
@@ -456,11 +484,15 @@
       "viewFilm": "View Film",
       "continue": "Continue",
       "start": "Start Production",
-      "resolution": "Resolution"
+      "resolution": "Resolution",
+      "lora": "Video LoRA"
     },
     "model": {
       "defaultWith": "Default · {model}",
-      "notConfigured": "Not configured"
+      "notConfigured": "Not configured",
+      "loraNone": "No LoRA (default)",
+      "loraStrength": "Strength",
+      "loraStrengthHint": "1.0 is the author's intended strength; 0.6-0.8 for a lighter touch. This picker only appears for the local ComfyUI provider"
     },
     "sidebar": {
       "inProgress": "In progress",

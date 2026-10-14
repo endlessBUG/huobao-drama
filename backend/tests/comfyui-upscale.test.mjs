@@ -8,7 +8,7 @@ const bridge = readFileSync('E:/AI/ComfyUI/custom_nodes/ComfyUI-OpenAI-Bridge/__
 const adapter = readFileSync(new URL('../src/services/adapters/comfyui-video.ts', import.meta.url), 'utf8')
 
 test('bridge：upscale 默认关，路由可覆盖', () => {
-  assert.match(bridge, /def _wf_video\(prompt, w, h, length, refs, seed, prefix, ref_scale=2\.0, upscale=0, selflift=False, sparse=False, guide=None, trim=0, prev_latent=None, save_name=None, window=22\):/)
+  assert.match(bridge, /def _wf_video\(prompt, w, h, length, refs, seed, prefix, ref_scale=2\.0, upscale=0, selflift=False, sparse=False, guide=None, trim=0, prev_latent=None, save_name=None, window=22, lora=None, lora_strength=1\.0, latent_upscale=0\):/)
   assert.match(bridge, /upscale = int\(b\.get\("upscale"\) or 0\)/)
   assert.match(bridge, /selflift = bool\(b\.get\("selflift"\)\)/)
   assert.match(bridge, /sparse = bool\(b\.get\("sparse", False\)\)/)
@@ -42,9 +42,12 @@ test('bridge 里所有 FlashVSR 节点的 class_type 都是节点包注册过的
   }
 })
 
+// 闸只管 FlashVSR 像素超分那条（g["3000"]）。1013 换桥后 native 二采的
+// MinimaxH3LatentUpscaler3D 自己写 precision=fp16（conv 上采、实测 302 s 热跑没问题），
+// 所以不许再全文禁 fp16 —— 要禁的是「谁把 FlashVSRInitPipe 的 bf16 改成 fp16」。
 test('bridge：超分精度用节点默认 bf16（同 2 字节，指数域和 fp32 同宽，不会溢出）', () => {
   assert.match(bridge, /"precision":\s*"bf16"/)
-  assert.doesNotMatch(bridge, /"precision":\s*"fp16"/)
+  assert.doesNotMatch(bridge, /FlashVSRInitPipe[\s\S]{0,300}?"precision":\s*"fp16"/)
 })
 
 test('bridge：超分插在 VAEDecode 与 CreateVideo 之间，音频旁路', () => {
@@ -69,7 +72,9 @@ test('ffmpeg-merge：成片统一落到 1920x1080，increase+crop 不拉伸', ()
   const merge = readFileSync(new URL('../src/services/ffmpeg-merge.ts', import.meta.url), 'utf8')
   assert.match(merge, /const OUT_W = 1920/)
   assert.match(merge, /const OUT_H = 1080/)
-  assert.match(merge, /scale=\$\{OUT_W\}:\$\{OUT_H\}:force_original_aspect_ratio=increase,crop=\$\{OUT_W\}:\$\{OUT_H\}/)
+  // 1009：交付尺寸搬进 `const feed`（非 VOSR2 那支），vf 改用 feed 的宽高 —— 断言跟着改，意思不变
+  assert.match(merge, /: \{ w: OUT_W, h: OUT_H \}/)
+  assert.match(merge, /scale=\$\{feed\.w\}:\$\{feed\.h\}:force_original_aspect_ratio=increase,crop=\$\{feed\.w\}:\$\{feed\.h\}\$\{finish\}/)
 })
 
 test('bridge _selftest 断言超分开/关两种形状', () => {
@@ -83,15 +88,41 @@ test('adapter：480p 走 SelfLift 864x480（提升靠 latent lift，不叠 Flash
   assert.match(adapter, /const DEFAULT_SIZE = '1472x832'/)
   assert.match(adapter, /const UPSCALE = 0/)
   assert.match(adapter, /const is480 = \(record\.resolution \|\| '480p'\) === '480p'/)
-  assert.match(adapter, /size: firstFrameFile \? FL2VA_SIZE : \(is480 \? SIZE_480P : DEFAULT_SIZE\)/)
+  // 2026-10-07：1080p 以前是**空设置**（is480 之外全走 DEFAULT_SIZE，所以选 1080p 和选 720p 出图完全一样）。
+  // 现在三档：480p → 864x480、1080p → 1920x1080、其它（含 720p 默认）→ 1472x832。
+  // 1080p 这一档本机**还没实测过能不能吃下**（1.22 MP 是台账里这台 8G 目前最高画布）；这条断言只锁映射，不锁结论。
+  assert.match(adapter, /const SIZE_1080P = '1920x1080'/)
+  assert.match(adapter, /size: firstFrameFile \? FL2VA_SIZE : \(is480 \? SIZE_480P : \(rawSize \|\| \(record\.resolution === '1080p' \? SIZE_1080P : DEFAULT_SIZE\)\)\)/)
   assert.match(adapter, /upscale: firstFrameFile \? 2 : UPSCALE/)
-  assert.match(adapter, /selflift: !firstFrameFile/)
+  // 1008：SelfLift 已下掉（用户定案「720p 直采 → VOSR2 ×2 → 2K」）。回退 = 改回 `!firstFrameFile`。
+  assert.match(adapter, /selflift: false,/)
   // 2026-10-03 拍板：transition_step=3（243 帧实测 914s vs t=2 的 2846s，−68%），
   // 代价是身份 0.698→0.635。改回 2 必须带着新的实测理由，别静默回退。
   assert.match(bridge, /"transition_step": 3/)
   assert.match(bridge, /assert v3\["307"\]\["inputs"\]\["transition_step"\] == 3/)
   // 闸：SelfLift 与 FlashVSR 不能同时开 —— 1152x640 再 ×2 = 2304x1280，8G 必炸
   assert.match(bridge, /if upscale and not selflift:/)
+})
+
+// 1007 下午两条：① `resolution` 可以直接写画布（以后量档位只改库、不用改代码）
+// ② 交付端收尾按源高分叉 —— 720p 上采到 1080p 只加 unsharp（实测锐度 5.2 → 14.1），
+//    1080p 直采必须先 gblur 再 unsharp（治 1–2 px 阶梯；纯 blur 会掉 28% 锐度、先放大 2× 再降回 ≈没做）。
+//    判据与实测表在 docs/comfyui-h3-configs.md §二十。unsharp 用位置参数：这个 ffmpeg build 不认具名选项。
+test('adapter：resolution 可直接写画布；ffmpeg-merge：收尾按源高分叉', () => {
+  const gen = readFileSync(new URL('../src/services/generation.ts', import.meta.url), 'utf8')
+  assert.ok(gen.includes('/^\\d+x\\d+$/.test(value)) return value'), 'generation.ts 没让 resolution 透传画布')
+  assert.ok(adapter.includes('const rawSize = /^\\d+x\\d+$/.test('), 'adapter 没读画布直写的 resolution')
+  assert.match(adapter, /size: firstFrameFile \? FL2VA_SIZE : \(is480 \? SIZE_480P : \(rawSize \|\| \(record\.resolution === '1080p' \? SIZE_1080P : DEFAULT_SIZE\)\)\)/)
+  const merge = readFileSync(new URL('../src/services/ffmpeg-merge.ts', import.meta.url), 'utf8')
+  assert.match(merge, /feed\.h >= 1000 \? ',gblur=sigma=0\.5,unsharp=5:5:1\.0' : ',unsharp=5:5:1\.0'/)
+  // 不传 input_size = 保持源尺寸（与 1008 的行为一致）；传了才预缩 —— 这条不许被默认值偷偷改掉
+  assert.match(merge, /parseSize\(opts\?\.inputSize\) \|\| \{ w: src\.w, h: src\.h \}/)
+  // 闸：收尾必须在 crop 之后（先低通再拉边缘），且 blur 半径固定 0.5 —— 改这两个数要带着新的实测理由
+  assert.match(merge, /function probeVideoSize\(filePath: string\): Promise<\{ w: number; h: number \}>/)
+  // 1008：VOSR2 模式不在交付端先放大（放大是超分模型的活，`inference.py` 的 `_resize_to_target`
+  // 会把整批先 bicubic 预放大再上 GPU ⇒ 先放一遍等于付两次钱，而且 tile 数近 2×）。
+  assert.match(merge, /const vosrMode = \/\^vosr\/i\.test\(upscaleMode\)/)
+  assert.match(merge, /const feed = vosrMode/)
 })
 
 // 块稀疏注意力（1003 加）。class_type 必须是 core 的 node_id —— 和 FlashVSR 那条是同一个坑。

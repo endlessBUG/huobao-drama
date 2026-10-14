@@ -51,6 +51,17 @@
             :options="resolutionOptions"
             hide-default
           />
+          <ModelSelect
+            v-if="loraOptions.length"
+            v-model="loraModel"
+            :label="t('episode.topbar.lora')"
+            :options="loraOptions"
+            :default-label="t('episode.model.loraNone')"
+          />
+          <label v-if="loraModel" class="lora-strength" :title="t('episode.model.loraStrengthHint')">
+            <span>{{ t('episode.model.loraStrength') }}</span>
+            <input v-model.number="loraStrength" type="number" min="0" max="1.5" step="0.05" />
+          </label>
         </div>
         <div class="studio-actions">
           <LocaleSwitcher />
@@ -1797,7 +1808,7 @@ import {
   Users, FileText, FolderKanban, Clapperboard, Download, Loader2,
   Plus, X, ListTodo, CircleHelp,
 } from 'lucide-vue-next'
-import { api, dramaAPI, episodeAPI, storyboardAPI, characterAPI, sceneAPI, propAPI, taskAPI, mergeAPI, aiConfigAPI, uploadAPI } from '~/composables/useApi'
+import { api, dramaAPI, episodeAPI, storyboardAPI, characterAPI, sceneAPI, propAPI, taskAPI, mergeAPI, aiConfigAPI, uploadAPI, comfyuiAPI } from '~/composables/useApi'
 import { startTour, autoTour } from '~/composables/useTour'
 import { useAgent } from '~/composables/useAgent'
 import { toastError, mapError, MODERATION_RE } from '~/composables/useToast'
@@ -1926,7 +1937,8 @@ const imageConfigs = ref([])
 const videoConfigs = ref([])
 const textConfigs = ref([])
 // 生成时可选模型：空串 = 跟随配置默认（models[0]）；选择持久化到 localStorage，刷新页面后保留
-const MODEL_STORE_KEYS = { chat: 'huobao:model:chat', image: 'huobao:model:image', video: 'huobao:model:video' }
+const MODEL_STORE_KEYS = { chat: 'huobao:model:chat', image: 'huobao:model:image', video: 'huobao:model:video',
+  lora: 'huobao:model:lora', loraStrength: 'huobao:model:lora-strength' }
 function readStoredModel(key, legacyKey = '') {
   try { return localStorage.getItem(key) || (legacyKey && localStorage.getItem(legacyKey)) || '' } catch { return '' }
 }
@@ -1934,6 +1946,9 @@ function readStoredModel(key, legacyKey = '') {
 const chatModel = ref(readStoredModel(MODEL_STORE_KEYS.chat, 'huobao:model:rewrite'))
 const imageModel = ref(readStoredModel(MODEL_STORE_KEYS.image))
 const videoModel = ref(readStoredModel(MODEL_STORE_KEYS.video))
+// 第二层 LoRA（只有本机 ComfyUI 有）：空串 = 不挂，出图与老行为逐字节一致
+const loraModel = ref(readStoredModel(MODEL_STORE_KEYS.lora))
+const loraStrength = ref(Number(readStoredModel(MODEL_STORE_KEYS.loraStrength) || '1'))
 function persistModel(modelRef, key) {
   watch(modelRef, v => {
     try { v ? localStorage.setItem(key, v) : localStorage.removeItem(key) } catch {}
@@ -1942,6 +1957,10 @@ function persistModel(modelRef, key) {
 persistModel(chatModel, MODEL_STORE_KEYS.chat)
 persistModel(imageModel, MODEL_STORE_KEYS.image)
 persistModel(videoModel, MODEL_STORE_KEYS.video)
+persistModel(loraModel, MODEL_STORE_KEYS.lora)
+watch(loraStrength, v => {
+  try { localStorage.setItem(MODEL_STORE_KEYS.loraStrength, String(v ?? 1)) } catch {}
+})
 // 左侧菜单栏收起/展开：收起为窄图标栏给内容区让位，持久化到 localStorage
 const SIDEBAR_COLLAPSED_KEY = 'huobao:sidebar-collapsed'
 const sidebarCollapsed = ref((() => {
@@ -1964,6 +1983,8 @@ const pendingSceneGridImageIds = ref([])
 const pendingPropImageIds = ref([])
 const pendingVideoIds = ref([])
 const failedVideoMessages = ref({})
+// 生成进度（1012）：后端把估算塞在 sys_task.params.progress，这里按分镜摊开显示
+const videoProgress = ref({})
 // 任务列表面板：顶栏按钮触发的右侧抽屉,按集聚合 sys_task + video_merges
 const genTasks = ref([])
 const genMerges = ref([])
@@ -2471,7 +2492,11 @@ function videoTaskState(sb) {
 function videoTaskStatusLabel(sb) {
   const state = videoTaskState(sb)
   if (state === 'done') return t('episode.status.done')
-  if (state === 'pending') return t('episode.status.generating')
+  if (state === 'pending') {
+    // 后端估算的进度（comfyui 暖跑锚）；没有就只显示「生成中」
+    const pr = videoProgress.value[sb?.id]
+    return pr ? `${t('episode.status.generating')} ${pr.pct}%` : t('episode.status.generating')
+  }
   if (state === 'failed') return t('episode.status.failed')
   return t('episode.status.todo')
 }
@@ -2491,7 +2516,7 @@ const allVideoTaskRows = computed(() => sbs.value.map((sb, index) => {
     id: sb.id,
     index,
     storyboard: sb,
-    title: sb.description || t('episode.vid.shotN', { n: String(index + 1).padStart(2, '0') }),
+    title: sb.title || t('episode.vid.shotN', { n: String(index + 1).padStart(2, '0') }),
     meta: sceneName,
     duration: Number.isFinite(duration) ? duration : 5,
     referenceCount,
@@ -2541,16 +2566,18 @@ const visualChars = computed(() => chars.value.filter(c => !isNarratorCharacter(
 const lockedVideoConfigId = computed(() => episode.value?.video_config_id || episode.value?.videoConfigId || null)
 // 集视频分辨率：顶栏直接修改（持久化 episodes.resolution，生成任务按此值锁定）。
 // 内部统一存 480p/720p/1080p 三档，界面按当前选中的视频模型显示厂商原生档位
-// （Seedance 480p/720p、MiniMax 768P/2K、Wan 3.0 480P/720P/1080P），适配器再映射为官方枚举
+// （Seedance 480p/720p、MiniMax 768P/2K、Wan 3.0 480P/720P/1080P、本机 ComfyUI 写真实像素），适配器再映射为官方枚举
 const RESOLUTION_TIERS = {
   volcengine: ['480p', '720p'],
   minimax: ['720p', '1080p'],
   aliyun: ['480p', '720p', '1080p'],
+  comfyui: ['480p', '720p'], // 本机桥只有这两档：1080p 会落到同一个 DEFAULT_SIZE（空档位），所以不显示
 }
 const RESOLUTION_DISPLAY = {
   volcengine: { '480p': '480p', '720p': '720p', '1080p': '720p' },
   minimax: { '480p': '768P', '720p': '768P', '1080p': '2K' },
   aliyun: { '480p': '480P', '720p': '720P', '1080p': '1080P' },
+  comfyui: { '480p': '864×480', '720p': '1472×832' }, // 直接写真实像素（comfyui-video.ts:42/48）
 }
 const resolutionProvider = computed(() => RESOLUTION_TIERS[selectedVideoConfig.value?.provider] ? selectedVideoConfig.value.provider : 'volcengine')
 const resolutionOptions = computed(() => RESOLUTION_TIERS[resolutionProvider.value].map(key => ({
@@ -2629,6 +2656,22 @@ const selectedVideoConfig = computed(() => {
 })
 const isWan3Video = computed(() => selectedVideoConfig.value?.provider === 'aliyun'
   || bareModelName(videoModel.value).startsWith('wan3.0-video'))
+
+// 第二层 LoRA 的下拉：只有视频配置是 comfyui 时才去问 6006（别的厂商没这层）
+const isComfyuiVideo = computed(() => selectedVideoConfig.value?.provider === 'comfyui')
+const comfyuiLoras = ref([])
+// 名字后面直接跟「它是干什么的」（note 来自后端登记表，列表本身来自 6006 现扫，两边不会漂）
+const loraOptions = computed(() => comfyuiLoras.value.map(item => ({
+  key: item.name, model: item.note ? `${item.label} — ${item.note}` : item.label,
+})))
+async function loadComfyuiLoras() {
+  if (!isComfyuiVideo.value) { comfyuiLoras.value = []; return }
+  try {
+    const r = await comfyuiAPI.loras(selectedVideoConfig.value?.id)
+    comfyuiLoras.value = (r?.items || []).filter(item => item?.name)
+  } catch { comfyuiLoras.value = [] }   // 6006 没起来就只剩「不挂」，别把工作台卡住
+}
+watch(isComfyuiVideo, loadComfyuiLoras)
 
 
 // 参考图上限（Wan 3.0 官方 10 张，其他模型 9 张），绑定素材收集与 @名字 映射统一读取
@@ -2756,10 +2799,17 @@ async function loadGenTasks() {
     // 永不消退(videoTaskState 中 pending 优先于 failed,重试按钮还被禁用)
     const pending = new Set()
     const failed = {}
+    const prog = {}
     for (const [sbId, t] of latestBySb) {
       // 分镜已有视频(失败后重试成功)时不再报历史错误
       if (hasVid(sbs.value.find(s => s.id === sbId))) continue
-      if (t.status === 'processing') pending.add(sbId)
+      if (t.status === 'processing') {
+        pending.add(sbId)
+        try {
+          const pr = JSON.parse(t.params || '{}').progress
+          if (pr && Number.isFinite(pr.pct)) prog[sbId] = pr
+        } catch { /* params 不是 JSON 就没进度 */ }
+      }
       else if (t.status === 'failed') failed[sbId] = t.error_msg || t('episode.status.failed')
     }
     // 刚点击提交、任务记录尚未加载出来的本地状态保留,避免状态闪退
@@ -2769,6 +2819,7 @@ async function loadGenTasks() {
     }
     pendingVideoIds.value = [...pending]
     failedVideoMessages.value = failed
+    videoProgress.value = prog
   } catch { /* 静默失败,不打断其他刷新 */ }
 }
 
@@ -3927,6 +3978,9 @@ async function genVid(sb, opts = {}) {
     // 接力走「额外参考图」而不是 first_frame，正是为了不踩上面那条互斥：身份行保住，上一段末帧
     // 只当第 10 个参考槽（超 9 会被适配器截断）。段必须按顺序跑（见 generation.ts 的 videoChains）。
     chain: true,
+    // 第二层 LoRA（只有 comfyui 有这层）：没选就完全不传，出图与老行为逐字节一致
+    lora: isComfyuiVideo.value && loraModel.value ? loraModel.value : undefined,
+    lora_strength: isComfyuiVideo.value && loraModel.value ? loraStrength.value : undefined,
     // 不传 first_frame_url：comfyui 桥一收到首帧就改走 fl2va 分支（_wf_fl2va），
     // ref_image_0~8 槽位全部丢弃 → 角色完全重生成（实测同一分镜两个人一个都不像）。
     // 底层 JZL_MiniMaxH3ReferenceToVideo2 没有 first_frame、JZL_MiniMaxH3ImageToVideoDual 没有 ref 槽位，
@@ -4028,6 +4082,7 @@ async function loadConfigs() {
     imageConfigs.value = imgCfgs || []
     videoConfigs.value = vidCfgs || []
     textConfigs.value = txtCfgs || []
+    loadComfyuiLoras()   // 配置到手才知道当前是不是 comfyui：那个 LoRA 下拉的清单跟着走
   } catch (e) { console.error('Failed to load AI configs', e) }
 }
 
@@ -5071,6 +5126,24 @@ onMounted(() => setTimeout(() => autoTour('episode', EPISODE_TOUR, t), 900))
   margin-right: 12px;
   padding-right: 12px;
   border-right: 1px solid var(--border);
+}
+/* 第二层 LoRA 的强度输入：与顶栏那排选择器同高同风格，只在选了 LoRA 时出现 */
+.lora-strength {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 11px var(--font-body);
+  color: var(--text-3);
+}
+.lora-strength input {
+  width: 54px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-1);
+  font: 11px var(--font-body);
 }
 .asset-final-prompt {
   display: flex;

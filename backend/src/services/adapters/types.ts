@@ -58,6 +58,9 @@ export interface VideoProviderAdapter {
   parsePollResponse(result: any): VideoPollResponse
 
   extractVideoUrl(result: any): string | null
+
+  /** 可选：返回「这条预计要跑多少秒」（暖跑口径），轮询侧据此算进度百分比。给不出就返回 undefined（不显示进度） */
+  progressHint?(record: VideoGenerationRecord): number | undefined
 }
 
 // ============ 通用类型 ============
@@ -116,6 +119,18 @@ export interface VideoGenerationRecord {
   saveName?: string | null
   // 段首跑道帧数（窗口 + 过渡）：生成侧加它，落盘前裁掉，交付帧数才等于设定值
   trimFrames?: number | null
+  // 第二层 LoRA（桥 _wf_video 里挂在 turbo 之后、注意力后端之前的那层）：只给文件名，空 = 不挂。
+  // 社区治「特写解剖丑」用的是权重不是措辞 —— 见台账 docs/comfyui-h3-configs.md
+  lora?: string | null
+  loraStrength?: number | null
+  // false = 不塞/不换触发词（只要权重）。归因实验要这个开关：C 臂换了 6 处 pussy→inniepussy，
+  // 不关掉它就没法把「权重」和「措辞」分开。
+  loraTrigger?: number | boolean | null
+  // 桥的块稀疏注意力（sol-attn，comfy_kitchen CUDA 内核）。只在 cu130 venv 上那个门才开着
+  // （comfy/quant_ops.py:26-28 在 torch<cu130 时把 CUDA 后端整个禁用 → 每次都回退 dense）。
+  // 1004 在 cu124 + 1MP/243 帧那档实测是净亏（1080s vs 961s、身份 0.379→0.332），
+  // 且上游 issue #16382 = 挂 LoRA + sol-attn 出伪影 —— 我们每条都带 turbo LoRA，所以这条只能当 A/B 仪表，默认关。
+  sparse?: boolean | null
   generateAudio?: number | boolean | null
   duration?: number | null
   aspectRatio?: string | null
@@ -150,4 +165,6 @@ export interface VideoPollResponse {
   videoUrl?: string
   duration?: number
   error?: string
+  /** 上游透出的真进度（comfyui 桥 1012 起从 ws 抓 step，0-99）；没有就靠 progressHint 估 */
+  progress?: number
 }

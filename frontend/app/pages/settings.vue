@@ -214,6 +214,49 @@
           </section>
         </div>
 
+        <!-- ===== 提示词库（全局、纯文字、无图；agent 按需拉） ===== -->
+        <div v-else-if="tab === 'library'" class="settings-scroll">
+          <div class="settings-head">
+            <h2 class="settings-title">{{ t('settings.library.title') }}</h2>
+            <p class="settings-desc">{{ t('settings.library.desc') }}</p>
+          </div>
+          <section class="card svc-group">
+            <div class="svc-group-head">
+              <div class="svc-group-heading">
+                <span class="svc-group-title">{{ t('settings.library.allTitle') }}</span>
+                <div class="svc-group-sub">{{ t('settings.library.count', { active: library.filter(e => e.is_active).length, total: library.length }) }}</div>
+              </div>
+              <input v-model="libQuery" class="input" style="max-width:170px" :placeholder="t('settings.library.searchPlaceholder')" />
+              <button class="btn btn-ghost btn-sm ml-auto" @click="startAddLib"><Plus :size="13" /> {{ t('common.add') }}</button>
+            </div>
+            <div class="svc-group-sub" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+              <button v-for="g in libGroups" :key="g" :class="['tag', libGroup === g ? 'tag-accent' : '']" @click="libGroup = libGroup === g ? '' : g">{{ g }}</button>
+            </div>
+            <div v-for="e in libraryRows" :key="e.id" class="config-row">
+              <div class="provider-badge style-badge"><BookOpen :size="15" /></div>
+              <div class="config-main">
+                <div class="config-line">
+                  <span class="config-name">{{ e.title }}</span>
+                  <span class="tag mono">{{ e.group_name }}</span>
+                  <span class="tag">{{ t('settings.library.hits', { n: e.hits || 0 }) }}</span>
+                  <span v-if="!e.is_active" class="tag">{{ t('settings.common.disabled') }}</span>
+                </div>
+                <div class="config-sub mono truncate">{{ e.text.split('\n')[0] }}</div>
+                <button class="btn btn-ghost btn-sm" style="margin-top:2px" @click="libOpenId = libOpenId === e.id ? null : e.id"><ChevronDown :size="12" /> {{ t('settings.library.expand', { n: (e.text || '').length }) }}</button>
+                <pre v-if="libOpenId === e.id" class="config-sub" style="white-space:pre-wrap;max-height:320px;overflow:auto;font-size:12px;line-height:1.7;margin-top:4px">{{ e.text }}{{ e.note ? '\n\n— ' + e.note : '' }}</pre>
+                <div v-if="e.note && libOpenId !== e.id" class="config-sub truncate">{{ e.note }}</div>
+              </div>
+              <label class="config-switch">
+                <input type="checkbox" class="sr-only" :checked="e.is_active" @change="toggleLib(e)">
+                <span class="switch" :class="{ on: e.is_active }"></span>
+              </label>
+              <button class="btn btn-ghost btn-icon btn-sm" @click="startEditLib(e)"><Pencil :size="13" /></button>
+              <button class="btn btn-danger btn-icon btn-sm" @click="libToDelete = e"><Trash2 :size="13" /></button>
+            </div>
+            <p v-if="!libraryRows.length" class="config-empty">{{ t('settings.library.empty') }}</p>
+          </section>
+        </div>
+
         <!-- ===== 存储位置 ===== -->
         <div v-else-if="tab === 'storage'" class="settings-scroll">
           <div class="settings-head">
@@ -635,6 +678,41 @@
         </div>
       </form>
     </div>
+    <!-- 提示词库条目编辑 -->
+    <div v-if="libDialog" class="overlay" @click.self="libDialog = false">
+      <form class="dialog config-dialog" @submit.prevent="saveLib">
+        <div class="dialog-head">
+          <div>
+            <div class="dialog-title">{{ libEditId ? t('settings.libDialog.editTitle') : t('settings.libDialog.addTitle') }}</div>
+            <div class="dialog-sub">{{ t('settings.libDialog.sub') }}</div>
+          </div>
+          <span class="tag tag-accent ml-auto"><BookOpen :size="12" /> {{ t('settings.libDialog.tag') }}</span>
+        </div>
+        <div class="dialog-body config-dialog-body">
+          <label class="field">
+            <span class="field-label">{{ t('settings.libDialog.group') }} <span class="required">*</span></span>
+            <input v-model="libForm.group_name" class="input" :placeholder="t('settings.libDialog.groupPlaceholder')" />
+          </label>
+          <label class="field">
+            <span class="field-label">{{ t('settings.libDialog.title') }} <span class="required">*</span></span>
+            <input v-model="libForm.title" class="input" />
+          </label>
+          <label class="field">
+            <span class="field-label">{{ t('settings.libDialog.text') }} <span class="required">*</span></span>
+            <textarea v-model="libForm.text" class="textarea" rows="4"></textarea>
+            <span class="field-hint">{{ t('settings.libDialog.textHint') }}</span>
+          </label>
+          <label class="field">
+            <span class="field-label">{{ t('settings.libDialog.note') }}</span>
+            <textarea v-model="libForm.note" class="textarea" rows="2"></textarea>
+          </label>
+        </div>
+        <div class="dialog-foot">
+          <button type="button" class="btn" @click="libDialog = false">{{ t('common.cancel') }}</button>
+          <button type="submit" class="btn btn-primary">{{ t('common.save') }}</button>
+        </div>
+      </form>
+    </div>
     <!-- 迁移确认（自建 dialog：ConfirmDialog 的删除语义/Enter 快捷键不合此处） -->
     <div v-if="migrateDialog" class="overlay" @click.self="!migrating && (migrateDialog = false)">
       <form class="dialog" @submit.prevent="startMigrate">
@@ -675,6 +753,14 @@
       @cancel="styleToDelete = null"
     />
     <ConfirmDialog
+      :open="!!libToDelete"
+      :title="t('settings.libDelete.title')"
+      :message="t('settings.libDelete.message', { name: libToDelete?.title })"
+      :loading="deletingLib"
+      @confirm="confirmDelLib"
+      @cancel="libToDelete = null"
+    />
+    <ConfirmDialog
       :open="!!skillToDelete"
       :title="t('settings.skillDelete.title')"
       :message="t('settings.skillDelete.message', { id: skillToDelete })"
@@ -686,12 +772,12 @@
 </template>
 
 <script setup>
-import { Plus, Pencil, Trash2, FileText, ChevronDown, Check, Loader2, Bot, Cpu, Sparkles, Palette, ExternalLink, Star, HardDrive, Database, RefreshCw, Download, Languages, SunMoon, X } from 'lucide-vue-next'
+import { Plus, Pencil, Trash2, FileText, ChevronDown, Check, Loader2, Bot, Cpu, Sparkles, Palette, BookOpen, ExternalLink, Star, HardDrive, Database, RefreshCw, Download, Languages, SunMoon, X } from 'lucide-vue-next'
 import BaseSelect from '~/components/BaseSelect.vue'
 import { toast } from 'vue-sonner'
 import { toastError } from '~/composables/useToast'
 import { useI18n } from 'vue-i18n'
-import { aiConfigAPI, promptAPI, skillsAPI, storageAPI, stylePresetAPI, settingsAPI, serverUpdateAPI } from '~/composables/useApi'
+import { aiConfigAPI, promptAPI, skillsAPI, storageAPI, stylePresetAPI, promptLibraryAPI, settingsAPI, serverUpdateAPI } from '~/composables/useApi'
 import { useDesktopBridge } from '~/composables/useDesktopBridge'
 import { useMigrateState } from '~/composables/useMigrateState'
 import { useTheme } from '~/composables/useTheme'
@@ -707,6 +793,7 @@ const baseTabs = computed(() => [
   { id: 'ai', label: t('settings.tabs.ai'), icon: Cpu },
   { id: 'general', label: t('settings.tabs.general'), icon: Languages },
   { id: 'styles', label: t('settings.tabs.styles'), icon: Palette },
+  { id: 'library', label: t('settings.tabs.library'), icon: BookOpen },
   { id: 'agents', label: t('settings.tabs.agents'), icon: Bot },
   { id: 'storage', label: t('settings.tabs.storage'), icon: HardDrive },
   { id: 'about', label: t('settings.tabs.about'), icon: RefreshCw },
@@ -1161,6 +1248,71 @@ async function saveSkill(id) {
 
 // ===== Style Presets =====
 const stylePresets = ref([])
+
+// ===== 提示词库（全局、纯文字、无图；agent 用 read_prompt_library 按需拉） =====
+const library = ref([])
+const libGroups = ref([])
+const libGroup = ref('')
+const libQuery = ref('')
+const libOpenId = ref(null) // 话题级条目正文上千字符，列表只给第一行，点开看全文
+const libDialog = ref(false)
+const libEditId = ref(null)
+const libForm = reactive({ group_name: '', title: '', text: '', note: '' })
+const libToDelete = ref(null)
+const deletingLib = ref(false)
+const libraryRows = computed(() => {
+  const needle = libQuery.value.trim().toLowerCase()
+  return library.value
+    .filter(it => !libGroup.value || it.group_name === libGroup.value)
+    .filter(it => !needle || (it.title + it.text + (it.note || '')).toLowerCase().includes(needle))
+    .sort((a, b) => (b.hits || 0) - (a.hits || 0) || a.id - b.id)
+})
+async function loadLibrary() {
+  try {
+    const rows = await promptLibraryAPI.list('all=1')
+    library.value = rows
+    libGroups.value = [...new Set(rows.filter(r => r.is_active).map(r => r.group_name))]
+  } catch (e) { toastError(e) }
+}
+async function toggleLib(it) {
+  try { await promptLibraryAPI.update(it.id, { is_active: !it.is_active }); loadLibrary() } catch (e) { toastError(e) }
+}
+function startAddLib() {
+  libEditId.value = null
+  Object.assign(libForm, { group_name: libGroups.value[0] || '', title: '', text: '', note: '' })
+  libDialog.value = true
+}
+function startEditLib(it) {
+  libEditId.value = it.id
+  Object.assign(libForm, { group_name: it.group_name, title: it.title, text: it.text, note: it.note || '' })
+  libDialog.value = true
+}
+async function saveLib() {
+  if (!libForm.group_name?.trim() || !libForm.title?.trim() || !libForm.text?.trim()) {
+    toast.warning(t('settings.libDialog.required'))
+    return
+  }
+  try {
+    if (libEditId.value) await promptLibraryAPI.update(libEditId.value, { ...libForm })
+    else await promptLibraryAPI.create({ ...libForm })
+    libDialog.value = false
+    toast.success(t('common.saved'))
+    loadLibrary()
+  } catch (e) { toastError(e) }
+}
+async function confirmDelLib() {
+  const it = libToDelete.value
+  if (!it) return
+  try {
+    deletingLib.value = true
+    await promptLibraryAPI.del(it.id)
+    libToDelete.value = null
+    toast.success(t('index.deleted'))
+    loadLibrary()
+  } catch (e) { toastError(e) } finally {
+    deletingLib.value = false
+  }
+}
 const styleDialog = ref(false)
 const styleEditId = ref(null)
 const styleForm = reactive({ name: '', value: '', prompt: '', description: '', sort_order: 0 })
@@ -1238,7 +1390,7 @@ async function saveStyle() {
   } catch (e) { toastError(e) }
 }
 
-onMounted(() => { loadCfgs(); loadAgents(); loadAllSkills(); loadAgentPrompt(selectedAgent.value); loadStylePresets() })
+onMounted(() => { loadCfgs(); loadAgents(); loadAllSkills(); loadAgentPrompt(selectedAgent.value); loadStylePresets(); loadLibrary() })
 
 // ===== 应用内引导（设置页）：快捷配置 + 手动模板两步 =====
 const SETTINGS_TOUR = [

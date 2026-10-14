@@ -71,6 +71,11 @@ test('前端的衔接显示与后端同一个判据：跨场景不接', () => {
   // v-for 与 v-if 同元素时 v-if 先求值（拿不到循环变量）⇒ 必须用 filter，别写回 v-if
   assert.match(view, /v-for="c in \[chainInfo\(selectedSb\)\]\.filter\(/)
   assert.doesNotMatch(view, /v-for="c in \[chainInfo\([^)]*\)\]" v-if=/)
+  // 视频制作列表的行标题必须是分镜标题，不能是 description（每条 description 都以【镜头1】开头 → 整列看着都是「镜头1」）
+  assert.match(view, /title: sb\.title \|\| t\('episode\.vid\.shotN'/)
+  // comfyui 档位必须写真实像素：'480p'→864×480、'720p'→1472×832（comfyui-video.ts:42/48），且不给空档位 1080p
+  assert.match(view, /comfyui: \['480p', '720p'\]/)
+  assert.match(view, /comfyui: \{ '480p': '864×480', '720p': '1472×832' \}/)
   assert.match(gen, /await extractLastFrame\(ctx\.source\)/)
 })
 

@@ -163,8 +163,22 @@ export const stylePresetAPI = {
   del: (id: number) => api.del(`/style-presets/${id}`),
 }
 
+// 提示词库：全局、纯文字、无图；agent 用 read_prompt_library 按需拉
+export const promptLibraryAPI = {
+  list: (query = '') => api.get(`/prompt-library${query ? `?${query}` : ''}`),
+  create: (d: any) => api.post('/prompt-library', d),
+  update: (id: number, d: any) => api.put(`/prompt-library/${id}`, d),
+  del: (id: number) => api.del(`/prompt-library/${id}`),
+}
+
 export const storageAPI = {
   info: () => api.get('/storage'),
+}
+
+// 本机 ComfyUI 的 LoRA 清单（工作台上方那个下拉用）。后端替前端去问 6006 的 object_info，
+// 生成仍然只走 /api/v1/tasks —— 这条只是读列表，不是触发。
+export const comfyuiAPI = {
+  loras: (configId?: number) => api.get(`/comfyui/loras${configId ? `?config_id=${configId}` : ''}`),
 }
 
 export const settingsAPI = {

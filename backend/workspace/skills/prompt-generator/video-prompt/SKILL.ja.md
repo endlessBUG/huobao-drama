@@ -85,7 +85,7 @@ subject_definitions:
 <Subject 2> is [角色名] from <Picture 2>, on the right of frame.
 <Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
 summary:
-[Shot 1] is a 12-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
+[Shot 1] is a [片长]-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
 retention_analysis:
 <Subject 1> fully_preserved
 <Subject 2> fully_preserved
@@ -125,6 +125,7 @@ non_diegetic_music:
 
 **カットの書き方（公式 §4.2、ハードルール）**：
 - **`[Shot 1]` にはタイムスタンプを付けない**；以降は `[Shot N] At MM:SS.mmm, ...` とし、カット点は**厳密に増加し、尺を超えない**
+- **アンカーは尺いっぱいに等分し、例句の間隔を写さない**：12s → `At 00:01.500 / 00:04.000 / 00:07.000 / 00:10.000`；15s → `At 00:01.500 / 00:05.000 / 00:09.000 / 00:13.000`。最後のアンカーは 尺−1.5s 以内に収め、**最後の 1.5 秒の画面**を必ず書く—— 末尾で空転したり前の一拍を繰り返してはいけない（1006 実測：15s の镜头でアンカーが 00:07-00:11 までだと、後半は同じ位置ですったまま）
 - 通常のカットはこの5つのいずれか：`the camera cuts to`、`the shot cuts to`、`the shot transitions to`、`the shot changes to`、`the shot switches to`。**ディゾルブ／フェード／ワイプはユーザーが明示的に要求した場合のみ**、既定はハードカット
 - 「切回」に**公式の対応語はない**。`cuts back to` と直訳しないこと。代わりに**前のカットを回指**して主体を再提示する。例：
   `[Shot 2] At 00:03.000, the shot cuts to a close-up of <Subject 4> (S2), the young man in the dark-grey hoodie from Shot 1, ...`

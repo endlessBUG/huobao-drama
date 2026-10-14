@@ -233,6 +233,7 @@
       "general": "一般",
       "ai": "AI サービス",
       "styles": "スタイルプリセット",
+      "library": "プロンプトライブラリ",
       "storage": "保存場所",
       "about": "更新について",
       "agents": "Agent 設定"
@@ -438,6 +439,33 @@
       "pickFailed": "ディレクトリの選択に失敗しました",
       "failed": "移行に失敗しました。元の保存場所に戻しました"
     },
+    "library": {
+      "title": "プロンプトライブラリ",
+      "desc": "全体共通・テキストのみ・画像なし。プロンプト Agent は分镜の動画プロンプトを書く時にまず引数なしで read_prompt_library を呼んで条目一覧を取り、必要な条はその id で 2 回目に呼んで詳細を取ります。一覧は軽く詳細は必要時取得なので、条目を足しても毎回の token は増えません。シーン・小道具の最終プロンプトでは使いません。詳細を取られた条目は hits が 1 増え、一覧はよく使われる順に並びます。",
+      "allTitle": "すべての条目",
+      "count": "{active} 件有効 · {total} 件合計",
+      "searchPlaceholder": "タイトル / 内容 / 備考を検索",
+      "hits": "{n} 回取得",
+      "expand": "全文を見る（{n} 文字）",
+      "empty": "条目がまだありません"
+    },
+    "libDialog": {
+      "tag": "プロンプトライブラリ",
+      "sub": "実測で検証済みで、かつ SKILL に無い言い回しだけ。同じ規範を二箇所に置くとズレます",
+      "addTitle": "条目を追加",
+      "editTitle": "条目を編集",
+      "group": "グループ",
+      "groupPlaceholder": "例：解剖 · トリ",
+      "title": "タイトル",
+      "text": "プロンプト内容",
+      "textHint": "AI が見る言い回しそのもの（動画プロンプトは英語）",
+      "note": "備考",
+      "required": "グループ・タイトル・内容は必須"
+    },
+    "libDelete": {
+      "title": "条目を削除",
+      "message": "「{name}」を削除しますか？ライブラリは全体共通なので、どの作品の AI も取りられなくなります。ただ目に入れないだけなら「無効」を使ってください。"
+    },
     "styleDelete": {
       "title": "スタイルプリセットを削除",
       "message": "スタイル「{name}」を削除しますか？使用中のプロジェクトには影響しませんが、削除した組み込みスタイルは再起動で復元される場合があります。「無効化」の利用をおすすめします。"
@@ -456,11 +484,15 @@
       "viewFilm": "完成映像を見る",
       "continue": "制作を続ける",
       "start": "制作を開始",
-      "resolution": "解像度"
+      "resolution": "解像度",
+      "lora": "動画 LoRA"
     },
     "model": {
       "defaultWith": "デフォルト · {model}",
-      "notConfigured": "未設定"
+      "notConfigured": "未設定",
+      "loraNone": "LoRA なし（既定）",
+      "loraStrength": "強度",
+      "loraStrengthHint": "1.0 は作者の設計値、0.6–0.8 は軽め。この選択器は ComfyUI を選んだ時だけ出ます"
     },
     "sidebar": {
       "inProgress": "進行中",

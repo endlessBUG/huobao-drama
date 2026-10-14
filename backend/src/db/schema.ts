@@ -295,3 +295,17 @@ export const appSettings = sqliteTable('app_settings', {
   value: text('value').notNull(),
   updatedAt: text('updated_at').notNull(),
 })
+
+// 提示词库：全局、纯文字（不像 props 那样挂剧、也没有图）。
+// agent 用 read_prompt_library 按需拉，不整本注入 system prompt。
+export const promptLibrary = sqliteTable('prompt_library', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  groupName: text('group_name').notNull(),
+  title: text('title').notNull(),
+  text: text('text').notNull(),
+  note: text('note'),
+  hits: integer('hits').default(0),
+  isActive: integer('is_active', { mode: 'boolean' }).default(true),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})

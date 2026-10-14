@@ -297,6 +297,20 @@ export const sqliteSchemaStatements = [
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
+
+  // 提示词库：全局、纯文字、无图（不像 props 挂剧）。UNIQUE(group_name,title) 让种子幂等。
+  `CREATE TABLE IF NOT EXISTS prompt_library (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_name TEXT NOT NULL,
+    title TEXT NOT NULL,
+    text TEXT NOT NULL,
+    note TEXT,
+    hits INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (group_name, title)
+  )`,
 ]
 
 /**
@@ -382,6 +396,30 @@ const UPGRADE_SQL = 'UPDATE style_presets SET "name" = ?, "prompt" = ?, "descrip
 // 内容寻址下架：命中下架种子原文才删除
 const REMOVE_SQL = 'DELETE FROM style_presets WHERE "value" = ? AND "prompt" = ?'
 
+// 提示词库种子：**话题级**一条（像 skill 那样：名字 = 话题，正文 = 整段口径）。
+// agent 第一步只拿到「穴 / 女性生殖器」这一行，需要时才按 id 取那 1.8k 字符的正文。
+// 说话人四条、段首 1 秒无对白、13 类运镜都已在 workspace/skills 里，不往这儿抄第二份。
+const PROMPT_LIBRARY_SEEDS = [{
+  group: "穴", title: "女性生殖器",
+  // 正文/备注直接抄库里 #31（这一份就是唯一源；改口径先改库这条，再跑这个脚本回写种子）
+  text: `【主词】pussy（6537 条 civitai 高赞 NSFW prompt 里 2611 条用了它）；vulva 只有 45，labia majora / labia minora / vestibule / perineum 都是 0 ⇒ 写 pussy 和下面的社区词，别写临床词。
+【合拢窄缝（一线天）】innie pussy 136、tight pussy 46、cleft of venus 40、small pussy lips tucked inside。别写 closed pussy（0 条）。
+【外露蓬松】puffy pussy 54、pussy lips 53、plump pussy 3；outie pussy 只有 2 条别指望。butterfly / asymmetrical 当阴部形状是 0（它们在语料里是嘴和头发的词）。
+【完整结构】合着的窄缝也要部件都在画面里：pussy lips, inner labia, clitoral hood, clitoris, cleft of venus, mons pubis / fat mons, vaginal opening。词频：clitoris 111 / labia 86 / clitoral hood 32 / opening 27 / urethra 7 / mons 5 / inner labia 4 / glans 3。一条里同时点出 ≥3 个部件的只有 7 条，最完整那条写的是 cleft of venus, clitoral hood, clitoris, labia, mons。
+【水光】wet pussy 210 + pussy juice 263 + dripping pussy 28（单写 dripping 会跟 cum 混）+ juicy pussy 13 + glistening 32。
+【颜色】pink 1186（pink pussy 16）、dark 1189（dark pussy 1）。「粉嫩」要 pink 和 wet 一起写，光写 pink 会跑到嘴唇和乳头上。
+【毛发】pubic hair 260 / light pubic hair 7 / tuft of pubic hair 3 / shaved pussy 25 / trimmed pussy 6 / smooth pussy 1；hairless pussy 是 0 ⇒ 无毛写 shaved 或 smooth。不写模型自己加。
+【隔布轮廓】cameltoe 176（靠衣物触发：thong 334 / fishnet 177 / g-string 48 / leggings 43）、pussy peek 36、pussy visible 42、no panties 163、panties pull 15。
+【细节开关】pussy focus 102、pussy presentation 28、detailed pussy 69、realistic pussy 22。只写 nude 不给这几个词，模型会把那块画成没有结构的色片（本机实测过）。
+【用词坑】seam 只有 2 条，而且那两条指的是衣服缝 —— 本机第一版分镜写的就是 narrow vertical seam，结果画出一条布缝。
+【视角】俯视大特写时 clitoris 常被 clitoral hood 那层褶盖住（danbooru clitoral_hood 维基原话）；要 clitoris 就换角度，只要窄缝就明写 the clitoral hood covering it。
+【取景】大特写只拍胯与大腿：frames only her hips and inner thighs, the pussy filling the lower half of the frame（带全身时解剖只占画面一小块，必然糊，本机实测）。手指别卡在 cleft 两侧，写 fingers resting on her inner thigh beside the cleft。
+【语法】(x:1.3) 权重括号和 score_9, score_8_up 是 SD / pony 的语法；H3 的文本编码器是 Qwen3-VL，写自然语言句子，不要堆标签。`,
+  note: `来源：① HF dataset wallstoneai/civitai-top-nsfw-images-with-metadata 的 prompts.json（6537 条 civitai 高赞 NSFW 图原 prompt，正文里的数字就是在这些条里有多少条用了该词）② danbooru 标签维基 pussy / cleft_of_venus / long_labia / fat_mons / mons_pubis / clitoral_hood / pussy_focus / pussy_peek / cameltoe / pubic_hair / pussy_juice / wet_clothes（labia_majora、labia_minora、vestibule、camel_toe 是 404 或别名，no_pubic_hair 是废弃标签）③ 本机 1006 实测（1472×832 / 294 帧 / heretic 无审查编码器）：写 parted / opening and closing 画成张开一坨、写 seam 画出布缝、取景带全身时糊，改成 cleft + 合着 + 只拍胯之后形状才读得出来（8.5s / 10.5s 中心放大判据）。人看的那份同内容文档在 docs/prompt-vulva-terms.md。`,
+}]
+// 幂等：按 (group_name, title) 判存在，不覆盖用户改过的行
+const SEED_LIB_SQL = 'INSERT INTO prompt_library ("group_name", "title", "text", "note", "hits", "is_active", "created_at", "updated_at") SELECT ?, ?, ?, ?, 0, 1, ?, ? WHERE NOT EXISTS (SELECT 1 FROM prompt_library WHERE group_name = ? AND title = ?)'
+
 // 幂等加列：新库走 CREATE TABLE 已带列，旧库走 ALTER 补列；已存在则忽略（无 IF NOT EXISTS）
 function addColumnIfMissing(sqlite: Database.Database, table: string, column: string) {
   try {
@@ -416,4 +454,12 @@ export function initSqliteSchema(sqlite: Database.Database) {
     const res = removeSeed.run(value, prompt)
     if (res.changes > 0) console.log(`🗑️ 风格预设「${value}」已下架`)
   }
+  const insertLibSeed = sqlite.prepare(SEED_LIB_SQL)
+  let libAdded = 0
+  for (const s of PROMPT_LIBRARY_SEEDS) {
+    const ts = new Date().toISOString()
+    const res = insertLibSeed.run(s.group, s.title, s.text, s.note, ts, ts, s.group, s.title)
+    if (res.changes > 0) libAdded++
+  }
+  if (libAdded > 0) console.log(`📚 提示词库补了 ${libAdded} 条种子`)
 }

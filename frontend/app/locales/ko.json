@@ -233,6 +233,7 @@
       "general": "일반",
       "ai": "AI 서비스",
       "styles": "스타일 프리셋",
+      "library": "프롬프트 라이브러리",
       "storage": "저장 위치",
       "about": "업데이트 정보",
       "agents": "Agent 설정"
@@ -438,6 +439,33 @@
       "pickFailed": "디렉터리 선택에 실패했습니다",
       "failed": "마이그레이션에 실패하여 원래 저장 위치로 복원되었습니다"
     },
+    "library": {
+      "title": "프롬프트 라이브러리",
+      "desc": "전역·텍스트만·그림 없음. 프롬프트 Agent 는 스토리보드의 영상 프롬프트를 쓸 때 먼저 매개변수 없이 read_prompt_library 를 호출해 항목 목록을 받고, 필요한 항목은 그 id 로 한 번 더 호출해 상세를 가져옵니다. 목록은 가볍고 상세는 필요 시 조회하므로, 항목을 추가해도 매 호출의 token 이 늘지 않습니다. 씬·소품 최종 프롬프트에서는 사용하지 않습니다. 상세가 조회된 항목은 hits 가 1 증가하고 목록은 자주 쓰인 순으로 정렬됩니다.",
+      "allTitle": "모든 항목",
+      "count": "{active} 개 활성 · {total} 개 전체",
+      "searchPlaceholder": "제목 / 내용 / 비고 검색",
+      "hits": "{n} 회 조회",
+      "expand": "전문 보기 ({n} 자)",
+      "empty": "아직 항목이 없습니다"
+    },
+    "libDialog": {
+      "tag": "프롬프트 라이브러리",
+      "sub": "실측으로 검증되고 SKILL 에 없는 표현만 저장하세요. 같은 규범을 두 곳에 두면 서로 어긋납니다",
+      "addTitle": "항목 추가",
+      "editTitle": "항목 편집",
+      "group": "분류",
+      "groupPlaceholder": "예: 해부 · 클로즈업",
+      "title": "제목",
+      "text": "프롬프트 내용",
+      "textHint": "AI 가 보는 표현 그 자체 (영상 프롬프트는 영어)",
+      "note": "비고",
+      "required": "분류·제목·내용은 필수"
+    },
+    "libDelete": {
+      "title": "항목 삭제",
+      "message": "「{name}」을 삭제할까요? 라이브러리는 전역이라 모든 작품의 AI 가 더 이상 조회하지 못합니다. 그냥 안 쓰려면 「비활성화」를 쓰세요."
+    },
     "styleDelete": {
       "title": "스타일 프리셋 삭제",
       "message": "스타일 「{name}」을(를) 삭제하시겠습니까? 사용 중인 프로젝트에는 영향이 없지만, 삭제된 기본 제공 스타일은 재시작 시 복원될 수 있습니다. 「비활성화」를 권장합니다."
@@ -456,11 +484,15 @@
       "viewFilm": "완성 영상 보기",
       "continue": "제작 계속",
       "start": "제작 시작",
-      "resolution": "해상도"
+      "resolution": "해상도",
+      "lora": "영상 LoRA"
     },
     "model": {
       "defaultWith": "기본 · {model}",
-      "notConfigured": "미설정"
+      "notConfigured": "미설정",
+      "loraNone": "LoRA 없음 (기본)",
+      "loraStrength": "강도",
+      "loraStrengthHint": "1.0은 저자가 설계한 값, 0.6–0.8은 가볍게. 이 선택기는 ComfyUI를 고를 때만 나옵니다"
     },
     "sidebar": {
       "inProgress": "진행 중",

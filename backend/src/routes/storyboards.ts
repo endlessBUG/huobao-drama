@@ -131,6 +131,9 @@ app.put('/:id', async (c) => {
     title: 'title', description: 'description', shot_type: 'shotType',
     angle: 'angle', movement: 'movement', duration: 'duration',
     video_prompt: 'videoPrompt',
+    // 全参考提示词必须在表里：不在的话 PUT 回 200、库里却没写进去（静默丢），
+    // 任何走这条接口的脚本都会以为自己改成功了（1006 实测踩到，第五集 sb5 那次）。
+    video_prompt_full_ref: 'videoPromptFullRef',
     image_prompt: 'imagePrompt', scene_id: 'sceneId', location: 'location',
     time: 'time', atmosphere: 'atmosphere', result: 'result',
     bgm_prompt: 'bgmPrompt', sound_effect: 'soundEffect',

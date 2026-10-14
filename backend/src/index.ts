@@ -15,6 +15,8 @@ import tasks from './routes/tasks.js'
 import upload from './routes/upload.js'
 import aiConfigs, { aiProviders } from './routes/aiConfigs.js'
 import stylePresets from './routes/stylePresets.js'
+import promptLibrary from './routes/promptLibrary.js'
+import comfyuiLoras from './routes/comfyuiLoras.js'
 import prompts from './routes/prompts.js'
 import agent from './routes/agent.js'
 import merge from './routes/merge.js'
@@ -61,6 +63,8 @@ api.route('/upload', upload)
 api.route('/ai-configs', aiConfigs)
 api.route('/ai-providers', aiProviders)
 api.route('/style-presets', stylePresets)
+api.route('/prompt-library', promptLibrary)
+api.route('/comfyui/loras', comfyuiLoras)
 api.route('/prompts', prompts)
 api.route('/agent', agent)
 api.route('/merge', merge)

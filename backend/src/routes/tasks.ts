@@ -194,6 +194,10 @@ app.post('/', async (c) => {
         promptExtend: videoBody!.prompt_extend,
         watermark: videoBody!.watermark,
         chain: videoBody!.chain,
+        lora: videoBody!.lora,
+        loraStrength: videoBody!.lora_strength ?? videoBody!.loraStrength,
+        loraTrigger: videoBody!.lora_trigger ?? videoBody!.loraTrigger,
+        sparse: videoBody!.sparse,   // 桥的 sol-attn 开关（A/B 仪表，默认关）
         configId,
       })
 

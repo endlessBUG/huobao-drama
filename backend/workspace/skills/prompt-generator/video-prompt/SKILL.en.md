@@ -85,7 +85,7 @@ subject_definitions:
 <Subject 2> is [角色名] from <Picture 2>, on the right of frame.
 <Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
 summary:
-[Shot 1] is a 12-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
+[Shot 1] is a [片长]-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
 retention_analysis:
 <Subject 1> fully_preserved
 <Subject 2> fully_preserved
@@ -125,6 +125,7 @@ non_diegetic_music:
 
 **Writing cuts (official §4.2, hard rules)**:
 - **`[Shot 1]` carries no timestamp**; later shots use `[Shot N] At MM:SS.mmm, ...`, with cut times **strictly increasing and within the video duration**
+- **Spread the anchors across the whole duration — do not copy the example's spacing**: 12s → `At 00:01.500 / 00:04.000 / 00:07.000 / 00:10.000`; 15s → `At 00:01.500 / 00:05.000 / 00:09.000 / 00:13.000`. The last anchor must be ≤ duration − 1.5s and must say **what happens in the final 1.5 seconds**; the tail may not idle or repeat the previous beat (measured 1006: 15s shots whose anchors stopped at 00:07-00:11 spent the second half grinding in place)
 - For ordinary cuts use only one of these five: `the camera cuts to`, `the shot cuts to`, `the shot transitions to`, `the shot changes to`, `the shot switches to`. **Cross-dissolve / fade / wipe only when the user explicitly asks**; default to hard cuts
 - "Cut back" has **no official equivalent** — never render it literally as `cuts back to`. Instead **refer back to the previous shot** while restating the subject, e.g.:
   `[Shot 2] At 00:03.000, the shot cuts to a close-up of <Subject 4> (S2), the young man in the dark-grey hoodie from Shot 1, ...`

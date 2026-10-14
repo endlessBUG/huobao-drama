@@ -233,6 +233,7 @@
       "general": "通用",
       "ai": "AI 服务",
       "styles": "风格预设",
+      "library": "提示词库",
       "storage": "存储位置",
       "about": "关于更新",
       "agents": "Agent 配置"
@@ -438,6 +439,33 @@
       "pickFailed": "选择目录失败",
       "failed": "迁移失败，已恢复原存储位置"
     },
+    "library": {
+      "title": "提示词库",
+      "desc": "全局共用、纯文字、没有图。提示词 Agent 写分镜的视频提示词时会先调用 read_prompt_library（不带参数）拿条目清单，需要哪条再按它的 id 调用一次取详情 —— 清单常驻、详情按需拉，所以加条目不会增加每次调用的 token；写场景或道具的最终提示词不会调用它。被取过详情的条目 hits 加一，列表按常用排序。",
+      "allTitle": "全部条目",
+      "count": "{active} 个启用 · {total} 个总计",
+      "searchPlaceholder": "搜标题 / 内容 / 备注",
+      "hits": "被拉 {n} 次",
+      "expand": "看全文（{n} 字符）",
+      "empty": "库里还没有条目"
+    },
+    "libDialog": {
+      "tag": "提示词库",
+      "sub": "只沉淀实测过、且 SKILL 里没有的写法；同一份规范种两处会互相漂移",
+      "addTitle": "新增提示词条目",
+      "editTitle": "编辑提示词条目",
+      "group": "分组",
+      "groupPlaceholder": "例如：解剖 · 特写",
+      "title": "标题",
+      "text": "提示词内容",
+      "textHint": "给 AI 看的写法本身（视频提示词是英文）",
+      "note": "备注",
+      "required": "分组、标题和内容都是必填"
+    },
+    "libDelete": {
+      "title": "删除条目",
+      "message": "确定删除「{name}」？库是全局共用的，删了以后所有剧的 AI 都拉不到它；只想不起作用请用「停用」。"
+    },
     "styleDelete": {
       "title": "删除风格预设",
       "message": "确定删除风格「{name}」？已使用此风格的项目不受影响，但删除的内置风格重启后可能恢复，建议改用「停用」。"
@@ -456,11 +484,15 @@
       "viewFilm": "查看成片",
       "continue": "继续制作",
       "start": "开始制作",
-      "resolution": "分辨率"
+      "resolution": "分辨率",
+      "lora": "视频 LoRA"
     },
     "model": {
       "defaultWith": "默认 · {model}",
-      "notConfigured": "未配置"
+      "notConfigured": "未配置",
+      "loraNone": "不挂 LoRA（默认）",
+      "loraStrength": "强度",
+      "loraStrengthHint": "1.0 是作者的设计值，0.6–0.8 轻一档；这个选择器只在本机 ComfyUI 下出现"
     },
     "sidebar": {
       "inProgress": "进行中",

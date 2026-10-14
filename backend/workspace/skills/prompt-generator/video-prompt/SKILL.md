@@ -87,7 +87,7 @@ subject_definitions:
 <Subject 2> is [角色名] from <Picture 2>, on the right of frame by the [固定陈设].
 <Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
 summary:
-[Shot 1] is a 12-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
+[Shot 1] is a [片长]-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
 retention_analysis:
 <Subject 1> fully_preserved
 <Subject 2> fully_preserved
@@ -129,6 +129,7 @@ non_diegetic_music:
 
 **切镜写法（官方 §4.2，硬规则）**：
 - **`[Shot 1]` 不带时间戳**；后续用 `[Shot N] At MM:SS.mmm, ...`，切点**严格递增且不得超过片长**
+- **锚点要按片长等分，不许照抄例句的排布**：12s → `At 00:01.500 / 00:04.000 / 00:07.000 / 00:10.000`；15s → `At 00:01.500 / 00:05.000 / 00:09.000 / 00:13.000`。最后一个锚必须 ≤ 片长 − 1.5s，并且要写清**最后 1.5 秒的画面**——尾巴不许空转、不许重复上一拍（1006 实测：15s 的镜头锚点只写到 00:07–00:11 时，后半段就在原地磨，看着像没发生事）
 - 普通切镜只用这五个之一：`the camera cuts to`、`the shot cuts to`、`the shot transitions to`、`the shot changes to`、`the shot switches to`。**叠化／淡入淡出／划像只在用户明确要求时用**，默认一律硬切
 - 中文 `video_prompt` 里的「切到／切回」只给人看，写进 `video_prompt_full_ref` 时必须换成上面五个之一。**「切回」没有官方对应词**，不要直译成 `cuts back to`——用**回指上一镜**的写法重新交代主体，例：
   `[Shot 2] At 00:03.000, the shot cuts to a close-up of <Subject 4> (S2), the young man in the dark-grey hoodie from Shot 1, ...`

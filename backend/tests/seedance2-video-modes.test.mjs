@@ -55,11 +55,13 @@ test('video resolution is fixed per episode, editable, and locked into video tas
   const tasks = read('src/routes/tasks.ts')
   const service = read('src/services/generation.ts')
 
-  // 创建集时固定（默认 480p，仅接受 480p/720p/1080p）
-  assert.match(episodes, /\['480p', '720p', '1080p'\]\.includes\(body\.resolution\)/)
+  // 创建集时固定（默认 480p）。1015：白名单从「只有三个档位名」扩成「档位名或直写画布」
+  //（generation/adapter 1007 就收了画布，路由还挡着 —— 画布只能脚本直写 sqlite 进库）
+  assert.match(episodes, /isResolutionValue = \(v: any\) => \['480p', '720p', '1080p'\]\.includes\(v\) \|\| \/\^\\d\+x\\d\+\$\/i/)
+  assert.match(episodes, /isResolutionValue\(body\.resolution\)/)
   // PUT 可修改，白名单校验
   assert.match(episodes, /'status', 'resolution'\]/)
-  assert.match(episodes, /resolution 只支持 480p \/ 720p/)
+  assert.match(episodes, /resolution 支持 480p \/ 720p \/ 1080p，或直接写画布/)
   // 视频任务锁定集的分辨率（优先于请求体）
   assert.match(tasks, /episodeResolution = ep\.resolution/)
   assert.match(tasks, /resolution: episodeResolution \|\| videoBody!\.resolution/)

@@ -9,6 +9,9 @@ import { getVideoPromptBatchStatus, startVideoPromptBatch } from '../services/vi
 
 const app = new Hono()
 
+// 档位名或直写画布都算合法（画布透传口径见 generation.ts 的 normalizeStoredVideoResolution）
+const isResolutionValue = (v: any) => ['480p', '720p', '1080p'].includes(v) || /^\d+x\d+$/i.test(String(v || '').trim())
+
 // POST /episodes — Create a new episode
 app.post('/', async (c) => {
   const body = await c.req.json()
@@ -33,9 +36,12 @@ app.post('/', async (c) => {
     title: body.title || `第${nextNum}集`,
     imageConfigId,
     videoConfigId,
-    // 视频分辨率在创建集时固定（480p/720p/1080p），后续可通过 PUT 修改；各视频适配器再映射为厂商档位
-    // 默认 480p：comfyui 这条上 480p = SelfLift 到 864x480（不叠 FlashVSR）；720p 及以上 = SelfLift 到 1.22 MP（1472x832，2026-10-05 定案，约 34 min/条）
-    resolution: ['480p', '720p', '1080p'].includes(body.resolution) ? body.resolution : '480p',
+    // 视频分辨率在创建集时固定，后续可通过 PUT 修改；各视频适配器再映射为厂商档位。
+    // 也允许直写画布（`1024x768` 这种）：comfyui 适配器原样吃（节点自己吸到 32 网格），
+    // 量新档位只改这条数据、不用改代码（1007）。1008 踩到：generation/adapter 都收了画布，
+    // 这里的白名单还挡着 —— 画布只能靠脚本直写 sqlite 进库，走 API 会被静默改成 480p。
+    // 默认 480p：comfyui 这条上 480p = 864x480；720p = 1472x832（1.22 MP）
+    resolution: isResolutionValue(body.resolution) ? body.resolution : '480p',
     createdAt: ts,
     updatedAt: ts,
   })
@@ -63,8 +69,8 @@ app.put('/:id', async (c) => {
     if (key in body) updates[key] = body[key]
   }
   if (Object.keys(updates).length === 0) return badRequest(c, '没有可更新的字段')
-  if ('resolution' in updates && !['480p', '720p', '1080p'].includes(updates.resolution)) {
-    return badRequest(c, 'resolution 只支持 480p / 720p / 1080p')
+  if ('resolution' in updates && !isResolutionValue(updates.resolution)) {
+    return badRequest(c, 'resolution 支持 480p / 720p / 1080p，或直接写画布（例 1024x768）')
   }
 
   // Map snake_case to camelCase for drizzle

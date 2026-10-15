@@ -38,7 +38,7 @@ CLAUDE.md 里只留一条引用，细节在这。
 | 项 | 值 | 状态 |
 |---|---|---|
 | 主模型 | `minimax_h3_ref2va_pruned_nvfp4.safetensors`（12.53 GB） | ✓ 桥 `_wf_video_native`（现役默认）/ `_wf_fl2va` 的 `unet_name`；`..._pruned_int8_convrot`（20.97 GB）留作回退 |
-| 注意力 | **Veda 学习稀疏**（`custom_nodes/Veda-on-ComfyUI` + `models/veda/minimax_h3_r2va_veda_preview_fp8.safetensors` 275 MB）；`generated_sparsity=32 / reference_sparsity=32`，full_attention 两栏空 | ✓ 42.9–49.4 s/步（剔编译）vs dense 94.1 vs JZL+kitchen 60.16；每内核自测「never silently off」；**别再叠 ComfyUI 自己的 Model Sparse Attention** |
+| 注意力 | **Veda 学习稀疏**（`custom_nodes/Veda-on-ComfyUI` + `models/veda/minimax_h3_r2va_veda_preview_fp8.safetensors` 275 MB）；`generated_sparsity=32 / reference_sparsity=32`，full_attention 两栏空 | ✓ 42.9–49.4 s/步（剔编译）vs dense 94.1 vs JZL+kitchen 60.16；每内核自测「never silently off」；**别再叠 ComfyUI 自己的 Model Sparse Attention**。**Spark-H3（zechengtang v0.1.3）已装未采纳**：`custom_nodes/ComfyUI-Spark-H3` + `comfy-kitchen 0.2.37+spark.h3.sm120.cu130.1`（他们的 fork wheel，顶了 PyPI 原版 0.2.37；`pip install --no-deps`，torch 未动）—— 实测 speed 档 371/351 vs Veda 锚 349 = 平手（见上表）。回退法：`pip install comfy-kitchen==0.2.37` + 删节点目录 + 重启 |
 | 文本编码器 | `qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors`（15.68 GB，无审查） | ✓ |
 | 视频 / 音频 VAE | `minimax_h3_video_vae_fp16`（5.21 GB）/ `minimax_h3_audio_vae_fp32`（0.61 GB） | ✓ |
 | LoRA | `minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16`（1.96 GB） | ✓ |

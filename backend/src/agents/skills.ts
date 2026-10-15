@@ -11,15 +11,11 @@
  */
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+import { WORKSPACE_ROOT } from '../utils/paths.js'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-// 桌面版由 Electron 主进程注入 WORKSPACE_PATH（userData 下的可写副本）；dev 锚定 backend/workspace
-const WORKSPACE_DIR = process.env.WORKSPACE_PATH
-  ? path.resolve(process.env.WORKSPACE_PATH)
-  : path.resolve(__dirname, '../../workspace')
+// 路径锚点在 utils/paths.ts（全项目唯一）；这里只别名出本地变量，语义不变
+const WORKSPACE_DIR = WORKSPACE_ROOT
 const SKILLS_DIR = path.join(WORKSPACE_DIR, 'skills')
 
 // 覆写默认 filesystem instructions（默认文案带绝对路径，暴露 workspace 字样）

@@ -21,3 +21,9 @@ export const DATA_ROOT = process.env.HUOBAO_DATA_DIR
     : path.join(repoRoot, 'data'))
 
 export const STORAGE_ROOT = process.env.STORAGE_PATH ?? path.join(DATA_ROOT, 'static')
+
+// Agent 工作目录（Mastra workspace jail 根）：桌面版由 Electron 主进程注入 WORKSPACE_PATH（userData 下的可写副本）；
+// dev / 服务器生产锚定 backend/workspace。1016 起 DB 种子也从这里读社区技法参考文件（sqlite-schema.ts）。
+export const WORKSPACE_ROOT = process.env.WORKSPACE_PATH
+  ? path.resolve(process.env.WORKSPACE_PATH)
+  : path.join(repoRoot, 'backend', 'workspace')

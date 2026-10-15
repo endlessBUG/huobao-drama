@@ -5,6 +5,9 @@
  * - 种子语句去掉 FROM DUAL（SQLite 非法），幂等语义（WHERE NOT EXISTS）保留
  */
 import type Database from 'better-sqlite3'
+import fs from 'fs'
+import path from 'path'
+import { WORKSPACE_ROOT } from '../utils/paths.js'
 
 export const sqliteSchemaStatements = [
   `CREATE TABLE IF NOT EXISTS dramas (
@@ -417,6 +420,41 @@ const PROMPT_LIBRARY_SEEDS = [{
 【语法】(x:1.3) 权重括号和 score_9, score_8_up 是 SD / pony 的语法；H3 的文本编码器是 Qwen3-VL，写自然语言句子，不要堆标签。`,
   note: `来源：① HF dataset wallstoneai/civitai-top-nsfw-images-with-metadata 的 prompts.json（6537 条 civitai 高赞 NSFW 图原 prompt，正文里的数字就是在这些条里有多少条用了该词）② danbooru 标签维基 pussy / cleft_of_venus / long_labia / fat_mons / mons_pubis / clitoral_hood / pussy_focus / pussy_peek / cameltoe / pubic_hair / pussy_juice / wet_clothes（labia_majora、labia_minora、vestibule、camel_toe 是 404 或别名，no_pubic_hair 是废弃标签）③ 本机 1006 实测（1472×832 / 294 帧 / heretic 无审查编码器）：写 parted / opening and closing 画成张开一坨、写 seam 画出布缝、取景带全身时糊，改成 cleft + 合着 + 只拍胯之后形状才读得出来（8.5s / 10.5s 中心放大判据）。人看的那份同内容文档在 docs/prompt-vulva-terms.md。`,
 }]
+// 1016 社区技法库（用户「场景skill要做的很精致…做成一个大的skill 然后引用其他skill，主的skill 做索引」+
+// 「人物也要这样…做成一个大skill」）。正文唯一源 = workspace/skills/prompt-generator/<主skill>/references/*.md
+// —— 原样搬运自两个昨天还在更新的短剧 skill 合集：zenstory-ai/drama-skills（MIT ★2922）与
+// eternityspring/shuohao-skills（Apache-2.0 ★4606），每份文件顶部带「火宝接入说明 + 出处」行。
+// 启动时读文件幂等进库（按 group+title 判存在，不覆盖用户改过的行）；文件缺失 = 跳过，不炸库
+// （老安装包 / 半搬运 / 用户删了某份都走这条路）。主 skill 的 SKILL.md 只做索引，正文按需拉。
+const LIB_SEED_FILES = [
+  { dir: 'scene-prompt', group: '场景技法', file: 'location-and-view.md', title: '地点与视图分层',
+    note: 'Location 存空间身份（分区/入口/固定锚点/材料），View 存可复用观看方向与时段光态；写场景图、九宫格、换机位前取' },
+  { dir: 'scene-prompt', group: '场景技法', file: 'scene-anchors-and-era.md', title: '场景锚点·朝代·光照状态',
+    note: '先定具体朝代（禁「古代/架空」）、锚点要可画可认可核对、光照状态从分集反推、提示词永远英文空景禁人、不写渲染画风、表面处理两档 —— 古装/年代戏写场景前必读' },
+  { dir: 'scene-prompt', group: '场景技法', file: 'scene-sheet-layout.md', title: '设定图版面（主图＋细节边框）',
+    note: '16:9 主视角 + 底部/右侧 L 形细节边框的版面规格；与我们的九宫格是两种流派，写 grid_prompt 前对照取' },
+  { dir: 'scene-prompt', group: '场景技法', file: 'era-anchors.md', title: '时代锚点从事实来',
+    note: '用设备/平台/流行语/年份等原著事实定时代，推不出就标「需创作者决定」，不默认成过去；现代戏与古装戏都先取这条' },
+  { dir: 'scene-prompt', group: '场景技法', file: 'continuity-lock.md', title: '跨镜一致性锁',
+    note: '什么值得上锁、锁面怎么写、谁把锁面带走、反例与校验；同场景跨分镜复用陈设/站位前取' },
+  { dir: 'scene-prompt', group: '场景技法', file: 'identity-vs-variant.md', title: '身份还是新变体',
+    note: '三个问题判「复用已有资产」还是「新建变体」（同建筑不同房间、翻新、换季光态）；拆资产与写提示词前取' },
+  { dir: 'character-prompt', group: '人物技法', file: 'character-and-look.md', title: '人物与造型分层',
+    note: 'Character 答「持续是谁、怎样被再次认出」，Look 答「某时段的完整外观」；换装/受伤/湿污/年龄时身份可复用；写角色最终提示词前必读' },
+  { dir: 'character-prompt', group: '人物技法', file: 'character-card-fields.md', title: '角色卡字段（人读/机喂二分）',
+    note: '给人读的字段跟报告语言，喂机器的（image.prompt / negativePrompt / sheet / voice.prompt）永远英文；硬规则全量；写人物设定与提示词前取' },
+  { dir: 'character-prompt', group: '人物技法', file: 'character-intake.md', title: '一段话拆成字段',
+    note: '用户一段话描述角色 → 拆字段、缺的补全，只有年龄/性别/年代推不出才问；细节图槽位与「细节只收长在人身上的」；优化用户手写的角色提示词时取' },
+  { dir: 'character-prompt', group: '人物技法', file: 'character-prompting.md', title: '人物提示词分层写法',
+    note: '角色提示词按分层字段组装、负面词与派生视图的写法；写三视图/正脸特写提示词前取' },
+  { dir: 'character-prompt', group: '人物技法', file: 'ref-image-sizes.md', title: '参考图尺寸与视频模型交集',
+    note: '出图三档尺寸（2:3 1056×1584 / 4:5 1152×1440 / 1:1 1328×1328）+ H3/Wan/Seedance 参考图硬交集（单边 300-5760、宽高比 0.4-2.5、≤20MB）；定角色参考图规格时取' },
+  { dir: 'character-prompt', group: '人物技法', file: 'anchor-then-derive.md', title: '先锚点后派生',
+    note: '方法 = 先出一张正面全身锚点，其余视图（大头照/90°侧面/背面/细节）只喂这张锚点、不喂原文；重出后自动标过期；做三视图一致性时取' },
+  { dir: 'prop-prompt', group: '道具技法', file: 'prop-and-state.md', title: '道具与状态设计',
+    note: '道具不是名词表：只有会被识别/操作/传递/读取/揭示的才值得受管；个体与集合、可读文字政策、内容物与人物认知两条连续性；写道具最终提示词前取' },
+]
+
 // 幂等：按 (group_name, title) 判存在，不覆盖用户改过的行
 const SEED_LIB_SQL = 'INSERT INTO prompt_library ("group_name", "title", "text", "note", "hits", "is_active", "created_at", "updated_at") SELECT ?, ?, ?, ?, 0, 1, ?, ? WHERE NOT EXISTS (SELECT 1 FROM prompt_library WHERE group_name = ? AND title = ?)'
 
@@ -459,6 +497,17 @@ export function initSqliteSchema(sqlite: Database.Database) {
   for (const s of PROMPT_LIBRARY_SEEDS) {
     const ts = new Date().toISOString()
     const res = insertLibSeed.run(s.group, s.title, s.text, s.note, ts, ts, s.group, s.title)
+    if (res.changes > 0) libAdded++
+  }
+  // 社区技法：文件是唯一源（workspace/skills/.../references/*.md），读不到就跳过 —— 老安装包、
+  // 半搬运、用户删了某份都不该炸库。库里这份是索引 + 正文，改口径先改文件再重启。
+  for (const s of LIB_SEED_FILES) {
+    const fp = path.join(WORKSPACE_ROOT, 'skills', 'prompt-generator', s.dir, 'references', s.file)
+    let text = ''
+    try { text = fs.readFileSync(fp, 'utf8').trim() } catch { continue }
+    if (!text) continue
+    const ts = new Date().toISOString()
+    const res = insertLibSeed.run(s.group, s.title, text, s.note, ts, ts, s.group, s.title)
     if (res.changes > 0) libAdded++
   }
   if (libAdded > 0) console.log(`📚 提示词库补了 ${libAdded} 条种子`)

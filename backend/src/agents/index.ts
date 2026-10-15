@@ -152,7 +152,7 @@ video_prompt 规则（硬约束）：
 - 所有提示词使用本次会话语言指令指定的目标语言输出，单段连贯描述，不要分点，不要混入无关词汇
 - 项目设定的视觉风格描述会由工具在保存图片提示词时自动注入到最终提示词的最前方，不要自行添加风格词
 - 必须实际调用保存工具，不要只在回复中给出提示词
-- 写分镜的视频提示词（video_prompt / video_prompt_full_ref）时才用 read_prompt_library：先不带参数调用拿条目清单，需要哪条就按它的 id 再调用一次取详情。用词照库里命中的条目，不要自己造术语；写场景或道具的最终提示词不用调用它`,
+- 写分镜的视频提示词（video_prompt / video_prompt_full_ref）时才用 read_prompt_library：先不带参数调用拿条目清单，需要哪条就按它的 id 再调用一次取详情。用词照库里命中的条目，不要自己造术语；写场景 / 道具的最终提示词、以及优化角色提示词时同样先不带参数拿清单（库里有社区技法条目：场景技法 / 人物技法 / 道具技法），按题材最多取 1-2 条正文，别整本读`,
   },
   character_prompt_optimizer: {
     name: '角色提示词优化',
@@ -370,8 +370,9 @@ const AGENT_TOOLS: Record<string, Record<string, any>> = {
     readStoryboardContext: storyboardTools.readStoryboardContext,
     updateStoryboard: storyboardTools.updateStoryboard,
   },
-  // 故意没有工具：优化结果只回给前端填进输入框，由用户决定要不要保存
-  character_prompt_optimizer: {},
+  // 只有一个只读工具：优化结果仍只回给前端、由用户决定要不要保存；挂库是为了让「人物技法」
+  // 真能被取到（1016 社区技法收割，主 skill 做索引、正文按需拉）
+  character_prompt_optimizer: { readPromptLibrary: promptLibraryTools.readPromptLibrary },
 }
 
 /** instructions 按请求解析：prompt 文件（或默认）+ 技能全文拼接 + 目标语言指令块

@@ -85,15 +85,16 @@ test('bridge _selftest 断言超分开/关两种形状', () => {
 
 test('adapter：480p 走 SelfLift 864x480（提升靠 latent lift，不叠 FlashVSR）；默认走 SelfLift 到 1.22 MP（1472x832）；首帧路径保持旧口径', () => {
   assert.match(adapter, /const SIZE_480P = '864x480'/)
-  assert.match(adapter, /const DEFAULT_SIZE = '1472x832'/)
+  assert.match(adapter, /const DEFAULT_SIZE = '1024x768'/) // 1016 定案：20 步无 LoRA 的生产画布
   assert.match(adapter, /const UPSCALE = 0/)
-  assert.match(adapter, /const is480 = \(record\.resolution \|\| '480p'\) === '480p'/)
+  assert.match(adapter, /const is480 = record\.resolution === '480p'/) // 1016：缺省不再当 480p，走生产默认画布
   // 2026-10-07：1080p 以前是**空设置**（is480 之外全走 DEFAULT_SIZE，所以选 1080p 和选 720p 出图完全一样）。
-  // 现在三档：480p → 864x480、1080p → 1920x1080、其它（含 720p 默认）→ 1472x832。
+  // 现在三档：480p → 864x480、1080p → 1920x1080、其它（含 720p 默认）→ 1024x768（1016 定案画布；1472x832 是 4 步 turbo 时代值）。
   // 1080p 这一档本机**还没实测过能不能吃下**（1.22 MP 是台账里这台 8G 目前最高画布）；这条断言只锁映射，不锁结论。
   assert.match(adapter, /const SIZE_1080P = '1920x1080'/)
-  assert.match(adapter, /size: firstFrameFile \? FL2VA_SIZE : \(is480 \? SIZE_480P : \(rawSize \|\| \(record\.resolution === '1080p' \? SIZE_1080P : DEFAULT_SIZE\)\)\)/)
-  assert.match(adapter, /upscale: firstFrameFile \? 2 : UPSCALE/)
+  // 1016 首尾帧：画布不再有 firstFrameUrl 例外（首尾帧走 native 的 AddGuide 链，同一条 20 步/去 LoRA）
+  assert.match(adapter, /size: is480 \? SIZE_480P : \(rawSize \|\| \(record\.resolution === '1080p' \? SIZE_1080P : DEFAULT_SIZE\)\)/)
+  assert.match(adapter, /upscale: UPSCALE/)
   // 1008：SelfLift 已下掉（用户定案「720p 直采 → VOSR2 ×2 → 2K」）。回退 = 改回 `!firstFrameFile`。
   assert.match(adapter, /selflift: false,/)
   // 2026-10-03 拍板：transition_step=3（243 帧实测 914s vs t=2 的 2846s，−68%），
@@ -112,7 +113,8 @@ test('adapter：resolution 可直接写画布；ffmpeg-merge：收尾按源高�
   const gen = readFileSync(new URL('../src/services/generation.ts', import.meta.url), 'utf8')
   assert.ok(gen.includes('/^\\d+x\\d+$/.test(value)) return value'), 'generation.ts 没让 resolution 透传画布')
   assert.ok(adapter.includes('const rawSize = /^\\d+x\\d+$/.test('), 'adapter 没读画布直写的 resolution')
-  assert.match(adapter, /size: firstFrameFile \? FL2VA_SIZE : \(is480 \? SIZE_480P : \(rawSize \|\| \(record\.resolution === '1080p' \? SIZE_1080P : DEFAULT_SIZE\)\)\)/)
+  // 1016 首尾帧：画布不再有 firstFrameUrl 例外（首尾帧走 native 的 AddGuide 链，同一条 20 步/去 LoRA）
+  assert.match(adapter, /size: is480 \? SIZE_480P : \(rawSize \|\| \(record\.resolution === '1080p' \? SIZE_1080P : DEFAULT_SIZE\)\)/)
   const merge = readFileSync(new URL('../src/services/ffmpeg-merge.ts', import.meta.url), 'utf8')
   assert.match(merge, /feed\.h >= 1000 \? ',gblur=sigma=0\.5,unsharp=5:5:1\.0' : ',unsharp=5:5:1\.0'/)
   // 不传 input_size = 保持源尺寸（与 1008 的行为一致）；传了才预缩 —— 这条不许被默认值偷偷改掉

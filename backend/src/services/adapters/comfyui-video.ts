@@ -45,7 +45,13 @@ const SIZE_480P = '864x480'
 // 1 MP 那个上限（MAX_PIXELS=768*1344）只卡参考视频（nodes.py:165），不卡输出画布，所以 1.22 MP 照跑。
 // 代价：采样 514s vs 409s（+25.7%，正好是 token 多 22% 的量），整单约 34 min/条（冷跑）。
 // 直出这个画布在 243 帧会 OOM（墙是 token 数 = 画布 × 帧数），所以只能靠 SelfLift 的分块拿 —— selflift 必须为 true。
-const DEFAULT_SIZE = '1472x832'
+// 以上是 4 步 turbo + SelfLift 时代的账，1016 定案后只作史（1472x832 走 rawSize 仍可用，20 步下 ≈16 min/条）。
+//
+// 1016 定案（用户看片拍板「就用这个」）：生产画布 = 1024×768 满画布、20 步单采、无 turbo LoRA。
+// 依据：12 步带 LoRA >750s vs 无 LoRA 454s 单变量 ⇒ 每步 2.25× 的账在 LoRA（每步税 ≥+25 s）；
+// 去 LoRA 后 nvfp4 裸权重 27.5 s/步 ⇒ 20 步实测 674 s/条（test/fresh_x2432s20.mp4，账在
+// docs/comfyui-h3-configs.md「1016 定案」）。1472×832 在 20 步口径下 ≈16 min/条，超耐心预算，故画布同步收到 768p。
+const DEFAULT_SIZE = '1024x768'
 // 2026-10-07 加：以前 `is480` 之外全走 DEFAULT_SIZE，所以选「1080p」和选「720p」出图完全一样（空设置）。
 // 1007 实测完：1920×1080 会被吸到 **1920×1072**（1080 不是 16 的倍数，H3 VAE 空间下采 = 16）= 2.07 MP，
 // 不 OOM 但每条 **117.64 min**（vs 1.22 MP 的 9.94 min = 11.8×）、每像素信息只 1.18–1.39×（13 s 反而 0.96）
@@ -57,7 +63,8 @@ const SIZE_1080P = '1920x1080'
 // 正好 2.0；而 1920x1080 的 1080/16=67.5 被吸到 67（单数）⇒ 纵向 lift = 67/34 = 1.9706，那条非整数重采样
 // 是 1080p 直采带阶梯的嫌疑来源之一。1.66 MP 介于已量的两档之间（1.22 MP = 9.94 min 常驻区、
 // 2.07 MP = 117.64 min 换页区）⇒ 这一档是「更高分辨率 + 时间还能接受」唯一还没量过的活口。
-const FL2VA_SIZE = '576x320'
+// 原 FL2VA_SIZE='576x320' 删于 1016：首尾帧改走 native 的 AddGuide 链（桥），576×320 的 fl2va 图
+// 只剩桥里 body `graph:"jzl"` 那条回退，平台适配器不再触达它。
 const UPSCALE = 0
 const FPS = 24
 const DEFAULT_LENGTH = 124
@@ -138,12 +145,18 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
       // 但为明确起见传 []（桥内部 _wf_video 会对不足 2 张补空串）
     }
 
-    // ponytail: 首帧只 staging 一张；firstFrameUrl 缺失/空则不 staging、body 无 first_frame → bridge 回 ref2v
+    // 1016 首尾帧（用户「首尾帧也要支持」）：两张各自 staging（桥要的是 input/ 里的文件名）。
+    // 缺失/空 = 不 staging、body 就没这个键 ⇒ 桥那边不进 AddGuide 链（图与不加帧时逐字节一致）。
     const firstFrameFile = record.firstFrameUrl
       ? (await stageReferenceImages([record.firstFrameUrl], inputDir, 1))[0]
       : undefined
+    const lastFrameFile = record.lastFrameUrl
+      ? (await stageReferenceImages([record.lastFrameUrl], inputDir, 1))[0]
+      : undefined
 
-    const is480 = (record.resolution || '480p') === '480p'
+    // 1016 定案：没填 resolution 的存量行 = 走生产默认画布，不再当 480p —— 480p 只由显式选择触发。
+    // （DDL 里 `resolution TEXT DEFAULT '480p'` 管住新行；这里只管 NULL/空的历史行。）
+    const is480 = record.resolution === '480p'
     // `resolution` 直接是画布（`1728x960`）时绕过所有档位名 —— JZL 节点自己把宽高吸到 32 网格，
     // 所以这里不校验，只透传。加这一条是为了量分辨率档位不用每次改代码（1007）。
     const rawSize = /^\d+x\d+$/.test((record.resolution || '').toLowerCase()) ? (record.resolution as string).toLowerCase() : null
@@ -155,17 +168,24 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
       body: {
         prompt,
         model: (record.model || config.model || 'minimax-h3-ref2v') || 'minimax-h3-ref2v',
-        size: firstFrameFile ? FL2VA_SIZE : (is480 ? SIZE_480P : (rawSize || (record.resolution === '1080p' ? SIZE_1080P : DEFAULT_SIZE))),
+        size: is480 ? SIZE_480P : (rawSize || (record.resolution === '1080p' ? SIZE_1080P : DEFAULT_SIZE)),
         length: framesForDuration(record.duration),
         images,
         ref_scale: 2.0,
-        upscale: firstFrameFile ? 2 : UPSCALE,
+        upscale: UPSCALE,
         // 1008 用户定案「720p 直采 → VOSR2 ×2 → 2K」⇒ 二采（SelfLift 的 latent lift + 高分那一步）不再做。
         // 账（台账 §当前最优，243 帧 @1.22 MP）：整单 514 s = 低分 3 步 192.8 + transition 12.3 +
         // 高分 1 步 8 块 308.9 ⇒ 下掉省的是 321 s/条，代价是画布掉到 1280×720、细节改由交付端 VOSR2 补
         // （`ffmpeg-merge` 的 `body.upscale="vosr2"`）。回退 = 这行改回 `!firstFrameFile`。
         selflift: false,
+        // 1016 定案（用户拍板）：20 步单采 + 去 turbo LoRA —— 桥那支 `no_lora:true` 摘掉 LoraLoaderModelOnly
+        // 节点、model 直吃 UNETLoader。首尾帧走同一条（用户「首尾帧也要支持」）：桥在 7 号 conditioning
+        // 后面串 MiniMaxH3AddGuide（首帧 frame_idx 0 / 尾帧 -1），画布与步数没有例外。480p/1080p/rawSize
+        // 同样 20 步（档位是用户显式选择，耗时自己承担；1080p 会到 ≈26 min）。实测锚 = x2432s20 674 s。
+        steps: 20,
+        no_lora: true,
         first_frame: firstFrameFile,
+        last_frame: lastFrameFile,
         guide: guideFile,
         prev_latent: record.prevLatent || undefined,
         save_name: record.saveName || undefined,
@@ -211,17 +231,16 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
     return result.url || null
   }
 
-  // 1012 暖跑实测锚（history `execution_start→execution_success`，124 帧整单、含解码+存盘）：
-  // 576x320 = 126 s（1.016 s/帧）· 864x480 = 364 s（2.936）· 1472x832 = 270 s（2.177，NVFP4）。
+  // 实测锚（history `execution_start→execution_success`，124 帧整单、含解码+存盘）：
+  // 576x320 = 126 s（1.016 s/帧）· 864x480 = 364 s（2.936）· 1472x832 = 270 s（2.177，4 步 turbo 时代）。
+  // 1024x768 = 674 s/243 帧 = 2.774 s/帧（1016 定案 20 步无 LoRA 实测，换算 124 帧 ≈344 s）。
   // 1920x1080 没测过，按像素比从 1472x832 外推（3.70 s/帧）—— 冷跑/排队/装载都不在锚里，进度只是估算，
   // 上限 95%，真完成由 poll 的 succeeded 定。
   progressHint(record: VideoGenerationRecord): number | undefined {
     const frames = framesForDuration(record.duration)
     const rawSize = /^\d+x\d+$/.test((record.resolution || '').toLowerCase()) ? (record.resolution as string).toLowerCase() : null
-    const size = record.firstFrameUrl
-      ? FL2VA_SIZE
-      : rawSize || (record.resolution === '1080p' ? SIZE_1080P : (record.resolution || '480p') === '480p' ? SIZE_480P : DEFAULT_SIZE)
-    const secPerFrame: Record<string, number> = { '576x320': 1.016, '864x480': 2.936, '1472x832': 2.177, '1920x1080': 3.70 }
+    const size = rawSize || (record.resolution === '1080p' ? SIZE_1080P : record.resolution === '480p' ? SIZE_480P : DEFAULT_SIZE)
+    const secPerFrame: Record<string, number> = { '576x320': 1.016, '864x480': 2.936, '1024x768': 2.774, '1472x832': 2.177, '1920x1080': 3.70 }
     const spf = secPerFrame[size]
     return spf ? Math.round(frames * spf) : undefined
   }

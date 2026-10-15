@@ -2577,7 +2577,7 @@ const RESOLUTION_DISPLAY = {
   volcengine: { '480p': '480p', '720p': '720p', '1080p': '720p' },
   minimax: { '480p': '768P', '720p': '768P', '1080p': '2K' },
   aliyun: { '480p': '480P', '720p': '720P', '1080p': '1080P' },
-  comfyui: { '480p': '864×480', '720p': '1472×832' }, // 直接写真实像素（comfyui-video.ts:42/48）
+  comfyui: { '480p': '864×480', '720p': '1024×768' }, // 直接写真实像素（comfyui-video.ts SIZE_480P/DEFAULT_SIZE；1016 定案 20 步 ⇒ 画布 1024×768）
 }
 const resolutionProvider = computed(() => RESOLUTION_TIERS[selectedVideoConfig.value?.provider] ? selectedVideoConfig.value.provider : 'volcengine')
 const resolutionOptions = computed(() => RESOLUTION_TIERS[resolutionProvider.value].map(key => ({
@@ -3975,16 +3975,17 @@ async function genVid(sb, opts = {}) {
     model: bareModelName(videoModel.value) || undefined,
     config_id: ownerConfigId(videoModelOptions.value, videoModel.value),
     reference_image_urls: referenceImages,
-    // 接力走「额外参考图」而不是 first_frame，正是为了不踩上面那条互斥：身份行保住，上一段末帧
-    // 只当第 10 个参考槽（超 9 会被适配器截断）。段必须按顺序跑（见 generation.ts 的 videoChains）。
+    // 1016（用户「首尾帧也要支持」）：分镜上存了首/尾帧图就带上。首尾帧现在走 native 的
+    // MiniMaxH3AddGuide 锚（frame_idx 0 / -1），与 ref_image_0~8 槽**并存不互斥**，画布/步数跟定案；
+    // 老「一收到首帧就改走 fl2va、ref 槽全丢」的账作废（fl2va 只剩桥里 body graph:"jzl" 回退）。
+    // 列由带 frame_type 的图片任务写入；UI 还没有选帧入口，先接数据面。
+    first_frame_url: sb.first_frame_image || sb.firstFrameImage || undefined,
+    last_frame_url: sb.last_frame_image || sb.lastFrameImage || undefined,
+    // 接力（连续拍）= 上一段末帧 keyframe + latent 直传，段必须按顺序跑（见 generation.ts 的 videoChains）。
     chain: true,
     // 第二层 LoRA（只有 comfyui 有这层）：没选就完全不传，出图与老行为逐字节一致
     lora: isComfyuiVideo.value && loraModel.value ? loraModel.value : undefined,
     lora_strength: isComfyuiVideo.value && loraModel.value ? loraStrength.value : undefined,
-    // 不传 first_frame_url：comfyui 桥一收到首帧就改走 fl2va 分支（_wf_fl2va），
-    // ref_image_0~8 槽位全部丢弃 → 角色完全重生成（实测同一分镜两个人一个都不像）。
-    // 底层 JZL_MiniMaxH3ReferenceToVideo2 没有 first_frame、JZL_MiniMaxH3ImageToVideoDual 没有 ref 槽位，
-    // 两者互斥 —— 与主分支口径一致：视频只走参考图。
   }
   if (!params.prompt && !referenceImages.length) {
     toast.error(t('episode.vid.needRefOrPrompt'))

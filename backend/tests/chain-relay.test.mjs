@@ -13,8 +13,12 @@ const adapter = readFileSync(new URL('../src/services/adapters/comfyui-video.ts'
 test('接力走 keyframe 窗口（latent 直传优先），不走 first_frame', () => {
   assert.match(gen, /if \(params\.chain\) \{[\s\S]*?relayContext\(record\.storyboardId\)/)
   assert.match(gen, /guideUrl = await extractLastFrame\(ctx\.source\)/)
-  assert.match(bridge, /if first_frame and "fl2va" in model|if first_frame:/)
-  assert.doesNotMatch(bridge, /g\["302"\]\["inputs"\]\["first_frame"\]/)
+  // 1016：first_frame/last_frame 现在也走原生图（在 7 号 conditioning 后串 AddGuide），
+  // 于是「桥里出现 first_frame 字样」不再是判据 —— 判据收窄到接力真正走的那支（JZL _wf_video）
+  // 整段不含 first_frame，且接力用的是 312 号 AddGuide 窗口。
+  assert.match(bridge, /g\["312"\] = \{"class_type": "MiniMaxH3AddGuide"/)
+  const jzlOnly = bridge.slice(bridge.indexOf('def _wf_video('), bridge.indexOf('def _wf_video_native('))
+  assert.doesNotMatch(jzlOnly, /"first_frame"/) // skip_first_frames 那个键不算，只差真帧锚键
 })
 
 test('三态衔接：跨场景不接；同场景按 continuity 决定措辞', () => {
@@ -73,10 +77,18 @@ test('前端的衔接显示与后端同一个判据：跨场景不接', () => {
   assert.doesNotMatch(view, /v-for="c in \[chainInfo\([^)]*\)\]" v-if=/)
   // 视频制作列表的行标题必须是分镜标题，不能是 description（每条 description 都以【镜头1】开头 → 整列看着都是「镜头1」）
   assert.match(view, /title: sb\.title \|\| t\('episode\.vid\.shotN'/)
-  // comfyui 档位必须写真实像素：'480p'→864×480、'720p'→1472×832（comfyui-video.ts:42/48），且不给空档位 1080p
+  // comfyui 档位必须写真实像素：'480p'→864×480、'720p'→1024×768（comfyui-video.ts SIZE_480P/DEFAULT_SIZE；1016 定案换过值），且不给空档位 1080p
   assert.match(view, /comfyui: \['480p', '720p'\]/)
-  assert.match(view, /comfyui: \{ '480p': '864×480', '720p': '1472×832' \}/)
+  assert.match(view, /comfyui: \{ '480p': '864×480', '720p': '1024×768' \}/)
   assert.match(gen, /await extractLastFrame\(ctx\.source\)/)
+})
+
+test('genVid 带上分镜的首/尾帧图（1016 起走 native AddGuide、与参考槽并存，不再互斥）', () => {
+  assert.match(view, /first_frame_url: sb\.first_frame_image \|\| sb\.firstFrameImage \|\| undefined/)
+  assert.match(view, /last_frame_url: sb\.last_frame_image \|\| sb\.lastFrameImage \|\| undefined/)
+  // 老注释「comfyui 桥一收到首帧就改走 fl2va、ref_image_0~8 槽位全部丢弃、两者互斥」作废 —— 留着它，
+  // 下一个人会照着它把这条接线又拆掉（1016 首尾帧改走 native 后 fl2va 只剩 body graph:"jzl"）
+  assert.doesNotMatch(view, /ref_image_0~8 槽位全部丢弃/)
 })
 
 // 243 帧 SelfLift 实测 47:26（含解码），300 次 × 10s = 50 分钟正好卡边界：任务 128 就是被

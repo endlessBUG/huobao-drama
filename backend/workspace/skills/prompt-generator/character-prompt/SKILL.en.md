@@ -96,9 +96,9 @@ Convert the character's personality traits into outward bearing and expression d
 ## Output
 
 **Output the prompt body and nothing else**: one plain-text passage — no explanation, no preamble, no markdown code fence, no "optimized prompt:" heading, and do not call any tool to store it: the user saves character prompts themselves on the detail page.
-The body carries no style words: **the project's visual style is prepended automatically at generation time**, so writing it in is duplication.
+The body carries no style words: **the project's visual style sits at the front of the box's default value** (the product puts it there), so writing it in is duplication.
 
-**The skeleton is mandatory (measured, 2026-09-27)**: whatever the upstream text is — empty, or a couple of scattered words — these lines must be kept verbatim:
+**Keep the skeleton, never invent it (1016 revision)**: the incoming text is the final prompt itself, and the box's default value already carries these lines. When they are present, keep them verbatim — do not delete, rewrite, or reorder them. When they are absent (the user rewrote the whole thing), do not add them either.
 
 - `Character reference sheet, left side a front-face close-up, right side three equal-height full-body views side by side showing front, 90-degree side, and back;`
 - `the close-up and the full-body views are the same character, full body in frame, neutral A-pose, the three full-body views equal in height, side by side, tops of heads and soles of feet aligned;`

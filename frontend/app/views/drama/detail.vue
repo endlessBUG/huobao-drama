@@ -253,9 +253,9 @@
                       </button>
                     </div>
                   </div>
-                  <div class="asset-final-prompt" :title="m.finalPrompt || ''">
+                  <div class="asset-final-prompt" :title="m.finalPrompt || m.sheet_default_prompt || ''">
                     <span class="afp-label">{{ t('episode.asset.finalPromptTurnaround') }}</span>
-                    <span :class="['afp-text', !m.finalPrompt && 'dim']">{{ m.finalPrompt || t('episode.asset.finalPromptAutoTurnaround') }}</span>
+                    <span :class="['afp-text', !m.finalPrompt && 'dim']">{{ m.finalPrompt || m.sheet_default_prompt }}</span>
                   </div>
                 </div>
               </article>
@@ -470,8 +470,11 @@
                   {{ finalPromptGen ? t('episode.asset.generating') + '…' : (editDraft.finalPrompt ? t('episode.sb.regenPrompt') : t('episode.asset.genPrompt')) }}
                 </button>
               </div>
+              <!-- 角色的框里空着就摆出后端下发的默认值（项目风格 + 三视图版式）= 真正发出去的那串；
+                   只是显示，没编辑过就不落库（存 null = 生成时用默认）。 -->
               <textarea
-                v-model="editDraft.finalPrompt"
+                :value="editDraft.finalPrompt || sheetDefaultOf(editTarget)"
+                @input="editDraft.finalPrompt = $event.target.value"
                 class="textarea mat-detail-prompt-text"
                 rows="5"
                 :placeholder="t('detail.mat.promptPlaceholder')"
@@ -847,6 +850,12 @@ const editDialog = ref(false)
 const editSaving = ref(false)
 const editTarget = ref(null)
 const editDraft = reactive({})
+
+// 角色空框时框里显示的默认值（后端下发，见 backend/src/services/character-sheet.ts）；
+// 场景/道具没有这回事（他们的最终提示词由 Agent 生成/手写，后端不追加任何东西）
+function sheetDefaultOf(m) {
+  return m?.kindKey === 'character' ? (m.sheet_default_prompt || '') : ''
+}
 
 function openEdit(m) {
   editTarget.value = m

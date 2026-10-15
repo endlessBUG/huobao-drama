@@ -15,20 +15,21 @@ test('提示词优化只作用于用户写下的字，空框不产出任何内�
   assert.doesNotMatch(agents, /哪怕【当前文本】是空的/)
   assert.doesNotMatch(agents, /按技能的输出结构组装/)
   assert.doesNotMatch(agents, /技能的构图骨架那几句必须原样保留/)
-  // 版式不归它：骨架由产品在生成时追加。首句锚句最容易被当成「忠实还原规则」抄回来，
-  // 而生成侧必带 → 实测原样追加过一遍，必须点名禁掉
-  assert.match(agents, /不写版式：技能「输出结构」那两段模板\*\*整段\*\*都是\*\*产品在生成时自动追加\*\*/)
+  // 版式句原样保留、缺了也不补写（1016 改版）：框里的字就是最终提示词，产品不再追加。
+  // 默认值里自带整套版式句 + 风格，优化器删掉它们 = 产物真的没有版式；没带的也不许它补。
+  assert.doesNotMatch(agents, /不写版式：技能「输出结构」那两段模板/)
+  assert.match(agents, /版式句原样保留、缺了也不补写/)
   assert.match(agents, /以参考图中的同一人物为准，脸型、五官、发型、肤色、妆容、服装与配饰一律照参考图原样保留，只改变角度与构图/)
-  assert.match(agents, /它读起来像忠实还原规则，其实是骨架的一部分/)
-  // 用户自己写的版式词也删（生成侧必带，留着就是重复）
-  assert.doesNotMatch(agents, /用户自己写了版式（三视图、白底、正面\/侧面\/背面等）就原样留着/)
+  assert.match(agents, /一个字都别删、别改写、别挪位/)
+  assert.doesNotMatch(agents, /用户自己写的版式词（三视图、白底、正面\/侧面\/背面）也删掉/)
   // 消息里不再带角色与上下文（只发框里那段字）
   assert.doesNotMatch(agents, /【角色】角色名/)
   assert.doesNotMatch(agents, /【上下文】/)
 
   const skill = read('workspace/skills/prompt-generator/character-prompt/SKILL.md')
   assert.match(skill, /版式不归你/)
-  assert.match(skill, /不要抄进结果/)
+  assert.match(skill, /原样保留 —— 别删、别改写、别挪位/)
+  assert.match(skill, /也不要补写/)
   assert.doesNotMatch(skill, /骨架不可省/)
 
   // 前端兜住：空框按钮灰掉 + 点了给提示（不白跑一次 LLM）

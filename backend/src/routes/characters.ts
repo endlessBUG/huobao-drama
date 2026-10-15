@@ -5,6 +5,7 @@ import { success, created, badRequest, now } from '../utils/response.js'
 import { toSnakeCase } from '../utils/transform.js'
 import { generateImage } from '../services/generation.js'
 import { getDramaStylePrompt } from '../services/style-preset.js'
+import { characterSheetDefaultPrompt } from '../services/character-sheet.js'
 import { logTaskError, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
 
 const app = new Hono()
@@ -39,36 +40,14 @@ app.post('/', async (c) => {
 })
 
 /**
- * 三视图骨架句 —— 与 workspace/skills/prompt-generator/character-prompt/SKILL.md 的
- * 「输出结构」一致（那份是给 agent 看的规范，这里是空框生成时的兜底，两边改动要同步）。
- * 只取骨架句，模板里的 [槽位] 不搬 —— 槽位的活由 char.appearance / char.styling 拼。
- */
-const SHEET_SKELETON_WITH_REF = [
-  '以参考图中的同一人物为准，脸型、五官、发型、肤色、妆容、服装与配饰一律照参考图原样保留，只改变角度与构图',
-  '角色设定参考图，左侧为正脸特写，右侧并列展示正面、90 度侧面、背面三张等高全身视图',
-  '特写与全身视图都是同一角色，全身入镜，中性 A 字站姿，三张全身视图等高并排、头顶脚底对齐',
-  '正脸特写与三个视图的脸、发型和服装完全一致，妆容与配饰同样一致，且与参考图是同一人',
-  '纯白背景，柔和均匀的光线，电影质感',
-].join('，')
-
-const SHEET_SKELETON_TEXT_ONLY = [
-  '角色设定参考图，左侧为正脸特写，右侧并列展示正面、90 度侧面、背面三张等高全身视图',
-  '特写与全身视图都是同一角色，全身入镜，中性 A 字站姿，三张全身视图等高并排、头顶脚底对齐',
-  '正脸特写与三个视图的脸、发型和服装完全一致，妆容与配饰同样一致',
-  '纯白背景，柔和均匀的光线，电影质感',
-].join('，')
-
-/**
- * 生图提示词 = 项目视觉风格 + 用户写的正文 + 三视图骨架。
- * 正文完全由用户决定（详情页那个文本框）：草稿优先、其次库里存的，**没写就是空** ——
- * 不拿 appearance/styling 拼兜底、不让 Agent 代笔。空框生成出来就是「风格 + 版式」，由用户自己承担。
- * 骨架是产品保证的版式，与「提示词优化」无关（优化只管用户那段字的内容）——不管用户写没写都追加，
- * 否则用户一写字版式就没了，出图不再是三视图。
- * 带参考图的骨架（「服装与配饰一律照参考图原样保留」）只在真有参考图时带，判定口径同 referenceImageFor()。
+ * 最终提示词 = **框里那串字本身**（1016 改版：「最终提示词」名副其实，框里显示的就是发出去的）。
+ * 用户改了、删了都以框里为准，后端不再往后面追加骨架 —— 否则框里看得见的版式和后端偷偷补的那份会撞成两遍。
+ * 只有框空着（从没写过、也没编辑过）才回落到默认：风格 + 骨架。
+ * 正文永远由用户决定：草稿优先、其次库里存的，不拿 appearance/styling 拼兜底、不让 Agent 代笔。
  */
 function characterImagePrompt(stylePrompt: string, userPrompt: string | null | undefined, char: typeof schema.characters.$inferSelect) {
   const content = (userPrompt || '').trim()
-  return [stylePrompt || '', content, char.localPath ? SHEET_SKELETON_WITH_REF : SHEET_SKELETON_TEXT_ONLY].filter(Boolean).join(', ')
+  return content || characterSheetDefaultPrompt(stylePrompt, !!char.localPath)
 }
 
 /**
@@ -117,7 +96,7 @@ app.post('/:id/generate-image', async (c) => {
   const [ep] = await db.select().from(schema.episodes).where(eq(schema.episodes.id, Number(body.episode_id)))
   if (!ep) return badRequest(c, '剧集不存在')
 
-  // 详情页传来的 prompt 就是框里当前的字（含没保存的草稿）；显式传了空串也照收（用户把框清空了）。
+  // 详情页传来的 prompt 就是框里当前的字（含没保存的草稿）；空串照收 —— 空框 = 用默认（风格 + 骨架）。
   // 只有字段缺席（面板没开）才回落到库里存的
   const stylePrompt = await getDramaStylePrompt(char.dramaId)
   const prompt = characterImagePrompt(stylePrompt, typeof body.prompt === 'string' ? body.prompt : char.finalPrompt, char)

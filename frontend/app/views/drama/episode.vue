@@ -364,9 +364,9 @@
                       </button>
                     </div>
                   </div>
-                  <div class="asset-final-prompt" :title="c.final_prompt || c.finalPrompt || ''">
+                  <div class="asset-final-prompt" :title="c.final_prompt || c.finalPrompt || c.sheet_default_prompt || ''">
                     <span class="afp-label">{{ t('episode.asset.finalPromptTurnaround') }}</span>
-                    <span :class="['afp-text', !(c.final_prompt || c.finalPrompt) && 'dim']">{{ c.final_prompt || c.finalPrompt || t('episode.asset.finalPromptAutoTurnaround') }}</span>
+                    <span :class="['afp-text', !(c.final_prompt || c.finalPrompt) && 'dim']">{{ c.final_prompt || c.finalPrompt || c.sheet_default_prompt }}</span>
                   </div>
                 </div>
               </article>
@@ -1580,7 +1580,7 @@
                     {{ assetFinalPrompt ? t('episode.asset.ready') : t('episode.asset.todo') }}
                   </span>
                   <button
-                    v-if="assetPromptDraft"
+                    v-if="assetPromptDraft || sheetDefaultPrompt"
                     class="btn btn-ghost btn-sm asset-detail-copy-btn"
                     @click="copyAssetFinalPrompt"
                   >
@@ -1590,15 +1590,15 @@
                 </div>
               </div>
               <textarea
-                :value="assetPromptDraft"
+                :value="assetPromptDraft || sheetDefaultPrompt"
                 @input="onAssetPromptInput"
                 class="textarea asset-detail-prompt-textarea"
                 rows="5"
-                :placeholder="assetDetail.type === 'character'
-                  ? t('episode.asset.promptPlaceholderChar')
-                  : assetDetail.type === 'scene'
-                    ? t('episode.asset.promptPlaceholderScene')
-                    : t('episode.asset.promptPlaceholderProp')"
+                :placeholder="assetDetail.type === 'scene'
+                  ? t('episode.asset.promptPlaceholderScene')
+                  : assetDetail.type === 'prop'
+                    ? t('episode.asset.promptPlaceholderProp')
+                    : ''"
               />
               <p class="asset-detail-prompt-hint">
                 {{ assetDetail.type === 'character'
@@ -2042,8 +2042,16 @@ function hasCharRefImage(item) {
   return !!(item?.image_url || item?.imageUrl)
 }
 
+// 角色框里空着时摆出来的默认值 = 后端真会发出去的那串（项目风格 + 三视图版式），随角色列表下发。
+// **只是显示**：用户没编辑过就不落库（库里 final_prompt 仍为空 → 生成时后端再用同一个默认值）。
+// 用户一敲字，浏览器给的整段新值（含这串默认值）就落进 assetPromptDraft，与后端口径一致。
+// 前端不再抄骨架句 —— 唯一真源是 backend/src/services/character-sheet.ts。
+const sheetDefaultPrompt = computed(() =>
+  assetDetail.value.type === 'character' ? (assetDetail.value.item?.sheet_default_prompt || '') : '')
+
 // 角色提示词由用户在详情页手写：详情页开着时，框里当前的字就是要出的字——不点保存也认，
-// 清空框（有意的空）同样认。面板没开（卡片上的按钮）则返回 undefined，由后端取库里存的
+// 框空着（没编辑过）则传空串，后端按「空框 = 默认（风格 + 版式）」处理。
+// 面板没开（卡片上的按钮）则返回 undefined，由后端取库里存的
 function charDraftPrompt(id) {
   const d = assetDetail.value
   return d.open && d.type === 'character' && d.item?.id === id
@@ -2057,7 +2065,8 @@ function isPendingCharImage(id) {
 
 // 「提示词优化」：把框里当前的字交给 character_prompt_optimizer Agent（无工具，只回文本），
 // 回来后覆盖草稿并标记 dirty —— 存不存仍然由用户点「保存」决定。
-// 优化器只改用户写下的那段字，不碰角色设定、不碰其他字段、不写版式。
+// 框里那串字就是最终提示词（空框时里面是默认值：风格 + 版式），所以优化器拿到的是整段，
+// 规则是「已经带了版式句就原样留着、缺了也不补写」——见 character-prompt/SKILL 的「版式不归你」。
 const promptOptimizing = ref('')
 const promptOptimizePrev = ref({})
 
@@ -2076,7 +2085,8 @@ function cleanOptimizedText(raw) {
 function fieldDraftValue(field) {
   if (field === 'appearance') return assetDetailDraft.value.appearance
   if (field === 'styling') return assetDetailDraft.value.styling
-  return assetPromptDraft.value
+  // 最终提示词框里看得见什么就优化什么：没编辑过时框里摆的是默认值（风格 + 版式）
+  return assetPromptDraft.value || sheetDefaultPrompt.value
 }
 // 框里没字就没得优化 —— 优化只作用于用户写下的字，不替他补写（按钮灰掉，API 直连同样拦住）
 function isPromptDraftEmpty(field) {
@@ -2101,7 +2111,7 @@ async function optimizePromptField(field) {
   const label = field === 'appearance' ? '样貌' : field === 'styling' ? '妆造' : '最终三视图'
   promptOptimizing.value = field
   try {
-    // 只发框里那段字（+参考图有/无）：优化器不碰角色设定、不碰其他字段、不写版式
+    // 只发框里那段字（+参考图有/无）：优化器不碰角色设定、不碰其他字段，带进来的版式句原样留着
     const res = await api.post('/agent/character_prompt_optimizer/chat', {
       message: [
         `【字段】${label}`,
@@ -2315,7 +2325,8 @@ async function genAssetFinalPrompt() {
 }
 
 async function copyAssetFinalPrompt() {
-  const text = assetPromptDraft.value || assetFinalPrompt.value
+  // 复制框里看得见的那串（没编辑过时 = 默认值，也就是真正会发出去的字）
+  const text = assetPromptDraft.value || sheetDefaultPrompt.value || assetFinalPrompt.value
   if (!text) return
   try {
     await navigator.clipboard.writeText(text)

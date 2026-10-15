@@ -80,3 +80,20 @@ test('scenes keep agent generation with legacy fallback; characters are user-wri
   assert.doesNotMatch(characters, /ensureCharacterFinalPrompt|generate-prompt/)
   assert.match(characters, /updates\.finalPrompt = body\.final_prompt \|\| null/)
 })
+
+// 1016 改版：框里那串字就是最终提示词（前端把默认值显示在框里，所见即所发）。
+// 后端**不再**往用户写的字后面追加骨架 —— 否则框里看得见的版式和偷偷补的那份会撞成两遍。
+test('character box is the final prompt; only an empty box falls back to style + sheet skeleton', () => {
+  const characters = read('src/routes/characters.ts')
+  const sheet = read('src/services/character-sheet.ts')
+
+  assert.match(characters, /const content = \(userPrompt \|\| ''\)\.trim\(\)/)
+  assert.match(characters, /return content \|\| characterSheetDefaultPrompt\(stylePrompt, !!char\.localPath\)/)
+  // 默认值 = 项目视觉风格 + 骨架；带参考图那版只在真有参考图（localPath）时带
+  assert.match(sheet, /export function characterSheetDefaultPrompt\(stylePrompt: string, hasRefImage: boolean\)/)
+  assert.match(sheet, /\[stylePrompt \|\| '', hasRefImage \? SHEET_SKELETON_WITH_REF : SHEET_SKELETON_TEXT_ONLY\]/)
+  // 前端显示的就是这一串：随角色列表下发（dramas / episodes 两条列表），前端不再抄一份骨架
+  assert.match(sheet, /sheet_default_prompt: characterSheetDefaultPrompt\(/)
+  assert.match(read('src/routes/dramas.ts'), /characters: await charactersWithSheetDefault\(chars, id\)/)
+  assert.match(read('src/routes/episodes.ts'), /charactersWithSheetDefault\(result, ep\?\.dramaId\)/)
+})

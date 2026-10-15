@@ -6,6 +6,7 @@ import { toSnakeCaseArray, toSnakeCase } from '../utils/transform.js'
 import { getActiveConfigId } from '../services/ai.js'
 import { EXTRACT_TARGETS, getExtractionStatus, startExtraction, type ExtractTarget } from '../services/extraction.js'
 import { getVideoPromptBatchStatus, startVideoPromptBatch } from '../services/video-prompts.js'
+import { charactersWithSheetDefault } from '../services/character-sheet.js'
 
 const app = new Hono()
 
@@ -105,7 +106,9 @@ app.get('/:id/characters', async (c) => {
   if (!charIds.length) return success(c, [])
   const allChars = await db.select().from(schema.characters)
   const result = allChars.filter(ch => charIds.includes(ch.id) && !ch.deletedAt)
-  return success(c, toSnakeCaseArray(result))
+  // 带上 sheet_default_prompt：前端把它显示在「最终提示词」框里（空框时），与生成时用的默认值同源
+  const [ep] = await db.select().from(schema.episodes).where(eq(schema.episodes.id, episodeId))
+  return success(c, await charactersWithSheetDefault(result, ep?.dramaId))
 })
 
 // GET /episodes/:id/scenes — scenes linked to this episode

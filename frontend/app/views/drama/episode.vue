@@ -1154,24 +1154,48 @@
               </div>
 
               <!-- 行1：场景描述 + 场景光影 -->
-              <label class="asset-detail-edit-field">
-                <span>{{ t('episode.asset.sceneDescField') }}</span>
+              <div class="asset-detail-edit-field">
+                <div class="asset-detail-field-head">
+                  <span>{{ t('episode.asset.sceneDescField') }}</span>
+                  <div class="asset-detail-optimize-actions">
+                    <PromptOptimizeButtons
+                      field="sceneDesc"
+                      :active="promptOptimizing"
+                      :can-undo="promptOptimizePrev.sceneDesc !== undefined"
+                      :disabled="isPromptDraftEmpty('sceneDesc')"
+                      @optimize="optimizePromptField"
+                      @undo="undoOptimize"
+                    />
+                  </div>
+                </div>
                 <textarea
                   v-model="assetDetailDraft.prompt"
                   class="textarea asset-detail-textarea"
                   rows="5"
                   :placeholder="t('episode.asset.sceneDescPlaceholder')"
                 />
-              </label>
-              <label class="asset-detail-edit-field">
-                <span>{{ t('episode.asset.sceneLightField') }}</span>
+              </div>
+              <div class="asset-detail-edit-field">
+                <div class="asset-detail-field-head">
+                  <span>{{ t('episode.asset.sceneLightField') }}</span>
+                  <div class="asset-detail-optimize-actions">
+                    <PromptOptimizeButtons
+                      field="sceneLight"
+                      :active="promptOptimizing"
+                      :can-undo="promptOptimizePrev.sceneLight !== undefined"
+                      :disabled="isPromptDraftEmpty('sceneLight')"
+                      @optimize="optimizePromptField"
+                      @undo="undoOptimize"
+                    />
+                  </div>
+                </div>
                 <textarea
                   v-model="assetDetailDraft.lighting"
                   class="textarea asset-detail-textarea"
                   rows="5"
                   :placeholder="t('episode.asset.sceneLightPlaceholder')"
                 />
-              </label>
+              </div>
 
               <!-- 行2：主图 + 九宫格 -->
               <button
@@ -1217,25 +1241,18 @@
               </button>
 
               <!-- 行3：最终提示词 + 九宫格提示词 -->
+              <!-- 场景的固定视角最终提示词 = 后端产物：生成场景图时 ensureSceneFinalPrompt 落库，前端只读展示 -->
               <section class="asset-detail-prompt-panel">
                 <div class="asset-detail-section-title">
                   <span>{{ t('episode.asset.finalPromptFixed') }}</span>
                   <div class="asset-detail-prompt-head-actions">
-                    <button
-                      class="btn btn-sm"
-                      :disabled="isGeneratingPrompt(assetDetail.type, assetDetail.item.id) || isAssetImagePending(assetDetail.type, assetDetail.item.id)"
-                      @click="genAssetFinalPrompt"
-                    >
-                      <Loader2 v-if="isGeneratingPrompt(assetDetail.type, assetDetail.item.id)" :size="11" class="animate-spin" />
-                      {{ isGeneratingPrompt(assetDetail.type, assetDetail.item.id) ? t('episode.asset.generating') : (assetFinalPrompt ? t('episode.asset.regenPrompt') : t('episode.asset.genPrompt')) }}
-                    </button>
                     <span :class="['asset-detail-state', assetFinalPrompt && 'is-ready']">
                       {{ assetFinalPrompt ? t('episode.asset.ready') : t('episode.asset.todo') }}
                     </span>
                     <button
-                      v-if="assetPromptDraft"
+                      v-if="assetFinalPrompt"
                       class="btn btn-ghost btn-sm asset-detail-copy-btn"
-                      @click="copyAssetFinalPrompt"
+                      @click="copyText(assetFinalPrompt)"
                     >
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                       {{ t('common.copy') }}
@@ -1243,8 +1260,8 @@
                   </div>
                 </div>
                 <textarea
-                  :value="assetPromptDraft"
-                  @input="onAssetPromptInput"
+                  :value="assetFinalPrompt"
+                  readonly
                   class="textarea asset-detail-prompt-textarea"
                   rows="3"
                   :placeholder="t('episode.asset.promptPlaceholderScene')"
@@ -1308,108 +1325,7 @@
                   </span>
                 </div>
 
-                <div
-                  v-if="assetDetail.type === 'scene' && (sceneWideSrc(assetDetail.item) || sceneGridSrc(assetDetail.item))"
-                  class="asset-detail-media-grid"
-                >
-                  <button
-                    v-if="sceneWideSrc(assetDetail.item)"
-                    type="button"
-                    class="asset-detail-media-frame"
-                    :title="t('episode.asset.sceneImage')"
-                    @click.stop="openImageViewer(sceneWideSrc(assetDetail.item), t('episode.asset.sceneImage') + ' · 宽镜头')"
-                  >
-                    <img
-                      :src="thumbOf(sceneWideSrc(assetDetail.item))"
-                      class="previewable-image"
-                      @error="thumbFallback($event, sceneWideSrc(assetDetail.item))"
-                    />
-                    <span class="asset-detail-frame-label">{{ t('episode.asset.sceneImage') }}</span>
-                  </button>
-
-                  <button
-                    v-if="sceneGridSrc(assetDetail.item)"
-                    type="button"
-                    class="asset-detail-media-frame asset-detail-media-frame-grid"
-                    :title="t('episode.asset.sceneImage') + ' · 九宫格'"
-                    @click.stop="openImageViewer(sceneGridSrc(assetDetail.item), t('episode.asset.sceneImage') + ' · 九宫格')"
-                  >
-                    <img
-                      :src="thumbOf(sceneGridSrc(assetDetail.item))"
-                      class="previewable-image"
-                      @error="thumbFallback($event, sceneGridSrc(assetDetail.item))"
-                    />
-                    <span class="asset-detail-frame-label">九宫格</span>
-                  </button>
-
-                  <!-- 最终提示词（对应宽镜头/场景图） -->
-                  <section class="asset-detail-prompt-panel">
-                    <div class="asset-detail-section-title">
-                      <span>{{ t('episode.asset.finalPromptFixed') }}</span>
-                      <div class="asset-detail-prompt-head-actions">
-                        <button
-                          class="btn btn-sm"
-                          :disabled="isGeneratingPrompt(assetDetail.type, assetDetail.item.id) || isAssetImagePending(assetDetail.type, assetDetail.item.id)"
-                          @click="genAssetFinalPrompt"
-                        >
-                          <Loader2 v-if="isGeneratingPrompt(assetDetail.type, assetDetail.item.id)" :size="11" class="animate-spin" />
-                          {{ isGeneratingPrompt(assetDetail.type, assetDetail.item.id) ? t('episode.asset.generating') : (assetFinalPrompt ? t('episode.asset.regenPrompt') : t('episode.asset.genPrompt')) }}
-                        </button>
-                        <span :class="['asset-detail-state', assetFinalPrompt && 'is-ready']">
-                          {{ assetFinalPrompt ? t('episode.asset.ready') : t('episode.asset.todo') }}
-                        </span>
-                        <button
-                          v-if="assetPromptDraft"
-                          class="btn btn-ghost btn-sm asset-detail-copy-btn"
-                          @click="copyAssetFinalPrompt"
-                        >
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                          {{ t('common.copy') }}
-                        </button>
-                      </div>
-                    </div>
-                    <textarea
-                      :value="assetPromptDraft"
-                      @input="onAssetPromptInput"
-                      class="textarea asset-detail-prompt-textarea"
-                      rows="5"
-                      :placeholder="t('episode.asset.promptPlaceholderScene')"
-                    />
-                    <p class="asset-detail-prompt-hint">{{ t('episode.asset.promptHintScene') }}</p>
-                  </section>
-
-
-                  <!-- 九宫格提示词（对应九宫格） -->
-                  <section
-                    v-if="assetDetail.type === 'scene' && (sceneGridSrc(assetDetail.item) || assetGridPrompt)"
-                    class="asset-detail-prompt-panel"
-                  >
-                    <div class="asset-detail-section-title">
-                      <span>{{ t('episode.asset.gridPromptTitle') }}</span>
-                      <span :class="['asset-detail-state', assetGridPrompt && 'is-ready']">
-                        {{ assetGridPrompt ? t('episode.asset.ready') : t('episode.asset.todo') }}
-                      </span>
-                      <button
-                        v-if="assetGridPrompt"
-                        class="btn btn-ghost btn-sm asset-detail-copy-btn"
-                        @click="copyText(assetGridPrompt)"
-                        :title="t('common.copy')"
-                      >
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                        {{ t('common.copy') }}
-                      </button>
-                    </div>
-                    <textarea
-                      :value="assetGridPrompt || ''"
-                      readonly
-                      class="textarea asset-detail-prompt-textarea"
-                      rows="3"
-                      :placeholder="t('episode.asset.gridPromptPlaceholder')"
-                    />
-                    <p class="asset-detail-prompt-hint">{{ t('episode.asset.gridPromptHint') }}</p>
-                  </section>
-                </div>
-                <div v-else-if="isCharSheet" class="asset-detail-media-grid">
+                <div v-if="isCharSheet" class="asset-detail-media-grid">
                   <button
                     type="button"
                     class="asset-detail-media-frame asset-detail-media-frame-char"
@@ -1531,24 +1447,6 @@
                       :placeholder="t('episode.asset.stylingFieldPlaceholder')"
                     />
                   </div>
-                  <label v-if="assetDetail.type === 'scene'" class="asset-detail-edit-field">
-                    <span>{{ t('episode.asset.sceneDescField') }}</span>
-                    <textarea
-                      v-model="assetDetailDraft.prompt"
-                      class="textarea asset-detail-textarea"
-                      rows="5"
-                      :placeholder="t('episode.asset.sceneDescPlaceholder')"
-                    />
-                  </label>
-                  <label v-if="assetDetail.type === 'scene'" class="asset-detail-edit-field">
-                    <span>{{ t('episode.asset.sceneLightField') }}</span>
-                    <textarea
-                      v-model="assetDetailDraft.lighting"
-                      class="textarea asset-detail-textarea"
-                      rows="5"
-                      :placeholder="t('episode.asset.sceneLightPlaceholder')"
-                    />
-                  </label>
                 </div>
 
               </section>
@@ -2063,10 +1961,11 @@ function isPendingCharImage(id) {
   return pendingCharImageIds.value.includes(id)
 }
 
-// 「提示词优化」：把框里当前的字交给 character_prompt_optimizer Agent（无工具，只回文本），
-// 回来后覆盖草稿并标记 dirty —— 存不存仍然由用户点「保存」决定。
-// 框里那串字就是最终提示词（空框时里面是默认值：风格 + 版式），所以优化器拿到的是整段，
-// 规则是「已经带了版式句就原样留着、缺了也不补写」——见 character-prompt/SKILL 的「版式不归你」。
+// 「提示词优化」：把框里当前的字交给优化 Agent（无工具、只回文本），回来后覆盖草稿并标记 dirty ——
+// 存不存仍然由用户点「保存」决定。**角色与场景是两条 Agent**（要求不一样，1016 用户定案）：
+// 角色三框（样貌/妆造/最终三视图）走 character_prompt_optimizer——只改不许补、已带的版式句原样留着；
+// 场景两框（场景描述/场景光影）走 scene_prompt_optimizer——用户给的是简报，要写满（默认 300-500 字，
+// 写了目标字数就按那个字数）。
 const promptOptimizing = ref('')
 const promptOptimizePrev = ref({})
 
@@ -2077,14 +1976,20 @@ function cleanOptimizedText(raw) {
     .replace(/^```[a-zA-Z]*\s*/, '').replace(/```\s*$/, '')
     .trim()
     .replace(/^(优化后的提示词|优化结果|提示词|optimized prompt|final prompt)\s*[:：]\s*/i, '')
+    // 关思考补丁的伴生现象：模型先吐一排句点再给正文（实测开头 9 个点）
+    .replace(/^[.．…]+/, '')
     .trim()
   // 空框时模型该什么都不输出，实测会把「空文本」三个字照抄回来 —— 当空处理，别填进框里
-  return /^(空文本|空|（空）|\(空\)|无|none|null|n\/a)$/i.test(text) ? '' : text
+  if (/^(空文本|空|（空）|\(空\)|无|none|null|n\/a)$/i.test(text)) return ''
+  // 整段只有句点（实测 177 个点、正文一个字没有）= 没写出正文，报「优化无内容」也别把点填进框
+  return /^[.．…。]+$/.test(text) ? '' : text
 }
 
 function fieldDraftValue(field) {
   if (field === 'appearance') return assetDetailDraft.value.appearance
   if (field === 'styling') return assetDetailDraft.value.styling
+  if (field === 'sceneDesc') return assetDetailDraft.value.prompt
+  if (field === 'sceneLight') return assetDetailDraft.value.lighting
   // 最终提示词框里看得见什么就优化什么：没编辑过时框里摆的是默认值（风格 + 版式）
   return assetPromptDraft.value || sheetDefaultPrompt.value
 }
@@ -2095,27 +2000,32 @@ function isPromptDraftEmpty(field) {
 function setFieldDraftValue(field, text) {
   if (field === 'appearance') assetDetailDraft.value.appearance = text
   else if (field === 'styling') assetDetailDraft.value.styling = text
+  else if (field === 'sceneDesc') assetDetailDraft.value.prompt = text
+  else if (field === 'sceneLight') assetDetailDraft.value.lighting = text
   else { assetPromptDraft.value = text; assetPromptDirty.value = true }
 }
 
 async function optimizePromptField(field) {
   const detail = assetDetail.value
-  if (!detail.open || detail.type !== 'character' || promptOptimizing.value) return
+  // 角色（样貌/妆造/最终三视图）与场景（场景描述/场景光影）共用同一个优化 Agent
+  if (!detail.open || !['character', 'scene'].includes(detail.type) || promptOptimizing.value) return
   if (isPromptDraftEmpty(field)) {
     toast.error(t('episode.asset.optimizeNeedText'))
     return
   }
-  const char = chars.value.find(c => c.id === detail.item?.id) || detail.item || {}
-  const hasRef = hasCharRefImage(char)
+  const hasRef = detail.type === 'character' && hasCharRefImage(chars.value.find(c => c.id === detail.item?.id) || detail.item || {})
   // 字段标签固定中文：Agent 按【字段】的值分流，与界面语言无关（输出语言由目标语言指令决定）
-  const label = field === 'appearance' ? '样貌' : field === 'styling' ? '妆造' : '最终三视图'
+  const label = { appearance: '样貌', styling: '妆造', final: '最终三视图', sceneDesc: '场景描述', sceneLight: '场景光影' }[field] || field
+  // 角色与场景走两条 Agent：角色「只改不许补」、场景「简报要写满」，要求不一样（1016 用户定案）
+  const agentType = field === 'sceneDesc' || field === 'sceneLight' ? 'scene_prompt_optimizer' : 'character_prompt_optimizer'
   promptOptimizing.value = field
   try {
     // 只发框里那段字（+参考图有/无）：优化器不碰角色设定、不碰其他字段，带进来的版式句原样留着
-    const res = await api.post('/agent/character_prompt_optimizer/chat', {
+    const res = await api.post(`/agent/${agentType}/chat`, {
       message: [
         `【字段】${label}`,
-        `【参考图】${hasRef ? '有' : '无'}`,
+        // 场景那条的报文格式里没有【参考图】这一行（场景不吃参考图）
+        ...(agentType === 'character_prompt_optimizer' ? [`【参考图】${hasRef ? '有' : '无'}`] : []),
         '【当前文本】',
         (fieldDraftValue(field) || '').trim() || '（空）',
       ].join('\n'),

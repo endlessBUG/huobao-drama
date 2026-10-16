@@ -27,7 +27,23 @@ async function runPromptAgent(episodeId: number, dramaId: number, message: strin
     modelOverride: opts?.model || undefined,
     textConfigId: opts?.configId || undefined,
   })
-  await agent.generate([{ role: 'user', content: message }], { maxSteps: 12, requestContext })
+  const result = await agent.generate([{ role: 'user', content: message }], { maxSteps: 12, requestContext })
+  return result.text || ''
+}
+
+/**
+ * 生成/重写场景的「场景描述」字段 —— 正文回给前端进草稿，**不落库**（用户点保存才写）。
+ * 素材字段与最终提示词分开：agent 读剧本上下文后只回文本，不许它顺手保存最终提示词。
+ */
+export async function generateSceneDescription(scene: SceneRow, episodeId: number, opts?: PromptAgentOptions): Promise<string> {
+  try {
+    logTaskProgress('SceneFields', 'description-generate', { sceneId: scene.id, episodeId })
+    return (await runPromptAgent(episodeId, scene.dramaId,
+      `为场景「${scene.location}」(scene_id=${scene.id}) 生成【场景描述】字段的正文。只回复正文，不要调用任何保存工具、不要碰最终提示词。`, opts)).trim()
+  } catch (err: any) {
+    logTaskError('SceneFields', 'description-generate', { sceneId: scene.id, error: err.message })
+    return ''
+  }
 }
 
 /** 确保场景拥有固定视角（前中后景）最终提示词，返回最终提示词（失败返回 ''）；force 时忽略已有提示词强制重新生成 */

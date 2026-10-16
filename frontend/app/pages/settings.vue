@@ -1024,9 +1024,10 @@ const agentDefs = computed(() => [
   { type: 'extractor', label: t('settings.agents.extractor'), icon: '🔍' },
   { type: 'storyboard_breaker', label: t('settings.agents.storyboardBreaker'), icon: '🎬' },
   { type: 'prompt_generator', label: t('settings.agents.promptGenerator'), icon: '🖼' },
-  // 第 5 个 Agent 只在后端 AGENT_SKILL_MAP 里存在（技能 prompt-generator/character-prompt）。
+  // 第 5、6 个 Agent 只在后端 AGENT_SKILL_MAP 里存在（技能 prompt-generator/character-prompt 与 scene-prompt）。
   // 之前设置页没有它 → 它的技能在界面上无处可管，还被前端按目录名猜算到了 prompt_generator 名下
   { type: 'character_prompt_optimizer', label: t('settings.agents.characterPromptOptimizer'), icon: '✨' },
+  { type: 'scene_prompt_optimizer', label: t('settings.agents.scenePromptOptimizer'), icon: '🏞' },
 ])
 
 function getAgentCfg(type) {

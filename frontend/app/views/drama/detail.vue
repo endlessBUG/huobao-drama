@@ -442,14 +442,34 @@
                     <span>{{ t('episode.create.time') }}</span>
                     <input v-model="editDraft.time" class="input" :placeholder="t('detail.mat.timePlaceholder')" />
                   </label>
-                  <label class="mat-detail-edit-field">
-                    <span>{{ t('episode.asset.sceneDescField') }}</span>
+                  <div class="mat-detail-edit-field">
+                    <div class="mat-detail-edit-field-head">
+                      <span>{{ t('episode.asset.sceneDescField') }}</span>
+                      <PromptOptimizeButtons
+                        field="sceneDesc"
+                        :active="promptOptimizing"
+                        :can-undo="promptOptimizePrev.sceneDesc !== undefined"
+                        :disabled="!(editDraft.prompt || '').trim()"
+                        @optimize="optimizeSceneField"
+                        @undo="undoOptimize"
+                      />
+                    </div>
                     <textarea v-model="editDraft.prompt" class="textarea mat-detail-textarea" rows="5" :placeholder="t('episode.asset.sceneDescPlaceholder')" />
-                  </label>
-                  <label class="mat-detail-edit-field">
-                    <span>{{ t('episode.asset.sceneLightField') }}</span>
+                  </div>
+                  <div class="mat-detail-edit-field">
+                    <div class="mat-detail-edit-field-head">
+                      <span>{{ t('episode.asset.sceneLightField') }}</span>
+                      <PromptOptimizeButtons
+                        field="sceneLight"
+                        :active="promptOptimizing"
+                        :can-undo="promptOptimizePrev.sceneLight !== undefined"
+                        :disabled="!(editDraft.lighting || '').trim()"
+                        @optimize="optimizeSceneField"
+                        @undo="undoOptimize"
+                      />
+                    </div>
                     <textarea v-model="editDraft.lighting" class="textarea mat-detail-textarea" rows="5" :placeholder="t('episode.asset.sceneLightPlaceholder')" />
-                  </label>
+                  </div>
                 </div>
               </section>
             </div>
@@ -569,8 +589,9 @@
 import { toast } from 'vue-sonner'
 import { toastError } from '~/composables/useToast'
 import { useI18n } from 'vue-i18n'
-import { dramaAPI, episodeAPI, characterAPI, sceneAPI, propAPI, uploadAPI } from '~/composables/useApi'
+import { api, dramaAPI, episodeAPI, characterAPI, sceneAPI, propAPI, uploadAPI } from '~/composables/useApi'
 import BaseSelect from '~/components/BaseSelect.vue'
+import PromptOptimizeButtons from '~/components/PromptOptimizeButtons.vue'
 
 const { t, locale } = useI18n()
 
@@ -894,6 +915,57 @@ async function generateFinalPrompt(m) {
   } finally {
     finalPromptGen.value = false
   }
+}
+
+// 「提示词优化」：把框里当前的字交给 scene_prompt_optimizer（场景那条 Agent、无工具、只回文本），
+// 结果覆盖草稿 —— 存不存仍然由用户点「保存」决定。与 episode.vue 同一套语义：字段固定走场景 Agent、
+// 【字段】固定中文，报文里没有参考图那一行（场景不吃参考图）。
+const promptOptimizing = ref('')
+const promptOptimizePrev = ref({})
+const sceneFieldKeys = { sceneDesc: 'prompt', sceneLight: 'lighting' }
+async function optimizeSceneField(field) {
+  const m = editTarget.value
+  const key = sceneFieldKeys[field]
+  const epId = firstEpisodeId.value
+  if (!m || m.kindKey !== 'scene' || !key) return
+  if (!epId) { toast.error(t('detail.mat.needEpisodeForPrompt')); return }
+  const current = (editDraft[key] || '').trim()
+  if (!current || promptOptimizing.value) {
+    if (!current) toast.error(t('episode.asset.optimizeNeedText'))
+    return
+  }
+  promptOptimizing.value = field
+  try {
+    const res = await api.post('/agent/scene_prompt_optimizer/chat', {
+      message: [`【字段】${field === 'sceneDesc' ? '场景描述' : '场景光影'}`, '【当前文本】', current].join('\n'),
+      drama_id: dramaId,
+      episode_id: epId,
+    })
+    // 模型偶尔包一层 ``` 或加个标题，剥掉；「空文本」是它照抄的占位，当空处理；
+    // 关思考补丁的伴生现象：先吐一排句点再给正文，整段只有点 = 没写出正文
+    const text = (res?.text || '')
+      .trim()
+      .replace(/^```[a-zA-Z]*\s*/, '').replace(/```\s*$/, '')
+      .trim()
+      .replace(/^(优化后的提示词|优化结果|提示词)\s*[:：]\s*/, '')
+      .replace(/^[.．…]+/, '')
+      .trim()
+    if (!text || /^(空文本|空|（空）|\(空\)|无|none|null|n\/a)$/i.test(text) || /^[.．…。]+$/.test(text)) throw new Error(t('episode.asset.optimizeEmpty'))
+    promptOptimizePrev.value = { ...promptOptimizePrev.value, [field]: editDraft[key] || '' }
+    editDraft[key] = text
+    toast.success(t('episode.asset.optimizeDone'))
+  } catch (e) {
+    toastError(e)
+  } finally {
+    promptOptimizing.value = ''
+  }
+}
+
+function undoOptimize(field) {
+  const key = sceneFieldKeys[field]
+  if (!key || promptOptimizePrev.value[field] === undefined) return
+  editDraft[key] = promptOptimizePrev.value[field]
+  promptOptimizePrev.value = {}
 }
 
 function closeEdit() {
@@ -1608,7 +1680,9 @@ onMounted(load)
 .mat-detail-edit-field {
   min-width: 0; display: flex; flex-direction: column; gap: 7px;
 }
+.mat-detail-edit-field-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .mat-detail-edit-field > span,
+.mat-detail-edit-field-head > span,
 .mat-detail-edit-field > input::placeholder,
 .mat-detail-textarea::placeholder {
   color: var(--text-3); font-size: 10px; font-weight: 780; letter-spacing: 0.04em;

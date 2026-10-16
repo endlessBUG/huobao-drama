@@ -364,7 +364,8 @@
       "promptGenerator": "프롬프트 생성",
       "characterPromptOptimizer": "캐릭터 프롬프트 최적화",
       "langFallback": "중국어로 폴백",
-      "followContentLang": "편집 언어: {lang} (일반 → AI 콘텐츠 언어에서 전환)"
+      "followContentLang": "편집 언어: {lang} (일반 → AI 콘텐츠 언어에서 전환)",
+      "scenePromptOptimizer": "장면 프롬프트 최적화"
     },
     "skills": {
       "agentList": "Agent 목록",
@@ -636,10 +637,10 @@
       "gridPromptHint": "3×3 그리드 프롬프트는 Agent가 생성한 3×3 빈 장면 참조 프롬프트입니다(표시만). 그리드를 다시 생성하면 이를 기반으로 장면 참조 이미지를 다시 생성합니다.",
       "genProp": "소품 이미지 생성",
       "regenProp": "소품 이미지 다시 생성",
-      "promptPlaceholderScene": "고정 시점 최종 프롬프트를 직접 작성하거나, 「프롬프트 생성」으로 Agent가 생성하게 합니다",
+      "promptPlaceholderScene": "장면 이미지 생성 시 백엔드가 자동으로 기록합니다 (읽기 전용)",
       "promptPlaceholderProp": "흰 배경 단품 최종 프롬프트를 직접 작성하거나, 「프롬프트 생성」으로 Agent가 생성하게 합니다",
       "promptHintChar": "입력란은 AI에 실제로 전송되는 프롬프트입니다. 비어 있으면 기본값(프로젝트 스타일 + 삼면도 레이아웃), 수정하면 입력란 그대로 전송되며(레이아웃 자동 추가 없음), 비우면 기본값으로 돌아갑니다. 저장하면 반영되고, 저장하지 않아도 「이미지 생성」 시 입력란 내용이 사용됩니다.",
-      "promptHintScene": "프롬프트는 직접 편집할 수 있으며 저장 후 적용됩니다. 장면 설명이나 조명을 변경하고 저장하면 최종 프롬프트가 지워지며, 다음 장면 이미지 생성 시 프롬프트 Agent가 다시 생성합니다.",
+      "promptHintScene": "읽기 전용: 장면 이미지 생성 시 프롬프트 Agent가 자동 생성합니다. 장면 설명이나 조명을 변경하고 저장하면 지워지며, 다음 장면 이미지 생성 시 다시 생성됩니다.",
       "promptHintProp": "프롬프트는 직접 편집할 수 있으며 저장 후 적용됩니다. 물품 외형을 변경하고 저장하면 최종 프롬프트가 지워지며, 다음 소품 이미지 생성 시 프롬프트 Agent가 다시 생성합니다.",
       "generatingPrompt": "최종 프롬프트 생성 중…",
       "promptGenerated": "최종 프롬프트가 생성되었습니다",

@@ -12,6 +12,8 @@ import { agentsUsingSkill } from '../src/agents/skills.ts'
 test('反向映射：目录名与 agent type 不一致时也要算对（character-prompt 那两个）', () => {
   assert.deepEqual(agentsUsingSkill('prompt-generator/character-prompt'), ['character_prompt_optimizer'])
   assert.deepEqual(agentsUsingSkill('prompt-generator/video-prompt'), ['prompt_generator'])
+  // 场景优化**不**吃这个技能（1016：SKILL 教的是「带 save_* 工具生成最终提示词」那套，
+  // 挂给无工具的优化器实测会把工具调用当正文吐回来）—— 场景优化的规矩内联在它自己的 instructions 里
   assert.deepEqual(agentsUsingSkill('prompt-generator/scene-prompt'), ['prompt_generator'])
   assert.deepEqual(agentsUsingSkill('prompt-generator/prop-prompt'), ['prompt_generator'])
 })

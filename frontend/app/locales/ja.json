@@ -362,9 +362,10 @@
       "extractor": "キャラクター・シーン抽出",
       "storyboardBreaker": "分镜分解",
       "promptGenerator": "プロンプト生成",
-      "characterPromptOptimizer": "キャラクター・プロンプト最適化",
+      "characterPromptOptimizer": "キャラクター用プロンプト最適化",
       "langFallback": "中国語にフォールバック",
-      "followContentLang": "編集言語：{lang}（「一般 → AI コンテンツ言語」で切替）"
+      "followContentLang": "編集言語：{lang}（「一般 → AI コンテンツ言語」で切替）",
+      "scenePromptOptimizer": "シーン用プロンプト最適化"
     },
     "skills": {
       "agentList": "Agent 一覧",
@@ -636,10 +637,10 @@
       "gridPromptHint": "九宮格プロンプトは、Agent が生成した 3×3 空シーンリファレンスプロンプトで、表示のみです。九宮格を再生成すると、それに基づいてシーンリファレンスイメージを再生成します。",
       "genProp": "小道具図を生成",
       "regenProp": "小道具図を再生成",
-      "promptPlaceholderScene": "固定視点の最終プロンプトを手動で書くか、「プロンプトを生成」で Agent に生成させます",
+      "promptPlaceholderScene": "シーン画像の生成時にバックエンドが自動で書き込みます（読み取り専用）",
       "promptPlaceholderProp": "白背景単品の最終プロンプトを手動で書くか、「プロンプトを生成」で Agent に生成させます",
       "promptHintChar": "入力欄は AI に実際に送られるプロンプトです。空欄なら既定値（プロジェクトのスタイル＋三面図レイアウト）、編集した場合は入力欄どおりに送信され（版式は自動追加されません）、空にすると既定値に戻ります。保存で反映、未保存でも「イメージを生成」で入力欄の内容が使われます。",
-      "promptHintScene": "プロンプトは直接編集でき、保存後に反映されます。シーン説明や光影を変更して保存すると最終プロンプトがクリアされ、次回のシーン図生成時にプロンプト Agent が再生成します。",
+      "promptHintScene": "読み取り専用：シーン画像の生成時にプロンプト Agent が自動生成します。シーン説明や光影を変更して保存するとクリアされ、次回のシーン画像生成時に再生成されます。",
       "promptHintProp": "プロンプトは直接編集でき、保存後に反映されます。物品の外見を変更して保存すると最終プロンプトがクリアされ、次回の小道具図生成時にプロンプト Agent が再生成します。",
       "generatingPrompt": "最終プロンプトを生成中…",
       "promptGenerated": "最終プロンプトを生成しました",

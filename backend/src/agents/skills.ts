@@ -44,6 +44,10 @@ const AGENT_SKILL_MAP: Record<string, string[]> = {
   // 角色三视图：技能回来了，但只挂在这个无工具的优化 Agent 上——
   // 它不改设定、不写库，只把用户框里那段字按技能规范优化后原样返回
   character_prompt_optimizer: ['prompt-generator/character-prompt'],
+  // scene_prompt_optimizer 刻意不挂技能：scene-prompt/SKILL 是给「生成最终提示词」那条（带 save_* 工具）
+  // 的规程 —— 它会教模型写「固定机位广角镜头」这类版式句（优化器明令禁止），还会让它把
+  // save_scene_final_prompt 的工具调用当正文吐回来（实测一次 790 字全是那段 JSON）。
+  // 场景优化的规矩全部内联在它自己的 instructions 里。
 }
 
 /** 技能相对路径（不带 skills/ 前缀）是否落在某组前缀下。

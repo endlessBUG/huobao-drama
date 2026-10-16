@@ -4,7 +4,7 @@ import { db, getInsertId, schema } from '../db/index.js'
 import { success, created, badRequest, now } from '../utils/response.js'
 import { generateImage } from '../services/generation.js'
 import { getDramaStylePrompt } from '../services/style-preset.js'
-import { ensureSceneFinalPrompt } from '../services/final-prompt.js'
+import { ensureSceneFinalPrompt, generateSceneDescription } from '../services/final-prompt.js'
 import { logTaskError, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
 
 const app = new Hono()
@@ -119,9 +119,26 @@ app.post('/:id/generate-grid-image', async (c) => {
     'middle-left the south wall; center from the doorway; middle-right from the far corner; ' +
     'bottom-left the window side; bottom-right the opposite corner; ' +
     'bottom-center close-up of the main furniture or entrance; consistent lighting and style'
-  // ponytail: 始终重算清洁 prompt 并落盘，不用旧的 scene.gridPrompt ——
-  // 旧的 grid_prompt 可能是上一版回退拼进去 finalPrompt 的脏值，复用会把脏值一直保留。
-  const prompt = [stylePrompt || '', fallback, scene.lighting || '']
+  // 1016 修（用户报「场景九宫格和场景图不一致」）：这条原本只喂 style + 墙面机位清单 + lighting，
+  // 场景自己的陈设一个字都没进去 —— 实测 scene 9：主图 prompt 1101 字（双人床/手办墙/落地窗/木地板/
+  // 圆地毯…），九宫格整条 prompt 982 字里只有 121 字是场景专属，还只是「same empty 卧室大厅」，
+  // 且该场景 lighting 列为空 ⇒ 模型凭空造了一间冷调护墙板客房，跟主图那间暖光卧室毫无关系。
+  // 修法：**把定场图本身当参考图喂进去**。qwen 的 TextEncodeQwenImage21 有真 reference latents 通道
+  // （角色三视图那条线一直在用），房间由参考图锁住，比用文字复述陈设稳 —— 且文字与参考图冲突时
+  // 出图跟文字走（qwen-image.ts 头注释实测定性），所以带图时正文一律留空，只留机位与空场景约束。
+  // 没有定场图（还没生成过场景图）时才退回文字：房间正文取 finalPrompt（定场图的实际输入），
+  // 去掉风格前缀（由 getDramaStylePrompt 另拼）与「固定机位」句式（留着九格会全变成同一张定场图）。
+  let roomBody = scene.finalPrompt || ''
+  if (stylePrompt && roomBody.startsWith(stylePrompt)) roomBody = roomBody.slice(stylePrompt.length)
+  roomBody = roomBody
+    .replace(/^[，,、\s]+/, '')
+    .replace(/固定机位广角镜头[，,]?\s*/g, '')
+    .replace(/清晰的?建立镜头[，,]?\s*/g, '')
+    .trim()
+  const referenceImage = scene.imageUrl || ''
+  const content = referenceImage ? '' : (roomBody || [scene.prompt || '', scene.lighting || ''].filter(Boolean).join('，'))
+  // 末尾再压一句无人物兜底，同 generate-image 的拼法。
+  const prompt = [stylePrompt || '', fallback, content, '画面中没有任何人物，空场景']
     .filter(Boolean)
     .join(', ')
   try {
@@ -135,6 +152,7 @@ app.post('/:id/generate-grid-image', async (c) => {
       prompt,
       size: '1536x1536',
       sceneGrid: true,
+      referenceImages: referenceImage ? [referenceImage] : undefined,
       model: body.model,
       configId: body.config_id ?? ep.imageConfigId ?? undefined,
     })
@@ -166,6 +184,27 @@ app.post('/:id/generate-prompt', async (c) => {
   }
   logTaskSuccess('FinalPrompt', 'scene-generate', { sceneId: id })
   return success(c, { final_prompt: finalPrompt })
+})
+
+// POST /scenes/:id/generate-description — 生成/重写「场景描述」字段（读剧本上下文；只回正文，不落库）
+app.post('/:id/generate-description', async (c) => {
+  const id = Number(c.req.param('id'))
+  const body = await c.req.json()
+  const [scene] = await db.select().from(schema.scenes).where(eq(schema.scenes.id, id))
+  if (!scene) return badRequest(c, '场景不存在')
+  if (!body.episode_id) return badRequest(c, 'episode_id 必填')
+
+  const [ep] = await db.select().from(schema.episodes).where(eq(schema.episodes.id, Number(body.episode_id)))
+  if (!ep) return badRequest(c, '剧集不存在')
+
+  logTaskStart('SceneFields', 'description-generate', { sceneId: id, episodeId: ep.id })
+  const prompt = await generateSceneDescription(scene, ep.id, { model: body.text_model, configId: body.text_config_id ?? undefined })
+  if (!prompt) {
+    logTaskError('SceneFields', 'description-generate', { sceneId: id, error: 'agent returned empty text' })
+    return badRequest(c, '场景描述生成失败，请重试')
+  }
+  logTaskSuccess('SceneFields', 'description-generate', { sceneId: id })
+  return success(c, { prompt })
 })
 
 // DELETE /scenes/:id — 软删除（保留历史生成记录）

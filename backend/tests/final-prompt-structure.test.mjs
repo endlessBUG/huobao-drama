@@ -81,6 +81,28 @@ test('scenes keep agent generation with legacy fallback; characters are user-wri
   assert.match(characters, /updates\.finalPrompt = body\.final_prompt \|\| null/)
 })
 
+// 场景描述也可以让 AI 写：读剧本上下文出正文，**只回文本不落库**（落不落库由用户点保存决定）
+test('scene description generation reads the script and returns text only (no auto-save)', () => {
+  const service = read('src/services/final-prompt.ts')
+  const scenes = read('src/routes/scenes.ts')
+  const agents = read('src/agents/index.ts')
+  const api = read('../frontend/app/composables/useApi.ts')
+  const fe = read('../frontend/app/views/drama/episode.vue')
+
+  assert.match(service, /export async function generateSceneDescription/)
+  assert.match(service, /只回复正文，不要调用任何保存工具/)
+  assert.match(scenes, /app\.post\('\/:id\/generate-description'/)
+  assert.match(scenes, /return success\(c, \{ prompt \}\)/)
+  // Agent 侧：与最终提示词相反 —— 这一类明确「不保存」；口径与提取阶段的场景字段一致
+  assert.match(agents, /## 场景字段正文（场景描述 \/ 场景光影）/)
+  assert.match(agents, /不要调用任何保存工具，也不要把内容写进 final_prompt/)
+  assert.match(agents, /不写光与氛围——那是场景光影的内容/)
+  // 前端：接口还留着（候选后端路径），但 UI 上不出按钮 —— 场景描述只做「提示词优化」（1016 用户定案）。
+  // 曾有「生成场景描述」按钮走 agent 生成，结果是 `…` 被写进框里。
+  assert.match(api, /generateDescription: \(id: number, episodeId: number, textModel\?: string, textConfigId\?: number\)/)
+  assert.doesNotMatch(fe, /genSceneDescription/)
+})
+
 // 1016 改版：框里那串字就是最终提示词（前端把默认值显示在框里，所见即所发）。
 // 后端**不再**往用户写的字后面追加骨架 —— 否则框里看得见的版式和偷偷补的那份会撞成两遍。
 test('character box is the final prompt; only an empty box falls back to style + sheet skeleton', () => {

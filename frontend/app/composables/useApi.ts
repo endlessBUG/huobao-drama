@@ -79,6 +79,8 @@ export const sceneAPI = {
   update: (id: number, data: any) => api.put(`/scenes/${id}`, data),
   del: (id: number) => api.del(`/scenes/${id}`),
   generatePrompt: (id: number, episodeId: number, force = false, textModel?: string, textConfigId?: number) => api.post(`/scenes/${id}/generate-prompt`, { episode_id: episodeId, force, text_model: textModel || undefined, text_config_id: textConfigId || undefined }),
+  // 生成「场景描述」字段正文（读剧本上下文；只回正文，落不落库由用户点保存决定）
+  generateDescription: (id: number, episodeId: number, textModel?: string, textConfigId?: number) => api.post(`/scenes/${id}/generate-description`, { episode_id: episodeId, text_model: textModel || undefined, text_config_id: textConfigId || undefined }),
   generateImage: (id: number, episodeId: number, model?: string, configId?: number, textModel?: string, textConfigId?: number) => api.post(`/scenes/${id}/generate-image`, { episode_id: episodeId, model: model || undefined, config_id: configId || undefined, text_model: textModel || undefined, text_config_id: textConfigId || undefined }),
   generateGridImage: (id: number, episodeId: number, model?: string, configId?: number, textModel?: string, textConfigId?: number) => api.post(`/scenes/${id}/generate-grid-image`, { episode_id: episodeId, model: model || undefined, config_id: configId || undefined, text_model: textModel || undefined, text_config_id: textConfigId || undefined }),
 }

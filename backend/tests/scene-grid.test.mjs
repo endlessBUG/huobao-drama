@@ -34,6 +34,18 @@ test('scenes 路由新增 POST /:id/generate-grid-image（1536x1536、sceneGrid�
   assert.match(s, /1536x1536/)
 })
 
+// 1016：九宫格必须和定场图同一间房。只发 style + 墙面机位清单 + lighting 时实测画出了另一间房
+// （用户报「场景九宫格和场景图不一致」）⇒ 把定场图当参考图喂给 qwen 的 reference latents 通道锁房间；
+// 没有定场图时才退回文字（房间正文取 finalPrompt，去掉风格前缀与「固定机位」句式）。
+test('九宫格用定场图当参考图，无图时退回 finalPrompt 正文', () => {
+  const s = read('src/routes/scenes.ts')
+  assert.match(s, /const referenceImage = scene\.imageUrl \|\| ''/)
+  assert.match(s, /const content = referenceImage \? '' : \(roomBody \|\|/)
+  assert.match(s, /referenceImages: referenceImage \? \[referenceImage\] : undefined/)
+  assert.match(s, /let roomBody = scene\.finalPrompt/)
+  assert.match(s, /\[stylePrompt \|\| '', fallback, content, '画面中没有任何人物，空场景'\]/)
+})
+
 test('generation: sceneGrid 字段 + writeBack 回写 gridImageUrl', () => {
   const s = read('src/services/generation.ts')
   assert.match(s, /sceneGrid\?:\s*boolean/)

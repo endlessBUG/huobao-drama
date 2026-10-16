@@ -60,8 +60,10 @@ test('主 skill = 索引：scene/character 的 SKILL.md 各带社区技法索引
   }
   assert.match(scene, /Location\/View|location-and-view/) // 索引必须点名 Location/View 这条
   assert.match(char, /Character\/Look|character-and-look/) // 人物索引必须点名 Character/Look 分层
-  // 人物技法要真的能被取到：optimizer 今天没工具，必须挂上 read_prompt_library
-  assert.match(agents, /character_prompt_optimizer: \{[\s\S]{0,200}?readPromptLibrary/)
+  // optimizer 不挂库工具（1016 实测：挂上就 60 步死循环、正文只剩一排点）—— 技法库由 prompt_generator 取
+  assert.match(agents, /character_prompt_optimizer: \{\}/)
+  assert.doesNotMatch(agents, /character_prompt_optimizer: \{[\s\S]{0,200}?readPromptLibrary/)
+  assert.match(agents, /scene_prompt_optimizer: \{\}/)
 })
 
 test('场景/道具不再被排除在库外（口径翻转，四语言 prompt 同步）', () => {

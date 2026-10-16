@@ -364,7 +364,8 @@
       "promptGenerator": "提示词",
       "characterPromptOptimizer": "角色提示词优化",
       "langFallback": "跟随中文",
-      "followContentLang": "编辑语言跟随：{lang}（在「通用 → AI 内容语言」切换）"
+      "followContentLang": "编辑语言跟随：{lang}（在「通用 → AI 内容语言」切换）",
+      "scenePromptOptimizer": "场景提示词优化"
     },
     "skills": {
       "agentList": "Agent 列表",
@@ -636,10 +637,10 @@
       "gridPromptHint": "九宫格提示词为 Agent 生成的 3×3 空场景参考提示词，仅可查看。重绘九宫格会基于它重新生成场景参考图。",
       "genProp": "生成道具图",
       "regenProp": "重绘道具图",
-      "promptPlaceholderScene": "可手动编写固定视角最终提示词，或点击「生成提示词」由 Agent 生成",
+      "promptPlaceholderScene": "生成场景图时由后端自动写入（只读）",
       "promptPlaceholderProp": "可手动编写白底单品最终提示词，或点击「生成提示词」由 Agent 生成",
       "promptHintChar": "框里就是真正发给 AI 的提示词：空框时摆的是默认值——项目视觉风格 + 三视图版式，改了就按框里原样发（不再自动补版式），清空则回到默认。保存后生效，改完没保存直接点「生成形象」也按框里当前的字生成。",
-      "promptHintScene": "提示词可直接编辑，保存后生效；修改场景描述或光影并保存后，最终提示词将被清空，下次生成场景图时由提示词 Agent 重新生成。",
+      "promptHintScene": "只读：生成场景图时由提示词 Agent 自动生成；修改场景描述或光影并保存后会被清空，下次生成场景图时重新生成。",
       "promptHintProp": "提示词可直接编辑，保存后生效；修改物品外貌并保存后，最终提示词将被清空，下次生成道具图时由提示词 Agent 重新生成。",
       "generatingPrompt": "正在生成最终提示词…",
       "promptGenerated": "最终提示词已生成",

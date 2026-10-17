@@ -703,6 +703,47 @@
                       @commit="v => updateField(selectedSb, 'video_prompt', v)"
                     />
                   </section>
+                  <!-- 1017（用户「首尾帧没生效」）：首尾帧图的入口。列由带 frame_type 的图片任务回写
+                       （generation.ts:551-552），genVid 已经在读它们（下面 3903-3904 那两行）—— 之前缺的就是这里。 -->
+                  <section class="video-inspector-section">
+                    <div class="video-inspector-prompt-head">
+                      <span class="video-inspector-label video-inspector-label-hero">首尾帧锚（MiniMax H3 AddGuide）</span>
+                      <span>
+                        <button
+                          type="button"
+                          class="btn btn-sm"
+                          :disabled="frameGeneratingIds.includes(selectedSb?.id)"
+                          @click="genFrameImage(selectedSb, 'first_frame')"
+                        >{{ (selectedSb?.first_frame_image || selectedSb?.firstFrameImage) ? '重出首帧' : '生成首帧图' }}</button>
+                        <button
+                          type="button"
+                          class="btn btn-sm"
+                          :disabled="frameGeneratingIds.includes(selectedSb?.id)"
+                          @click="genFrameImage(selectedSb, 'last_frame')"
+                        >{{ (selectedSb?.last_frame_image || selectedSb?.lastFrameImage) ? '重出尾帧' : '生成尾帧图' }}</button>
+                      </span>
+                    </div>
+                    <div class="video-inspector-prompt-head">
+                      <button
+                        type="button"
+                        class="storyboard-ref-thumb"
+                        :disabled="!(selectedSb?.first_frame_image || selectedSb?.firstFrameImage)"
+                        @click.stop="openImageViewer(assetImageSrc({ imageUrl: selectedSb?.first_frame_image || selectedSb?.firstFrameImage }), '分镜首帧图')"
+                      >
+                        <img v-if="selectedSb?.first_frame_image || selectedSb?.firstFrameImage" :src="thumbOf(assetImageSrc({ imageUrl: selectedSb?.first_frame_image || selectedSb?.firstFrameImage }))" class="previewable-image" loading="lazy" @error="thumbFallback($event, assetImageSrc({ imageUrl: selectedSb?.first_frame_image || selectedSb?.firstFrameImage }))" />
+                        <span v-else>首帧</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="storyboard-ref-thumb"
+                        :disabled="!(selectedSb?.last_frame_image || selectedSb?.lastFrameImage)"
+                        @click.stop="openImageViewer(assetImageSrc({ imageUrl: selectedSb?.last_frame_image || selectedSb?.lastFrameImage }), '分镜尾帧图')"
+                      >
+                        <img v-if="selectedSb?.last_frame_image || selectedSb?.lastFrameImage" :src="thumbOf(assetImageSrc({ imageUrl: selectedSb?.last_frame_image || selectedSb?.lastFrameImage }))" class="previewable-image" loading="lazy" @error="thumbFallback($event, assetImageSrc({ imageUrl: selectedSb?.last_frame_image || selectedSb?.lastFrameImage }))" />
+                        <span v-else>尾帧</span>
+                      </button>
+                    </div>
+                  </section>
                   <section class="video-inspector-section video-fullref-panel">
                     <div class="video-fullref-head">
                       <span class="video-inspector-label video-inspector-label-hero">ComfyUI Full-Reference（只读）</span>
@@ -3658,20 +3699,66 @@ function formatHistoryTime(iso) {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
+// 1017（用户「首尾帧没生效」）：分镜的首/尾帧图以前**没有任何生产者** —— 后端回写路径在
+// （generation.ts:551-552 按 frame_type 写 first_frame_image / last_frame_image）、读取路径也在
+// （genVid 带 first/last_frame_url），缺的就是这个入口。补上：首帧 = description 的【镜头1】、
+// 尾帧 = 最后一个【镜头N】（站位本来就写死在分镜里），参考位沿用 getShotReferenceImages 的顺序
+// （角色 → 场景 → 道具，1016 的真实 bug 就出在这条顺序上）。锚图会被 AddGuide center-resize 到
+// 画布（comfy_extras/nodes_minimax_h3.py:222），所以尺寸跟定案画布 1024x768；画风由后端按
+// frame_type 注入（routes/tasks.ts），这里只发画面描述。
+const frameGeneratingIds = ref([])   // 这个 SFC 是 `<script setup>`（无 lang=ts），别写泛型
+function shotFramePrompt(sb, frameType) {
+  const parts = String(sb?.description || '').split(/【镜头\d+】\s*/).map(s => s.trim()).filter(Boolean)
+  const list = parts.length ? parts : [String(sb?.description || '').trim()]
+  return frameType === 'first_frame' ? list[0] : list[list.length - 1]
+}
+async function genFrameImage(sb, frameType) {
+  if (!sb?.id) return
+  const prompt = shotFramePrompt(sb, frameType)
+  if (!prompt) { toast.error(t('episode.vid.needRefOrPrompt')); return }
+  frameGeneratingIds.value = [...frameGeneratingIds.value, sb.id]
+  try {
+    const task = await taskAPI.generate({
+      type: 'image', storyboard_id: sb.id, drama_id: dramaId,
+      config_id: imageConfigs.value[0]?.id, size: '1024x768',
+      frame_type: frameType, prompt, reference_images: getShotReferenceImages(sb),
+    })
+    const id = task?.id ?? task?.data?.id
+    // 图片任务同步等完（实测 35-70 秒/张）再刷页面，不然缩略图要手点才出来
+    for (let i = 0; id && i < 120; i++) {
+      const st = await taskAPI.get(id).catch(() => null)
+      const s = String(st?.status || '').toLowerCase()
+      if (s === 'completed' || s === 'failed') { if (s === 'failed') toast.error(String(st?.error_msg || '').slice(0, 120)); break }
+      await new Promise(r => setTimeout(r, 5000))
+    }
+    await refresh()
+  } catch (e) { toast.error(String(e?.message || e)) }
+  finally { frameGeneratingIds.value = frameGeneratingIds.value.filter(i => i !== sb.id) }
+}
+
 function getShotReferenceImages(sb) {
   const refs = []
   const pushRef = (value) => {
     if (!value || refs.includes(value) || refs.length >= refImageLimit.value) return
     refs.push(value)
   }
-  // 角色排最前：ComfyUI ref2v 参考位仅 2 张，必须保住每个角色的脸，
-  // 场景/道具让位（单角色分镜也能同时容纳角色+场景两张）
+  // 角色排最前：参考位是 9 槽（桥 `__init__.py:496` `refs[:9]` → `ref_images.ref_image_0~8`、
+  // adapter `comfyui-video.ts:31` MAX_IMAGES=9、本文件 2640 行 refImageLimit=9），顺序 = 角色 → 场景 → 道具。
+  // 老注释写的「仅 2 张」是 1012 换桥之前 JZL 那张图的前提，已经作废（1016 的真实 bug 是顺序错了、不是槽位不够）。
   for (const char of getStoryboardCharacters(sb)) {
     pushRef(char?.image_url || char?.imageUrl)
   }
   const scene = getStoryboardScene(sb)
-  // 场景槽：九宫格优先（3x3 构图锚点），无则回退宽镜头；双空时 pushRef 内 !value 丢弃
-  pushRef(scene?.gridImageUrl || scene?.grid_image_url || scene?.image_url || scene?.imageUrl)
+  // 场景槽：**定场图单视图优先**（1017，用户「房间参考对不上 看看社区怎么做」）。算术出自上游源码，不是猜：
+  // `comfy_extras/nodes_minimax_h3.py:267-268` 的 `ref_image_size:"match"` = 每张参考按生成画布面积
+  // 等比缩小（1024×768 = 0.786 MP）⇒ 实测 1008×1008 的九宫格被压成 888×888、每格 ≈296 px（0.088 MP）；
+  // 实测 1344×768 的定场图同预算下是 1171×669 = 整间房拿满 0.786 MP ⇒ **房间细节 ×9，零额外时间**。
+  // `"max"`（短边 2048、从不放大）救不了九宫格 —— 1008 < 2048 ⇒ 只多 13% 线性。社区对这个病的药是
+  // JZL 的 `ref_scale`（面积倍率 1.0-5.0，`ComfyUI-JZL-MiniMax-H3/nodes.py:101`、`:145-148`、
+  // README:14「越大保真度越高、越慢」），但核心原生节点没这个旋钮（`nodes_minimax_h3.py:259-285` 的
+  // schema 里没有它）⇒ 只能靠喂对图。九宫格留着当回退（SKILL 105 行那条「一条参考锚多镜、定视角顺序」
+  // 的用法仍然成立），只是不再当首选。
+  pushRef(scene?.image_url || scene?.imageUrl || scene?.gridImageUrl || scene?.grid_image_url)
   for (const prop of getStoryboardProps(sb)) {
     pushRef(prop?.image_url || prop?.imageUrl)
   }

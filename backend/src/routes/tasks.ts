@@ -159,13 +159,22 @@ app.post('/', async (c) => {
       if (stylePrompt) videoPrompt = `${stylePrompt}，\n${videoPrompt}`
     }
 
+    // 1017 分镜首尾帧图：带 `frame_type` 的图片任务也吃项目画风，和上面 video 那条同口径。
+    // 角色三视图 / 场景九宫格**不**注入 —— 它们自己的提示词写着「纯白背景、电影质感」，叠画风会打架。
+    let imagePrompt = body.prompt
+    if (type === 'image' && body.frame_type && String(body.prompt || '').trim()) {
+      const dramaId = body.drama_id ?? storyboardDramaId ?? null
+      const stylePrompt = await getDramaStylePrompt(dramaId)
+      if (stylePrompt) imagePrompt = `${stylePrompt}，\n${body.prompt}`
+    }
+
     const id = type === 'image'
       ? await generateImage({
         storyboardId: body.storyboard_id,
         dramaId: body.drama_id,
         sceneId: body.scene_id,
         characterId: body.character_id,
-        prompt: body.prompt,
+        prompt: imagePrompt,
         model: body.model,
         size: body.size,
         referenceImages: body.reference_images,
@@ -181,6 +190,9 @@ app.post('/', async (c) => {
         imageUrl: videoBody!.image_url,
         firstFrameUrl: videoBody!.first_frame_url,
         lastFrameUrl: videoBody!.last_frame_url,
+        // 1017（用户「保存 然后接入」）：graph 给桥里注册的工作流文件名（如 "shot1.json"）⇒ 那条单
+        // 走 ComfyUI UI 里 Export(API) 出来的图；不给 = 桥的默认 native 图（现役定案），行为不变。
+        graph: videoBody!.graph,
         referenceImageUrls: videoBody!.reference_image_urls,
         referenceVideoUrls: videoBody!.reference_video_urls,
         referenceAudioUrls: videoBody!.reference_audio_urls,

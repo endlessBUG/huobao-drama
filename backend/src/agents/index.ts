@@ -426,8 +426,12 @@ const AGENT_TOOLS: Record<string, Record<string, any>> = {
   scene_prompt_optimizer: {},
 }
 
-/** 只改用户那段字、不带任何工具的「优化器」：角色一条、场景一条（它们的要求不一样，分开写） */
-const OPTIMIZER_TYPES = new Set(['character_prompt_optimizer', 'scene_prompt_optimizer'])
+/** 不给 workspace 文件工具的 Agent：两条优化器（只改用户那段字、零工具）+ prompt_generator。
+ *  prompt_generator 1016 摘掉 workspace：探针实测一条 60 步里 57 步是 mastra_workspace_grep /
+ *  list_files / read_file 的瞎探索（同一个 pattern 连打 30 次）、一个字没落库；它的 prompt 与
+ *  SKILL 文本里没有任何一句要它读文件（技能全文已在 instructions 里服务端拼好，read_* 与
+ *  save_ 系列与 update_storyboard 全是 DB/库工具），文件工具纯粹是陷阱。摘掉后模型只剩该调的那几条。 */
+const NO_WORKSPACE_TYPES = new Set(['character_prompt_optimizer', 'scene_prompt_optimizer', 'prompt_generator'])
 
 /** instructions 按请求解析：prompt 文件（或默认）+ 技能全文拼接 + 目标语言指令块
  *  prompt/skill 文本随内容语言切换语言变体（<type>.<lang>.md / SKILL.<lang>.md），缺失回退中文版 */
@@ -469,7 +473,7 @@ export const agentRegistry: Record<string, Agent> = Object.fromEntries(
       // 优化器不挂工作区：技能是**内联进 instructions** 的（buildInstructions 里 loadAgentSkills），
       // 工作区只带来 skill/mastra_workspace_* 这套文件工具。实测（1016）默认文本模型拿到这些工具后
       // 会陷进 grep 循环 —— 一发 60 次工具调用、最后回一串「.」；它只该输出一段改写后的正文。
-      workspace: OPTIMIZER_TYPES.has(type) ? undefined : skillWorkspaces[type],
+      workspace: NO_WORKSPACE_TYPES.has(type) ? undefined : skillWorkspaces[type],
       skillsFormat: 'markdown',
     }),
   ]),

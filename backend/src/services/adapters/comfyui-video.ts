@@ -186,14 +186,21 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
         no_lora: true,
         first_frame: firstFrameFile,
         last_frame: lastFrameFile,
+        // 1017（用户「保存 然后接入」）：给文件名就换图跑（桥 `_wf_saved`，按消费者角色填动态量）；
+        // 不给 = 桥默认 native（1016 定案那条），与之前逐字节一致。
+        graph: record.graph || undefined,
         guide: guideFile,
         prev_latent: record.prevLatent || undefined,
         save_name: record.saveName || undefined,
         trim: record.trimFrames || 0,
         lora: record.lora || undefined,
         lora_strength: record.lora ? (record.loraStrength ?? 1.0) : undefined,
-        // 不传 = 桥里那格整段不出现，图与老行为逐字节一致（和 lora 同一个口径）
-        sparse: record.sparse ? true : undefined,
+        // 不传 = 桥里那格整段不出现，图与老行为逐字节一致（和 lora 同一个口径）。
+        // 1016 夜改：`false` 要能真发出去。桥 `__init__.py:1012` 判的是 `b.get("sparse") is False`，
+        // 老写法 `record.sparse ? true : undefined` 把 false 和「没传」混成一谈 ⇒ dense 对照臂永远进不去。
+        // 今晚 18 连卡（GPU 100% @ 42 W、step 0 不动、磁盘读 0、硬缺页 0，而同进程一条 512×384 的
+        // krea2 出图 40 秒跑完 = 机器是好的）⇒ 用 body `sparse:false` 走 dense 对照。
+        sparse: record.sparse ?? undefined,
         seed: record.seed ?? undefined,
       },
     }

@@ -37,7 +37,8 @@ test('episode.vue：角色宽图拆两格（宽高判断 + 模板 + CSS 同图�
   assert.match(s, /const charSheetWide = ref\(false\)/)
   assert.match(s, /el\.naturalWidth > el\.naturalHeight/)
   assert.match(s, /const isCharSheet = computed/)
-  assert.match(s, /v-else-if="isCharSheet"/)
+  // 1017 复跑：这条现在是分支链的**第一**支（`v-if`），不是 `v-else-if` —— 功能没变（横图才拆、两格同图靠 object-position）
+  assert.match(s, /v-if="isCharSheet"/)
   // 打开别的资产时复位，避免上一张的宽高结论串到下一张
   assert.match(s, /charSheetWide\.value = false/)
   // 两格取自同一张图，只靠 object-position 区分

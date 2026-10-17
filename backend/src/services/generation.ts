@@ -59,6 +59,7 @@ interface GenerateVideoParams {
   imageUrl?: string
   firstFrameUrl?: string
   lastFrameUrl?: string
+  graph?: string   // 1017：桥里那份 saved 工作流的文件名（`.json`）；空 = 走默认 native
   referenceImageUrls?: string[]
   referenceVideoUrls?: string[]
   referenceAudioUrls?: string[]
@@ -138,6 +139,7 @@ export async function generateVideo(params: GenerateVideoParams): Promise<number
     imageUrl: params.imageUrl,
     firstFrameUrl: params.firstFrameUrl,
     lastFrameUrl: params.lastFrameUrl,
+    graph: params.graph,
     referenceImageUrls: params.referenceImageUrls,
     referenceVideoUrls: params.referenceVideoUrls,
     referenceAudioUrls: params.referenceAudioUrls,
@@ -299,6 +301,13 @@ async function processTask(id: number, config: AIConfig) {
         imageUrl: resolvedImageUrl,
         firstFrameUrl: resolvedFirstFrameUrl,
         lastFrameUrl: resolvedLastFrameUrl,
+        // 1017 的洞：`graph` 存进了 sys_task.params（上面 :142）也进了适配器（comfyui-video.ts:191
+        // `record.graph`），但这条 record 字面量是**逐字段列出来的**、没抄 graph ⇒ 适配器永远读到
+        // undefined ⇒ 桥 `_graph = b.get("graph") or "native"` 恒走 native，body `graph:"*.json"` 形同不存在。
+        // 实测证据 = 1017 13:18Z 那条在跑的 `/queue`：文件里 CLIPLoader `device:"cpu"`，队列里同一号
+        // 节点却是 `"device":"default"`（`h3_refall_cpuTE.json` 的 28 号被 `_wf_saved` 剪到 20 号，
+        // 但 device 不会被它动 —— `__init__.py:600-601` 只是 `dict(v["inputs"])` 原样拷）。
+        graph: params.graph,
         referenceImageUrls: resolvedReferenceImageUrls.length ? JSON.stringify(resolvedReferenceImageUrls) : null,
         referenceVideoUrls: resolvedReferenceVideoUrls.length ? JSON.stringify(resolvedReferenceVideoUrls) : null,
         referenceAudioUrls: resolvedReferenceAudioUrls.length ? JSON.stringify(resolvedReferenceAudioUrls) : null,

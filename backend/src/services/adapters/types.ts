@@ -104,6 +104,7 @@ export interface VideoGenerationRecord {
   imageUrl?: string | null
   firstFrameUrl?: string | null
   lastFrameUrl?: string | null
+  graph?: string | null   // 1017：saved 工作流文件名（桥 `_wf_saved`），空 = 桥默认 native
   referenceImageUrls?: string | null
   referenceVideoUrls?: string | null
   referenceAudioUrls?: string | null

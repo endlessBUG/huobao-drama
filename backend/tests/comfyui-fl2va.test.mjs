@@ -16,7 +16,9 @@ test('bridge 的 _wf_fl2va（fl2va 节点 + first/last 接线 + upscale_scale=1.
 test('videos 路由：首尾帧默认走 native，只有显式 graph:"jzl" 才落 _wf_fl2va', () => {
   assert.match(bridge, /first_frame = b\.get\("first_frame"\) or None/)
   assert.match(bridge, /last_frame = b\.get\("last_frame"\) or None/)
-  assert.match(bridge, /if \(first_frame or last_frame\) and \(b\.get\("graph"\) or "native"\)\.lower\(\) != "native":/)
+  // 1017：`graph` 先取进 `_graph`（`_wf_saved` 的 `.json` 分支排在它前面）⇒ 判词没变、写法变了
+  assert.match(bridge, /_graph = str\(b\.get\("graph"\) or "native"\)\.lower\(\)/)
+  assert.match(bridge, /elif \(first_frame or last_frame\) and _graph != "native":/)
   assert.match(bridge, /_wf_fl2va\(prompt, w, h, int\(b\.get\("length",\s*124\)\),\s*first_frame/)
   assert.match(bridge, /last_frame=last_frame/)
   assert.match(bridge, /first_frame=first_frame, last_frame=last_frame/)

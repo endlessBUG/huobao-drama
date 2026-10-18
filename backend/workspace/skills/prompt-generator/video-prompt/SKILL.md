@@ -14,9 +14,10 @@ description: 视频提示词规范 — 根据分镜段落内容生成按时间�
 ```
 出场人物：@小明、@小红；场景：@咖啡厅。
 0-3秒：@咖啡厅，近景固定镜头，@小明低头看手机，手指反复敲桌面，表情焦虑。
-3-6秒：切到门口全景，门铃响，@小红推门走入，带进一阵冷风。
-6-9秒：切回中景，@小红微笑着走向小明坐下，小明说：「你终于来了。」
+3-6秒：镜头保持同一近景，@小明的拇指停在屏幕上，抬眼看向门口，呼吸放轻。
+6-9秒：切到门口全景，门铃响，@小红推门走入，带进一阵冷风。
 ```
+上例的 description 只有两个【镜头N】：前两段是同一个近景镜头（3-6秒写「镜头保持」，不切），唯一的一刀在 6 秒进【镜头2】。**切镜次数 = 【镜头N】数 − 1**。
 
 信息头规则：
 - 只列该分镜段落实际出场的人物和绑定的场景，不要列没出场的
@@ -25,11 +26,13 @@ description: 视频提示词规范 — 根据分镜段落内容生成按时间�
 
 按 3 秒为一段，每段单独一行、用换行分隔，时间范围连续衔接（无重叠、无空缺）。
 
+**3 秒段不是镜头（硬规则，1018）**：分段只是时间切片。同一个 `【镜头N】` 跨多个 3 秒段时，所有段共用同一个景别与机位，只在动作/台词上推进；下一段开头写「镜头保持 / 镜头继续」，**不要**写「切到 / 切回」。切镜只发生在 `【镜头N】` 的边界上——整条提示词的切镜次数必须等于 description 里 `【镜头N】` 的数量 − 1。多出来的每一刀都是为切而切，模型会照做，成片就是同一主体来回跳。
+
 ## 与分镜描述的映射
 
 `description` 是 video_prompt 的唯一内容来源（画面、动作、台词、旁白都在其中），转换规则：
 
-- `description` 的每个 `【镜头N】` 映射为 **1-2 个连续的 3 秒段**，顺序一致、不遗漏、不合并、不新增子镜头
+- `description` 的每个 `【镜头N】` 映射为 **1-2 个连续的 3 秒段**（这 1-2 段仍是**同一个镜头**，不是 1-2 个镜头），顺序一致、不遗漏、不合并、不新增子镜头；`【镜头N】` 数就是镜头数，切镜只发生在两个 `【镜头N】` 之间
 - 台词/旁白从对应 `【镜头N】` 内的「角色名说：「…」」「旁白：…」提取，分配到该子镜头映射的段；**不要创作 description 之外的新台词**
 - 画面动作以 `description` 为准；`atmosphere` 只用于补各段的光线、色调与氛围描写
 
@@ -43,14 +46,15 @@ description: 视频提示词规范 — 根据分镜段落内容生成按时间�
 
 - **第一段必须建立空间**：场景 + 机位 + 每个角色的左右站位（谁在画面左、谁在右）与状态，让观众一眼知道在哪、看谁
 - **站位跨段恒定**：每一段都要写角色在画面哪一侧；上一段在左、没写他移动，下一段不许出现在右
-- **切镜**：切镜后的段开头用"切到/切回"等衔接词，并重新交代景别与主体；切镜点应对齐分镜 `description` 中的 `【镜头N】` 结构
+- **切镜**：只在 `【镜头N】` 边界处用"切到/切回"等衔接词，并重新交代景别与主体；同一个 `【镜头N】` 内部的段首用"镜头保持/继续"，不切
 - **切镜准入（硬规则，MiniMax H3 官方 §4.2）**：切镜必须**引入新信息**——新主体、新空间、新状态、新视角或新时间。
   **只是距离（景别）或轻微角度变化，不要切，改用运镜**：`中景 → 特写` 该写成 `The camera pushes in with small amplitude at slow speed...`，
   不是在两段之间切一刀。同一主体、同一空间、同一时间点上「中景→特写→中景」来回切，就是「为切而切」，模型会照做，成片只是没有信息量的跳来跳去
-- **景别/运镜**：每段一个镜头状态（近景/中景/全景/特写；运镜用下面 full_ref 那节的官方词汇）；单个子镜头内运镜连续，切镜后可更换运镜方式
+- **景别/运镜**：每个 `【镜头N】` 一个镜头状态（近景/中景/全景/特写；运镜用下面 full_ref 那节的官方词汇）；同一子镜头的连续段内运镜连续，切镜后才更换运镜方式
 - **动作**：每段一个主动作，动词具体可见（走、转身、抬头、攥紧、停顿）
 - **情绪全部转为可见描写**：不要"他很伤心/气氛紧张"这类抽象词，写成"他低下头、手指攥紧杯沿、呼吸变重"
 - **对白/旁白**：写「角色名说：「台词」」，旁白写「旁白：内容」；3 秒念不完的长台词拆到多段；无对白的段可写环境音/动作音（如"机器持续轰鸣"）
+- **声音要可听（硬规则，1018「声音没了」实测）**：无对白 ≠ 无声。每个无对白段都要写**具体、可听见**的动作音/环境音（呼吸、布料摩擦、床架轻响、脚步、水声），不要用「极静 / 无声 / 无人说话 / faint / barely audible」把整段压成静音——实测写「faint creak + faint insects」时成片音频只有 -55 dB，等于没声音。声音只写 description / atmosphere 已有的声源，不新增台词。full_ref 的 `overall_soundscape` 同样写**至少两个可听见的具体声源**，不许写 `faint` / `barely audible` / `quiet` 收尾
 
 ## 引用规则
 
@@ -92,10 +96,10 @@ summary:
 [reference generation] [Shot 1] is a [片长]-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
 retention_analysis:
 <Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - identity and costume exactly as supplied by <Picture 1>; on the left of frame by the [固定陈设].
-<Subject 2> (appears in [Shot 1], [Shot 3]): fully_preserved - identity and costume exactly as supplied by <Picture 2>; on the right of frame by the [固定陈设].
+<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - identity and costume exactly as supplied by <Picture 2>; on the right of frame by the [固定陈设].
 <Subject 3> (appears in all shots): fully_preserved - room layout, fixed furnishing positions and light direction exactly as supplied by <Picture 3>.
 detailed_description:
-[Shot 1] a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] —— 这一秒只写画面/动作，不写 `<d>`（段首 1 秒是衔接窗口，必须无对白）。[Shot 2] At 00:01.500, <Subject 1> (S1) says: <d>[Chinese] 台词原文</d> [Shot 3] At 00:03.000, the camera cuts to...
+[Shot 1] a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] —— 段首 1 秒只写画面/动作，不写 `<d>`（衔接窗口，必须无对白）。At 00:01.500, <Subject 1> (S1) says: <d>[Chinese] 台词原文</d> The same shot continues with [同一镜头内的后续动作]。[Shot 2] At 00:04.000, the shot cuts to [下一子镜]...（**description 有几个【镜头N】，这里就只能有几个 [Shot N]、N−1 个 cut 短语；同一镜头跨多个时间点写在同一段 [Shot N] 里，不新增 [Shot N]**）
 overall_soundscape:
 [环境音描述]
 non_diegetic_music:
@@ -127,6 +131,7 @@ non_diegetic_music:
 - **「腿缠腰/腿贴髋」是必须删除的动作，不是改写对象（1018 第三次穿模后定）**：description 里的腿部缠绕/贴髋在并躺场景中不可渲染；`video_prompt` 与 `video_prompt_full_ref` 里**不得出现任何腿与对方身体接触的句子**，也不得出现 `hip` / `waist` / `calf` / `thigh` / `legs` / `both legs` / 「髋」/「腰」/「小腿」/「大腿」/「双腿」。腿只允许两种落点句：`her foot stays on the mattress` / `her calf rests on the sheet`。亲密接触一律改用**手、手臂、肩、脸**（`her right palm rests on the outer side of <Subject 1>'s shoulder`）。
 - **并躺亲密镜头默认腰部以上景别**：写 `medium close-up from the waist up` 或 `close-up`，**不写 medium shot / full shot**，画面里不出现两人的腿（腿不入画 = 没有腿可穿模）。
 - **保存前强制自检**：调用 `update_storyboard` 前逐字检查两条提示词，出现 `hip` / `calf` / `thigh` / `legs` / `both legs` / 「髋」/「小腿」/「大腿」/「双腿」/ `sink` / 「陷入」即改写；除上面两种落点句外，任何腿部描写都删掉。
+- **保存前数镜头（硬自检）**：数 description 里的 `【镜头N】` 个数 = N；两条提示词必须各有 **N 个镜头**、**N−1 个切镜**。`video_prompt` 里「切到/切回/切至」出现次数 = N−1，其余段首写「镜头保持/继续」；`video_prompt_full_ref` 的 `detailed_description` 里 `[Shot N]` 个数 = N，cut 短语个数 = N−1。多了就是自己新增的子镜头，删掉并合并回同一镜头——同一场景同一主体每 3 秒切一刀，成片就是无意义的跳来跳去。
 - **重新生成时不得照抄旧提示词**：`read_storyboard_context` 返回的 `existing_storyboards[*].video_prompt` 是上一版（可能含已判死的穿模写法），只能用来核对站位/台词，**不得整段复制、也不得在它上面做局部微调**；每次重新生成都必须从 `description` + 本技能重新写。
 - **禁止缠绕类连续重叠措辞**：`wraps her legs around` / `entwines` / `locked around the waist` / `缠在腰间` 会让模型把肢体塞进躯干。一律改成点到点的“贴住/压住/搭在/握住”，并写清**另一条肢体在哪**（`her left leg stays extended on the sheet`）。
 - 每个接触镜头写**承重点**：重量落在床面/椅面/地面，不是落在对方身体里。

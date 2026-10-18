@@ -375,11 +375,41 @@ const updateStoryboard = createTool({
     if (!storyboard) return { error: `Storyboard ${storyboard_id} not found` }
 
     // 过滤模型回传的垃圾值：视频提示词 Agent 常把整行字段回传，
-    // 拿不准的字符串字段写成 "null"/"undefined"，直接覆盖会毁掉已有内容
+    // 拿不准的字符串字段写成 "null"/"undefined"/""/"..."，直接覆盖会毁掉已有内容。
+    // 1018 实测：上一版只挡 null/undefined，sb95 的 atmosphere/angle/image_prompt 被清空、
+    // sb96 整行变成 "..."（占位符）——空串与纯省略号一律当「没改」，不回写。
     for (const key of Object.keys(fields) as (keyof typeof fields)[]) {
       const v = fields[key]
-      if (typeof v === 'string' && (v === 'null' || v === 'undefined' || v === 'NULL' || v === 'Null')) {
+      if (typeof v === 'string' && (/^[.．…\s]*$/.test(v) || /^(null|undefined)$/i.test(v.trim()))) {
         delete fields[key]
+      }
+    }
+    // description 是本体的正文：只允许「仍含【镜头N】」的覆盖，防止被标题/摘要之类冲掉
+    if ('description' in fields && !/【镜头\d+】/.test(fields.description || '')
+      && /【镜头\d+】/.test(storyboard.description || '')) {
+      delete fields.description
+    }
+
+    // 切镜数硬校验（1018 实测）：description 的【镜头N】就是镜头数，切镜词只许出现在
+    // 这些边界上。模型常在没写切镜的段落之间自己补「切回/切到」，12 秒 2 镜被写成 4 刀，
+    // 成片就是同一主体来回跳。计数不符直接拒绝保存，错误信息里给出应有的数目让它重写。
+    if ('video_prompt' in fields || 'video_prompt_full_ref' in fields) {
+      const desc = ('description' in fields ? fields.description : storyboard.description) || ''
+      const shotCount = (desc.match(/【镜头\d+】/g) || []).length
+      if (shotCount >= 1) {
+        const expected = shotCount - 1
+        if ('video_prompt' in fields) {
+          const vpCuts = ((fields.video_prompt || '').match(/切到|切回|切至/g) || []).length
+          if (vpCuts !== expected) {
+            return { error: `切镜数不符：description 有 ${shotCount} 个【镜头N】，video_prompt 必须正好 ${expected} 次切镜（切到/切回/切至），当前 ${vpCuts} 次。多出的切镜合并回同一镜头（同一【镜头N】跨多个 3 秒段时段首写「镜头保持/继续」，不切）；也不要把两个【镜头N】并成一刀。重写后重新调用 update_storyboard（只传 storyboard_id / video_prompt / video_prompt_full_ref）。` }
+          }
+        }
+        if ('video_prompt_full_ref' in fields) {
+          const frCuts = ((fields.video_prompt_full_ref || '').match(/\b(?:camera|shot)\s+(?:cuts|transitions|changes|switches)\s+to\b/gi) || []).length
+          if (frCuts !== expected) {
+            return { error: `切镜数不符：description 有 ${shotCount} 个【镜头N】，video_prompt_full_ref 必须正好 ${expected} 个 cut 短语（the camera cuts to / the shot cuts to / the shot transitions to / the shot changes to / the shot switches to），当前 ${frCuts} 个。每个【镜头N】只写一个 [Shot N]，同一镜头跨多个时间点写在同一段 [Shot N] 里，不新增 [Shot N]。重写后重新调用 update_storyboard。` }
+          }
+        }
       }
     }
 

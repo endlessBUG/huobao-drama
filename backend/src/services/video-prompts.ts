@@ -87,12 +87,19 @@ export async function startVideoPromptBatch(
         const handoff = prevTail
           ? `\n\n上一镜（分镜 #${prevTail.no}，同一场景）结尾的落定状态如下，**本条第一段必须从这里承接**——站位、朝向、手停在哪、持物、视线与之一致；要换位置必须写出可见的动作过程，不许无声换位：\n${prevTail.text}`
           : ''
+        // 模型不会自己数【镜头N】：把镜头清单与应有刀数直接写进指令（1018 实测：
+        // 2 镜的 12 秒被写成 4 刀，成片在同一场景里切来切去）
+        const shotTexts = (sb.description || '').split(/【镜头\d+】/).slice(1).map(s => s.trim()).filter(Boolean)
+        const shotPlan = shotTexts.length
+          ? `\n**本镜镜头清单（硬约束，不许新增）**：description 有 ${shotTexts.length} 个【镜头N】，两条提示词都必须正好 ${shotTexts.length} 个镜头、${shotTexts.length - 1} 次切镜：\n${shotTexts.map((t, i) => `【镜头${i + 1}】${t.slice(0, 50)}${t.length > 50 ? '…' : ''}`).join('\n')}\n把 ${segCount} 个 3 秒段按顺序分配给这 ${shotTexts.length} 个镜头；同一镜头跨 1-2 段，段首写「镜头保持/继续」，切镜只出现在上面 ${shotTexts.length - 1} 个镜头边界上；full_ref 的 [Shot N] 也必须是 ${shotTexts.length} 个。`
+          : ''
         await agent.generate([{
           role: 'user',
-          content: `请为分镜 #${sb.storyboardNumber}(ID:${sb.id})生成视频提示词(video_prompt) 与全参考提示词(video_prompt_full_ref)。视频模型:${videoLabel}。**本镜视频时长 ${sec.toFixed(1)} 秒，按 3 秒分段共 ${segCount} 段，最后一段的终点写 ${sec.toFixed(1)} 秒，不要写超出这个时长的内容**。
-请先调用 read_storyboard_context 获取该分镜的画面描述(含【镜头N】子镜头与台词/旁白)、氛围及时长，据此生成 video_prompt(第一行是信息头：列出该分镜出场的人物与场景，用 @角色名/@场景名 引用；之后按 3 秒分段换行、用 @角色名/@场景名/@道具名 引用参考素材；段落内允许多镜头切镜，段与段可以是不同景别/角度/对象，但不跨场景，切镜点对齐分镜 description 的【镜头N】结构)。同时按技能「六段式英文全参考」生成 video_prompt_full_ref（英文，含 <Subject>/<Picture> 标签，对应同一分镜）。然后调用 update_storyboard 保存到分镜 ID:${sb.id}。update_storyboard 参数只传 storyboard_id、video_prompt、video_prompt_full_ref 三个键,不要回传该分镜的其他任何字段,不要重新拆分整集。
+          content: `请为分镜 #${sb.storyboardNumber}(ID:${sb.id})生成视频提示词(video_prompt) 与全参考提示词(video_prompt_full_ref)。视频模型:${videoLabel}。**本镜视频时长 ${sec.toFixed(1)} 秒，按 3 秒分段共 ${segCount} 段，最后一段的终点写 ${sec.toFixed(1)} 秒，不要写超出这个时长的内容**。${shotPlan}
+请先调用 read_storyboard_context 获取该分镜的画面描述(含【镜头N】子镜头与台词/旁白)、氛围及时长，据此生成 video_prompt(第一行是信息头：列出该分镜出场的人物与场景，用 @角色名/@场景名 引用；之后按 3 秒分段换行、用 @角色名/@场景名/@道具名 引用参考素材；**3 秒段只是时间切片、不是镜头**：同一个【镜头N】跨多个 3 秒段时保持同一景别/机位，段间写「镜头保持/继续」、不写「切到」；只有 description 的【镜头N】边界才切镜，整条提示词的切镜次数必须等于【镜头N】数 − 1，不新增子镜头；不跨场景)。同时按技能「六段式英文全参考」生成 video_prompt_full_ref（英文，含 <Subject>/<Picture> 标签，对应同一分镜）。然后调用 update_storyboard 保存到分镜 ID:${sb.id}。update_storyboard 参数只传 storyboard_id、video_prompt、video_prompt_full_ref 三个键,不要回传该分镜的其他任何字段,不要重新拆分整集。
 **工具纪律**：第一步 read_storyboard_context；拿到内容后直接写两条提示词并调用 update_storyboard 保存。**不要再调用任何其他工具**（read_prompt_library 已从本 Agent 摘除，workspace 文件工具也不可用）—— 分镜的画面描述、人物与场景都在 read_storyboard_context 的返回里，多调只会烧步数（1016 实测：一条 60 步全花在无谓探索上、一个字没落库；同一条不探索时 3 步就存好）。
-**床上并躺/侧躺硬规则**：一律腰部以上景别；两条提示词正文不得出现 腿/脚/小腿/膝/髋/腰（「腰部以上」除外）与 leg/calf/thigh/knee/hip/waist（「waist up」除外）；亲密接触只写手、手臂、肩、脸。${handoff}`,
+**床上并躺/侧躺硬规则**：一律腰部以上景别；两条提示词正文不得出现 腿/脚/小腿/膝/髋/腰（「腰部以上」除外）与 leg/calf/thigh/knee/hip/waist（「waist up」除外）；亲密接触只写手、手臂、肩、脸。
+**声音硬规则**：无对白 ≠ 无声。每个无对白段都要写可听见的呼吸/布料摩擦/床架轻响等动作音或环境音，不许用「极静/无声/无人说话/faint/barely audible」把整段压成静音（1018 实测：faint 措辞的成片音频 -55 dB = 没声音）。不新增台词。${handoff}`,
         }], { maxSteps: 24, requestContext })
         // 以实际落库为准判定成败：两个字段都要，只查 video_prompt 会把
         // 「full_ref 恒 NULL」误报成成功（本次 bug 即被这条掩盖）
@@ -101,6 +108,14 @@ export async function startVideoPromptBatch(
           !(fresh?.videoPrompt || '').trim() && 'video_prompt',
           !(fresh?.videoPromptFullRef || '').trim() && 'video_prompt_full_ref',
         ].filter(Boolean)
+        // 切镜数与 description 的【镜头N】数对齐（update_storyboard 已拒绝错误保存，
+        // 这里兜底：Agent 没修就判失败，不让旧提示词蒙混成 completed）
+        const shotCount = (sb.description || '').match(/【镜头\d+】/g)?.length || 0
+        const vpCuts = (fresh?.videoPrompt || '').match(/切到|切回|切至/g)?.length || 0
+        const frCuts = (fresh?.videoPromptFullRef || '').match(/\b(?:camera|shot)\s+(?:cuts|transitions|changes|switches)\s+to\b/gi)?.length || 0
+        if (shotCount && (vpCuts !== shotCount - 1 || frCuts !== shotCount - 1)) {
+          missing.push(`切镜数(vp ${vpCuts} / full_ref ${frCuts}，应为 ${shotCount - 1})`)
+        }
         if (!missing.length) {
           task.completed++
           // 末态 = **真实渲染结尾所在的那一段**，不是最后一段：prompt 可能一路写到 9 秒，

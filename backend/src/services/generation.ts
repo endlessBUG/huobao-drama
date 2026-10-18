@@ -268,24 +268,28 @@ async function processTask(id: number, config: AIConfig) {
       const resolvedFirstFrameUrl = await normalizeVideoReferenceUrl(params.firstFrameUrl)
       const resolvedLastFrameUrl = await normalizeVideoReferenceUrl(params.lastFrameUrl)
       const resolvedReferenceImageUrls = await normalizeVideoReferenceUrls(params.referenceImageUrls)
-      // 段间接力（连续拍）：上一段末帧作 keyframe 锚。keyframe 的 cond 行永不降噪（img_update=False）、
-      // 每步重注入 ⇒ 段首窗口是照搬的，落盘前裁掉，否则和上一段重复同 0.92 秒。见 relayContext 的注释。
+      // 镜头衔接（1018 用户规则）：衔接 = 上一条**精确末帧**当首帧锚（AddGuide frame_idx 0）；
+      // 不衔接（cut / 跨场景）= 不碰上一段，只用参考图。参考图始终由 referenceImageUrls 另传。
       let prompt = record.prompt
+      let firstFrameUrl = resolvedFirstFrameUrl
       let guideUrl: string | null = null
       let prevLatent: string | null = null
       let trimFrames = 0
       if (params.chain) {
         const ctx = await relayContext(record.storyboardId)
-        // 跨场景不接 —— 官方 §2.2 里 keyframe 是「具体帧锚」，只有内容真的延续时才成立；换场景靠角色图 + 场景图。
-        if (ctx?.source && ctx.sameScene) {
-          guideUrl = await extractLastFrame(ctx.source)
-          if (guideUrl) {
-            // 上一段的 AV latent 还在 → 桥走零往返路径（窗口帧与上一段末帧逐像素相同）；
-            // 不在 → 回退 pixel 路径（那张 PNG 既是兜底也是页面显示的那一帧）。
-            prevLatent = `sb${ctx.prevId}`
-            trimFrames = SEAM_WINDOW
-            const mode = ctx.continuity === 'same_shot' ? 'lighting, colour and camera position' : 'lighting and colour'
-            prompt = `${prompt}\ncontinuity: [keyframe completion] the first ${SEAM_WINDOW} frames are carried from the end of the previous shot; match its ${mode}.`
+        if (ctx?.source && ctx.sameScene && ctx.continuity === 'same_shot') {
+          const lastFrame = await extractLastFrame(ctx.source)
+          if (lastFrame) {
+            // 老 JZL 图只认 keyframe 窗口（guide + 段间 latent）：cond 行永不降噪、每步重注入，
+            // 段首窗口是照搬的，落盘前裁掉。native / saved 图走 AddGuide 首帧，不重复窗口、不裁。
+            if (String(params.graph || '').toLowerCase() === 'jzl') {
+              guideUrl = lastFrame
+              prevLatent = `sb${ctx.prevId}`
+              trimFrames = SEAM_WINDOW
+            } else {
+              firstFrameUrl = lastFrame
+            }
+            prompt = `${prompt}\ncontinuity: [keyframe completion] the first frame is taken from the end of the previous shot; match its lighting, colour and camera position.`
           }
         }
       }
@@ -299,7 +303,7 @@ async function processTask(id: number, config: AIConfig) {
         prompt,
         referenceMode: params.referenceMode,
         imageUrl: resolvedImageUrl,
-        firstFrameUrl: resolvedFirstFrameUrl,
+        firstFrameUrl,
         lastFrameUrl: resolvedLastFrameUrl,
         // 1017 的洞：`graph` 存进了 sys_task.params（上面 :142）也进了适配器（comfyui-video.ts:191
         // `record.graph`），但这条 record 字面量是**逐字段列出来的**、没抄 graph ⇒ 适配器永远读到

@@ -11,6 +11,7 @@ import { AliyunWanVideoAdapter } from './aliyun-wan-video'
 import { ComfyUIVideoAdapter } from './comfyui-video'
 import { ComfyUIImageAdapter } from './comfyui-image'
 import { QwenImageAdapter } from './qwen-image'
+import { H3StillImageAdapter } from './comfyui-h3-still'
 import type { ImageProviderAdapter, VideoProviderAdapter } from './types'
 
 // 图片 Adapter 注册表
@@ -20,6 +21,8 @@ export const imageAdapters: Record<string, ImageProviderAdapter> = {
   volcengine: new VolcEngineImageAdapter(),
   comfyui: new ComfyUIImageAdapter(),
   qwen: new QwenImageAdapter(),
+  // 1018 用户定案：首帧图用 fl2va NVFP4（6006，和视频同一张卡/同一个 venv）
+  'h3-still': new H3StillImageAdapter(),
 }
 
 // 视频 Adapter 注册表

@@ -3718,14 +3718,23 @@ async function genFrameImage(sb, frameType) {
   if (!prompt) { toast.error(t('episode.vid.needRefOrPrompt')); return }
   frameGeneratingIds.value = [...frameGeneratingIds.value, sb.id]
   try {
+    // 1018 用户定案「需要首帧图的时候用 fl2va 的 NVFP 版本」⇒ 首帧走 6006 的 h3-still 配置；
+    // 尾帧仍走默认图片配置（qwen/6007）。fl2va 的 ImageToVideo 没有参考图通道，所以首帧不传 refs。
+    const isH3Still = frameType === 'first_frame'
+    const frameCfg = (isH3Still
+      ? imageConfigs.value.find(c => String(c.provider || '').toLowerCase() === 'h3-still')
+      : null) || imageConfigs.value[0]
+    const useH3Still = String(frameCfg?.provider || '').toLowerCase() === 'h3-still'
     const task = await taskAPI.generate({
       type: 'image', storyboard_id: sb.id, drama_id: dramaId,
-      config_id: imageConfigs.value[0]?.id, size: '1024x768',
-      frame_type: frameType, prompt, reference_images: getShotReferenceImages(sb),
+      config_id: frameCfg?.id, size: '1024x768',
+      frame_type: frameType, prompt,
+      reference_images: useH3Still ? [] : getShotReferenceImages(sb),
     })
     const id = task?.id ?? task?.data?.id
-    // 图片任务同步等完（实测 35-70 秒/张）再刷页面，不然缩略图要手点才出来
-    for (let i = 0; id && i < 120; i++) {
+    // 图片任务同步等完再刷页面，不然缩略图要手点才出来。qwen/6007 = 35-70 秒；
+    // h3-still/6006 = fl2va 12 GB + TE 14.6 GB 冷读，可能 10 分钟（还要排在视频任务后面），给 20 分钟。
+    for (let i = 0; id && i < 240; i++) {
       const st = await taskAPI.get(id).catch(() => null)
       const s = String(st?.status || '').toLowerCase()
       if (s === 'completed' || s === 'failed') { if (s === 'failed') toast.error(String(st?.error_msg || '').slice(0, 120)); break }
@@ -3749,16 +3758,10 @@ function getShotReferenceImages(sb) {
     pushRef(char?.image_url || char?.imageUrl)
   }
   const scene = getStoryboardScene(sb)
-  // 场景槽：**定场图单视图优先**（1017，用户「房间参考对不上 看看社区怎么做」）。算术出自上游源码，不是猜：
-  // `comfy_extras/nodes_minimax_h3.py:267-268` 的 `ref_image_size:"match"` = 每张参考按生成画布面积
-  // 等比缩小（1024×768 = 0.786 MP）⇒ 实测 1008×1008 的九宫格被压成 888×888、每格 ≈296 px（0.088 MP）；
-  // 实测 1344×768 的定场图同预算下是 1171×669 = 整间房拿满 0.786 MP ⇒ **房间细节 ×9，零额外时间**。
-  // `"max"`（短边 2048、从不放大）救不了九宫格 —— 1008 < 2048 ⇒ 只多 13% 线性。社区对这个病的药是
-  // JZL 的 `ref_scale`（面积倍率 1.0-5.0，`ComfyUI-JZL-MiniMax-H3/nodes.py:101`、`:145-148`、
-  // README:14「越大保真度越高、越慢」），但核心原生节点没这个旋钮（`nodes_minimax_h3.py:259-285` 的
-  // schema 里没有它）⇒ 只能靠喂对图。九宫格留着当回退（SKILL 105 行那条「一条参考锚多镜、定视角顺序」
-  // 的用法仍然成立），只是不再当首选。
-  pushRef(scene?.image_url || scene?.imageUrl || scene?.gridImageUrl || scene?.grid_image_url)
+  // 场景槽：**九宫格优先**（1018 用户「场景参考图 用九宫格啊」，1017 的定场图单视图优先作废）。
+  // 九宫格 = 多视角定视角顺序，一张参考锚住多条分镜的机位；定场图只在没有九宫格时兜底。
+  // 驱动 `data/generated/.ep7_remake.mjs` 的 refs 顺序必须与此一致（角色 → 场景 → 道具）。
+  pushRef(scene?.grid_image_url || scene?.gridImageUrl || scene?.image_url || scene?.imageUrl)
   for (const prop of getStoryboardProps(sb)) {
     pushRef(prop?.image_url || prop?.imageUrl)
   }

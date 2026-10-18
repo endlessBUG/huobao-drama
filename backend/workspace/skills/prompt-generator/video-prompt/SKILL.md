@@ -37,7 +37,9 @@ description: 视频提示词规范 — 根据分镜段落内容生成按时间�
 
 每一段按此顺序组织内容（可省略无内容的项，但动作/画面必须有）：
 
-**时间范围 ＋ 场景@引用 ＋ 景别/运镜 ＋ 角色@引用＋站位·主体动作·表情 ＋ 对白/旁白 ＋ 氛围光线**
+**时间范围 ＋ 场景@引用 ＋ 景别/运镜 ＋ 角色@引用＋站位·主体动作·表情 ＋ 对白/旁白 ＋ 氛围光线 ＋ 末态**
+
+**每段五要素自检**（官方专业分镜表的秒级写法，压进 3 秒段）：① 动作/姿态/表情 ② 机位/景别/运镜 ③ 空间位置（画面哪侧、相对哪件陈设、朝向）④ 声音（对白/环境音）⑤ 交给下一段的末态（手位、持物、视线、接触点）。缺哪项补哪项——特别是 ⑤，下一段要能从这里起手。
 
 - **第一段必须建立空间**：场景 + 机位 + 每个角色的左右站位（谁在画面左、谁在右）与状态，让观众一眼知道在哪、看谁
 - **站位跨段恒定**：每一段都要写角色在画面哪一侧；上一段在左、没写他移动，下一段不许出现在右
@@ -87,11 +89,11 @@ subject_definitions:
 <Subject 2> is [角色名] from <Picture 2>, on the right of frame by the [固定陈设].
 <Subject 3> is the [场景名] scene from <Picture 3>, an interior bedroom with a window on the right.
 summary:
-[Shot 1] is a [片长]-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
+[reference generation] [Shot 1] is a [片长]-second reference-generation video of [场景]. <Subject 1> and <Subject 2> interact; <Subject 3> is a storyboard reference for [Shot 1], defining its viewpoint, subject placement, and shot order.
 retention_analysis:
-<Subject 1> fully_preserved
-<Subject 2> fully_preserved
-<Subject 3> fully_preserved   # 场景锁定
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - identity and costume exactly as supplied by <Picture 1>; on the left of frame by the [固定陈设].
+<Subject 2> (appears in [Shot 1], [Shot 3]): fully_preserved - identity and costume exactly as supplied by <Picture 2>; on the right of frame by the [固定陈设].
+<Subject 3> (appears in all shots): fully_preserved - room layout, fixed furnishing positions and light direction exactly as supplied by <Picture 3>.
 detailed_description:
 [Shot 1] a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] —— 这一秒只写画面/动作，不写 `<d>`（段首 1 秒是衔接窗口，必须无对白）。[Shot 2] At 00:01.500, <Subject 1> (S1) says: <d>[Chinese] 台词原文</d> [Shot 3] At 00:03.000, the camera cuts to...
 overall_soundscape:
@@ -101,7 +103,6 @@ non_diegetic_music:
 ```
 
 **标签规则**：
-- **画风词不写**：`detailed_description` 里不许出现任何媒介/画风词（`Live-action` / `实拍` / `真人` / `photoreal` / `anime` / `2D` / `3D`）。画风由调用方在提示词最前方注入的项目风格预设决定，自己写一句等于跟预设打架（实测：预设是 3D CG，模板例句的 `Live-action` 被照抄 → 出片变实拍质感）。
 - **画风词不写**：`detailed_description` 里不许出现任何媒介/画风词（`Live-action` / `实拍` / `真人` / `photoreal` / `anime` / `2D` / `3D`）。画风由调用方在提示词最前方注入的项目风格预设决定，自己写一句等于跟预设打架（实测：预设是 3D CG，模板例句的 `Live-action` 被照抄 → 出片变实拍质感）。
 - `<Subject N>`：角色写**两样**——它是 `<Picture N>` 里的谁（角色名），以及它在画面里的位置（如 `on the left of frame by the nightstand lamp`，左右 ＋ 相对固定陈设，两样都要）。**妆造一律不写**：脸型、五官、发型、妆容、服装、配饰全部直接取自参考图，也不要加造型形容词（`elegant` / `beautiful` / `in a silk dress` 都算造型）。你**看不到**参考图，编出来的外貌和穿着必然跟角色图打架。场景/道具同理：只写参考图确实承载的布局，不要往里加人。
 - `<Picture N>`：参考图序号，与中文 `@图片N` 同一套 N（角色 1..k、场景 k+1、道具 k+2..）。
@@ -118,7 +119,36 @@ non_diegetic_music:
 - **承接上一镜末态**：调用消息里若给了「上一镜末态」，本条第一段必须从那个状态起手（站位、朝向、手停在哪、持物、视线一致），要换位置必须写出可见的动作过程
 - **场景锚点逐字复用**：同一场景的空间锚点（固定陈设各自在哪一侧、光从哪来）在每条提示词里**原样重复**，不要换措辞——改写措辞就是漂移的起点
 
-**retention 规则**：`retention_analysis` 每个 subject 一个状态词——`fully_preserved`（强保留，**场景一律用它**）/ `partially_preserved` / `attribute_transfer` / `weak_reference`。
+**肢体接触（硬规则，1018 穿模实测后定）**：
+- **分镜 description 里的缠绕措辞不得照抄**：description 写「双腿缠上腰间」「绕住」「锁住」时，`video_prompt` 与 `video_prompt_full_ref` 必须改写成接触点句子；**输出里出现 `wrap around` / `wrapped around` / `缠在腰间` / `sinking into` / `陷入` 即视为不合格**（照抄就是穿模的源头）。改写示例：description「双腿缓缓缠上 A 的腰」→ `Her right hand lifts and rests on the outer side of <Subject 1>'s shoulder; both her legs stay extended on her own side of the mattress, her right calf resting on the sheet.`
+- 只写**接触点**：谁的哪个部位、贴住对方的哪个部位、接触的是外侧/衣物表面（`her right palm rests on the outer side of <Subject 1>'s shoulder`）。不要把接触写成“进入/陷进/穿过”对方身体。
+- **并躺/侧躺时腿部零接触（1018 两次穿模实测后升级）**：两人都在床上、身体大致平行时，禁止写任何「小腿/膝盖/大腿贴住对方髋、腰、腿」。一条腿要碰到对侧髋必须跨过对方身体中线，模型算不出这条腿的髋关节，实测会渲染成腿穿进另一条大腿、膝盖悬空融合。腿部各自留在自己一侧、脚或小腿贴床；亲密接触只用**手/手臂/肩/脸**。只有站立/跨坐等确实需要双腿承重时才写腿部接触，且两条腿各有落点、不得互相交叉。
+- **躺姿禁止双腿同时离床**：一个 3 秒段最多抬一条腿，且必须写落点（`her right knee rises a little, her right foot stays on the mattress`）；禁止 `both legs rise off the sheet` / `both knees push upward`（没有落点的悬空腿 = 穿模）。
+- **「腿缠腰/腿贴髋」是必须删除的动作，不是改写对象（1018 第三次穿模后定）**：description 里的腿部缠绕/贴髋在并躺场景中不可渲染；`video_prompt` 与 `video_prompt_full_ref` 里**不得出现任何腿与对方身体接触的句子**，也不得出现 `hip` / `waist` / `calf` / `thigh` / `legs` / `both legs` / 「髋」/「腰」/「小腿」/「大腿」/「双腿」。腿只允许两种落点句：`her foot stays on the mattress` / `her calf rests on the sheet`。亲密接触一律改用**手、手臂、肩、脸**（`her right palm rests on the outer side of <Subject 1>'s shoulder`）。
+- **并躺亲密镜头默认腰部以上景别**：写 `medium close-up from the waist up` 或 `close-up`，**不写 medium shot / full shot**，画面里不出现两人的腿（腿不入画 = 没有腿可穿模）。
+- **保存前强制自检**：调用 `update_storyboard` 前逐字检查两条提示词，出现 `hip` / `calf` / `thigh` / `legs` / `both legs` / 「髋」/「小腿」/「大腿」/「双腿」/ `sink` / 「陷入」即改写；除上面两种落点句外，任何腿部描写都删掉。
+- **重新生成时不得照抄旧提示词**：`read_storyboard_context` 返回的 `existing_storyboards[*].video_prompt` 是上一版（可能含已判死的穿模写法），只能用来核对站位/台词，**不得整段复制、也不得在它上面做局部微调**；每次重新生成都必须从 `description` + 本技能重新写。
+- **禁止缠绕类连续重叠措辞**：`wraps her legs around` / `entwines` / `locked around the waist` / `缠在腰间` 会让模型把肢体塞进躯干。一律改成点到点的“贴住/压住/搭在/握住”，并写清**另一条肢体在哪**（`her left leg stays extended on the sheet`）。
+- 每个接触镜头写**承重点**：重量落在床面/椅面/地面，不是落在对方身体里。
+- 一个 3 秒段只写**一个因果动作**（抬起→贴近→贴住），接触状态的变化要有可见过程，不许一段里又抱又翻身又换位。
+- 接触状态逐段复述；下一段从上一段结束的接触点起手，不许换肢体、换接触面。**全文只能有一种接触写法**：第 2 段定成「右手掌贴住左肩外侧」，第 3/4 段只能复述右手（`her right palm still rests against …`），不得再出现 `legs`/`both`/「双腿」；并躺场景里腿部从第一段到最后一段都留在各自一侧。
+- 负向词不写（采样没有负面分支）；用正向状态替代（写“右手贴在外侧肩部”，不写“腿不要穿过身体”）。
+
+**姿态与关节（硬规则）**：
+- **每段复述躯干姿态与头朝向**：不只写左右站位，还要写这一段里每个人是卧（俯卧 / 仰卧 / 侧卧）、坐、站、跪、半撑还是倚靠、承重点在哪、脸朝哪一侧。切镜后重新交代一次；与上一段不一致时必须写出可见的翻身、撑起或转身过程。
+- **不得发明 description 没有的姿态**：description 没写躯干姿态时，沿用上一镜末态，或按 description 的动作反推最省关节的姿势；不要自行添加会改变躯干朝向的描写。模型会把没写清的姿态按参考图和惯性补出来，补出来的往往与动作冲突。
+- **头相对躯干转 0–90°**：脸朝自己的后背方向是物理上做不到的；人要看身后或脚侧的对象时，本段先写翻身、转身或改成侧卧。
+- **近距离的头部动作（耳边呼吸 / 低语 / 贴面 / 亲吻等）**：靠近的一方从对方头侧接近，或两人面对面侧卧 / 一坐一卧且上身朝向对方；把两人躯干朝向和头朝向一起写。只写「唇贴近耳廓」而不写两人怎么躺，模型会让脸和背同时朝向镜头。
+- **大角度转头段用固定机位**：头相对躯干转 ≥45° 的 3 秒段写 `Static Shot` / `the camera holds a static shot`，不叠加环绕 / 推拉。
+- **一个 3 秒段一个精准接触**：接触点之外的肢体写清在哪（`her left hand stays braced on the mattress`），不要同时安排翻身、转头、抬手。
+- 正向陈述，负向词不写（与上面同一原则）。
+
+**summary / retention 规则（官方六段式硬格式）**：
+- `summary` 第一个词必须是任务类型标签：`[reference generation]`；本条带首帧锚（链式续接、keyframe completion）时写 `[reference generation + keyframe completion]`。没有标签的 summary 视为格式不合格。
+- `retention_analysis` 每个 subject 一行，格式 = `<Subject N> (appears in [Shot N], ...): <状态词> - <保留项>`。出现过的 shot 要列全，没出现的不列，场景写 `appears in all shots`。
+- 保留项**只写参考图负责的结构性事实**：角色写身份/妆造“as supplied by <Picture N>”、画面侧与固定陈设；场景写布局、陈设在哪一侧、光从哪来；道具写形状与标记。**不编具体五官、发型、服装**（与本技能「妆造一律不写」同一理由）。
+- 状态词：`fully_preserved`（强保留，**场景一律用它**）/ `partially_preserved` / `attribute_transfer` / `weak_reference`。
+- `non_diegetic_music` 段必须保留：有配乐就写，没有就写 `N/A (no non-diegetic music)`——不许删掉这个段名或留空。
 
 **镜头词汇表**（官方 §4.3，13 类全表）：`Zoom In` / `Zoom Out`、`Push In` / `Pull Out`、`Pan Left` / `Pan Right`、`Truck Left` / `Truck Right`、`Tilt Up` / `Tilt Down`、`Pedestal Up` / `Pedestal Down`、`Arc Shot`、`Tracking Shot`、`Static Shot`、`Shake Slightly` / `Shake Strongly`、`POV`、`Roll Clockwise` / `Roll Counterclockwise`。
 
@@ -139,7 +169,7 @@ non_diegetic_music:
 **镜头与对白规则**：
 - `detailed_description` 按 `[Shot N]` 逐镜头写，含镜头、机位运动（上述词汇）、**每个角色的画面站位**、人物动作、说话人 ID（如 `(S1)`）、`<d>` 对白。
 - **说话人规则（官方 §4.4）**：只有真发声的角色才给 `(Sx)`，从不发声的角色**不给** speaker ID；多个已编号说话人**同时**说/唱用复合 ID `(S1,S2)`；同一说话人跨镜头保持同一 ID。写不清谁在说，模型就自己补，表现成两个人同时开口。
-- **说话人首次出现**要给出声音身份（人物类型、年龄、性别、是否画外、音高、音色、语速、口音）；身份短语、ID、动作和 delivery 写在 `<d>` **外**，`<d>` 内只放语言 tag 和原文台词。
+- **说话人首次出现**要给出声音身份（人物类型、年龄、性别、是否画外、音高、音色、语速、口音）与这一句的语气/节奏（`low and steady` / `hurried`），例：`<Subject 1> (S1), a young woman in her mid-20s, speaking in a warm mid-range voice at an unhurried pace, says:`；身份短语、ID、动作和 delivery 写在 `<d>` **外**，`<d>` 内只放语言 tag 和原文台词。
 - **段首 1 秒内不得有任何 `<d>` 对白**（台词/旁白/内心独白全算），最早台词时间戳 ≥ 1s，这 1 秒只允许画面/氛围/动作。衔接窗口（22 帧 ≈ 0.92 s）正是这一段 —— 窗口里说话会和上一段的音频撞。
 - **台词时长**：按自然语速估（中文 ≈4–5 字/秒、英文 ≈2–3 词/秒，含停顿），台词必须装得进该镜头时长；装不下就延 `[Shot N]` 时间戳，或跨相邻镜头拆并用 `<scenetrans>` 标连续。**绝不把长台词塞进太短的镜头**（破坏口型和节奏）。
 - `<Audio N>` 槽按**本段说话顺序**编号：第一个说话者 = item 1（= `<Audio 1>` = `ref_audio_0`），第二个 = item 2；**绝不按槽位名 A/B/C 排**。只在段内真有人说话时才写 `<Audio N>`。

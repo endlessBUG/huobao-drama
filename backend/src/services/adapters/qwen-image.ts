@@ -121,16 +121,25 @@ export class QwenImageAdapter implements ImageProviderAdapter {
 
     // 参考图：DB 里的 static/... 或 data URL（generation.ts 已统一压成 ≤768px data URL）
     // → 落到 ComfyUI input/，模板里的 LoadImage 只认文件名。
-    // 带图 = 参考图模式（角色三视图）；不带图 = 纯文生图（场景/道具）。两条路都走这里。
+    // 带图 = 参考图模式（角色三视图 / 分镜锚图）；不带图 = 纯文生图（场景/道具）。两条路都走这里。
+    // 1018：TextEncodeQwenImage21 原生支持 image_1..image_16（comfy_extras/nodes_qwen.py:125-133）。
+    // 老代码只 stage 1 张、只喂 refs[0] ⇒ 多角色分镜里两个人都被画成第一个人（task 484 错尾帧的根因）。
     const refs = await stageReferenceImages(
       record.referenceImages ? JSON.parse(record.referenceImages as string) : [],
       toInputDir(config),
-      1,
+      16,
     )
+    const enc = requireNode(graph, 'TextEncodeQwenImage21')
     const loadId = Object.keys(graph).find((k) => graph[k]?.class_type === 'LoadImage')
     if (!loadId) throw new Error('qwen-workflow.json 缺 LoadImage 节点——请用 ComfyUI 的 Export (API) 重新导出覆盖')
-    if (refs[0]) {
-      graph[loadId].inputs.image = refs[0]
+    if (refs.length) {
+      refs.forEach((fname, i) => {
+        // 模板自带那张 LoadImage 给 refs[0]，其余按顺序克隆。Autogrow 子输入键必须是 `images.image_N`。
+        const key = i === 0 ? loadId : `ref_img_${i + 1}`
+        if (i === 0) graph[loadId].inputs.image = fname
+        else graph[key] = { class_type: 'LoadImage', inputs: { image: fname } }
+        enc.inputs[`images.image_${i + 1}`] = [key, 0]
+      })
     } else {
       // 无参考图 = 纯文生图（场景/道具走这条）。参考图那条线要**整个摘掉**，不能留空：
       // LoadImage 收到空文件名会去列 input/ 目录，报

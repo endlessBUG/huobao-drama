@@ -24,8 +24,11 @@ export async function extractLastFrame(relativePath: string): Promise<string | n
     await new Promise<void>((resolve, reject) => {
       ffmpeg(getAbsolutePath(relativePath))
         .inputOptions(['-sseof', '-0.2'])
-        // 这张是列表里每行都要加载的图，不缩就是 1.7 MB × N 行
-        .outputOptions(['-frames:v', '1', '-vf', 'scale=640:-1'])
+        // 这张是列表里每行都要加载的图，不缩就是 1.7 MB × N 行。
+        // 1017 血证：`-frames:v 1` 落的是 seek 窗口的**第一帧**（294 帧实测抓到 238），
+        // 当 AddGuide 首帧锚会明显偏。`-update 1` 逐帧覆写同一个文件 ⇒ 留下窗口最后一帧，
+        // 1018 实测与「ffprobe 数帧 + select=n-1」逐字节相同。
+        .outputOptions(['-vf', 'scale=640:-1', '-update', '1'])
         .save(getAbsolutePath(outRel))
         .on('end', () => resolve())
         .on('error', reject)

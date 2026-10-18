@@ -14,7 +14,6 @@ import { scriptTools } from './tools/script-tools.js'
 import { extractTools } from './tools/extract-tools.js'
 import { storyboardTools } from './tools/storyboard-tools.js'
 import { imagePromptTools } from './tools/image-prompt-tools.js'
-import { promptLibraryTools } from './tools/prompt-library-tools.js'
 import { loadAgentSkills, skillWorkspaces } from './skills.js'
 import { loadAgentPromptFile, loadBasePromptFile } from './prompts.js'
 import { buildLanguageDirective } from './language.js'
@@ -168,7 +167,7 @@ video_prompt 规则（硬约束）：
 - 所有提示词使用本次会话语言指令指定的目标语言输出，单段连贯描述，不要分点，不要混入无关词汇
 - 项目设定的视觉风格描述会由工具在保存图片提示词时自动注入到最终提示词的最前方，不要自行添加风格词
 - 必须实际调用保存工具，不要只在回复中给出提示词
-- 写分镜的视频提示词（video_prompt / video_prompt_full_ref）时才用 read_prompt_library：先不带参数调用拿条目清单，需要哪条就按它的 id 再调用一次取详情。用词照库里命中的条目，不要自己造术语；写场景 / 道具的最终提示词、以及优化角色提示词时同样先不带参数拿清单（库里有社区技法条目：场景技法 / 人物技法 / 道具技法），按题材最多取 1-2 条正文，别整本读`,
+- 不要调用 read_prompt_library（1018 已从本 Agent 摘除；用词按技能正文，不要自己造术语）`,
   },
   character_prompt_optimizer: {
     name: '角色提示词优化',
@@ -414,7 +413,8 @@ const AGENT_TOOLS: Record<string, Record<string, any>> = {
   storyboard_breaker: storyboardTools,
   prompt_generator: {
     ...imagePromptTools,
-    readPromptLibrary: promptLibraryTools.readPromptLibrary,
+    // 1018：read_prompt_library 已摘 —— 批量生成时模型会陷入「同参数连调 56 次」，
+    // maxSteps 打满、一个字没落库（1016 同类问题只摘了 workspace，漏了这条）。
     readStoryboardContext: storyboardTools.readStoryboardContext,
     updateStoryboard: storyboardTools.updateStoryboard,
   },

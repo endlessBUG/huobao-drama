@@ -91,7 +91,8 @@ export async function startVideoPromptBatch(
           role: 'user',
           content: `请为分镜 #${sb.storyboardNumber}(ID:${sb.id})生成视频提示词(video_prompt) 与全参考提示词(video_prompt_full_ref)。视频模型:${videoLabel}。**本镜视频时长 ${sec.toFixed(1)} 秒，按 3 秒分段共 ${segCount} 段，最后一段的终点写 ${sec.toFixed(1)} 秒，不要写超出这个时长的内容**。
 请先调用 read_storyboard_context 获取该分镜的画面描述(含【镜头N】子镜头与台词/旁白)、氛围及时长，据此生成 video_prompt(第一行是信息头：列出该分镜出场的人物与场景，用 @角色名/@场景名 引用；之后按 3 秒分段换行、用 @角色名/@场景名/@道具名 引用参考素材；段落内允许多镜头切镜，段与段可以是不同景别/角度/对象，但不跨场景，切镜点对齐分镜 description 的【镜头N】结构)。同时按技能「六段式英文全参考」生成 video_prompt_full_ref（英文，含 <Subject>/<Picture> 标签，对应同一分镜）。然后调用 update_storyboard 保存到分镜 ID:${sb.id}。update_storyboard 参数只传 storyboard_id、video_prompt、video_prompt_full_ref 三个键,不要回传该分镜的其他任何字段,不要重新拆分整集。
-**工具纪律**：第一步 read_storyboard_context；拿到内容后直接写两条提示词并调用 update_storyboard 保存，中途最多再调 2 次 read_prompt_library。**不要用 workspace 的 grep / list_files / read_file 找素材** —— 分镜的画面描述、人物与场景都在 read_storyboard_context 的返回里，探索只会烧步数（1016 实测：一条 60 步全花在 workspace grep 上、一个字没落库；同一条不探索时 3 步就存好）。${handoff}`,
+**工具纪律**：第一步 read_storyboard_context；拿到内容后直接写两条提示词并调用 update_storyboard 保存。**不要再调用任何其他工具**（read_prompt_library 已从本 Agent 摘除，workspace 文件工具也不可用）—— 分镜的画面描述、人物与场景都在 read_storyboard_context 的返回里，多调只会烧步数（1016 实测：一条 60 步全花在无谓探索上、一个字没落库；同一条不探索时 3 步就存好）。
+**床上并躺/侧躺硬规则**：一律腰部以上景别；两条提示词正文不得出现 腿/脚/小腿/膝/髋/腰（「腰部以上」除外）与 leg/calf/thigh/knee/hip/waist（「waist up」除外）；亲密接触只写手、手臂、肩、脸。${handoff}`,
         }], { maxSteps: 24, requestContext })
         // 以实际落库为准判定成败：两个字段都要，只查 video_prompt 会把
         // 「full_ref 恒 NULL」误报成成功（本次 bug 即被这条掩盖）

@@ -8,47 +8,30 @@ CLAUDE.md 里只留一条引用，细节在这。
 
 ## 当前最优（2026-10-18）
 
-### 速度臂（用户目标「降低到 600s以内」= 达成）：GPU 侧 TE + `--disable-smart-memory` + PDD 5 步 = **494.82 s**
+### 生产默认（1018 深夜用户「换成1采 20步 试试 只改这个 不要lora」）：native 单采 20 步、零 LoRA、GPU 侧 TE
 
-实测 task 512（平台 `/api/v1/tasks`）：ComfyUI `Prompt executed in 494.82 seconds`，发车→平台 merged **8 分 54 秒**，1024×768 / 294 帧（12.25 s）/ 带音轨，分镜 sb88 链式首帧（上一条 #87 精确末帧）。
+**现役配置**：平台 `backend/src/services/adapters/comfyui-video.ts` 写死 `PROD_GRAPH='native'`、`steps:20`、`no_lora:true`，且不再透传分镜 lora（`lora` 两行已注释）。
+桥 `_wf_video_native` 生成的图：UNETLoader(nvfp4) → Veda sp24 → BasicGuider；`BasicScheduler(simple)` 20 步 + `res_multistep`；CLIPLoader `device:"default"`（文本编码器在 GPU）；首尾帧走 `MiniMaxH3AddGuide`（frame_idx 0 / -1）；参考图走 `ref_image_0~8`。
 
-**三个杠杆（缺一不可）：**
+**为什么退到 20 步**：1018 深夜两条快档都被用户判「效果不好」——PDD 5 步（task 512，494.82 s）与 4 步 turbo LoRA（task 540，438 s，首帧 PSNR 9.9 没锚住）。20 步无 LoRA 是 1016 的定案档；1018 深夜用户看 task 542 成片（sb98，`static/videos/b5a64c43-…mp4`）判「这个可以 代码以后都用这个方案」⇒ **已锁定为长期方案**。首帧 PSNR 检查在 20 步这条仍报 9.7（驱动自动重发），但用户按画面判通过，重发已停；锚检查阈值 25 只当提示、不再当否决。
 
-| 杠杆 | 改法 | 效果（实测） |
-|---|---|---|
-| ① TE 上 GPU | saved 图 4 号 CLIPLoader `device:"default"`（生产图是 `"cpu"`） | 固定税 **427 s → 53 s**：文本编码从 CPU 6.5-7 分钟（CPU 368%、GPU 0%）降到 GPU **~32 s**；TE 装载 `loaded partially; 10108.65 MB usable / 9397.24 loaded / 5559.15 offloaded`（`--reserve-vram 1.5` 下 5.5 GB 逐层过 PCIe，一次前向） |
-| ② `--disable-smart-memory` | 加进 `Start-ComfyUIHidden.ps1` 启动参数 | 让 ① 成立：smart memory 开着时 TE 在采样期被「部分卸载」、把 unet 顶出去（1017 的 320-395 s/步）；关掉后 `free_memory` 走 `memory_to_free=1e32`（`model_management.py:924`），unet 载入前 TE 整块卸掉。**单变量对照 task 509（cpuTE + smart-off + 无 PDD）步时 35.84/35.67 s ≈ 基线 36.2 ⇒ 这个 flag 本身不抬步时** |
-| ③ PDD 加速 LoRA 5 步 | 节点 17 `MiniMaxH3PDDLoRA`：`model` = Veda 输出、`sigmas` → 采样器、`steps:5`；**删 BasicScheduler**；采样器 `euler` | 20 步 × 36 s → 5 步 × 81 s = **405 s 采样**；PDD 文件自带 32 点网格，5 步 = 块宽 [8,8,8,4,4]（作者 README：8 步蒸馏档的 2% 以内） |
+**耗时实测（task 542）**：294 帧 20 步 = 发车→completed **14 分 24 秒**（864 s，GPU TE），与预估 ≈14 分钟一致。
 
-**分阶段实测（5 步单，2026-10-18 08:25:50Z 发车）：**
+**速度账（20 步 @1024×768）**：243 帧 674 s 实测（`test/fresh_x2432s20.mp4`，旧 cpuTE）；294 帧旧实测 20 分 10 秒（task 504，cpuTE 固定税 427 s）。**GPU 侧 TE 把固定税从 427 s 降到 ~53 s**（task 512 分阶段：fire→采样起 53 s，其中 TE 装载+编码 ~37 s；`--disable-smart-memory` 是前提，unet 载入前整块卸掉 TE，`model_management.py:924`）⇒ 294 帧 20 步预计 ≈14 分钟（task 542 实测值回填这里）。
 
-```
-08:25:50 got prompt / VAE audio+cuda 2 s / video VAE 2 s
-08:26:02 TE 装载开始（GPU，MixedPrecisionOps）
-08:26:07 TE loaded partially 10108.65 usable / 9397.24 loaded / 5559.15 offloaded
-08:26:39 文本编码结束（≈32 s）→ unet 量化探测
-08:26:43 采样开始（fire→采样 = 53 s）
-tqdm 84.09 / 81.12 / 80.32 / …（5 步 ≈ 405 s）
-08:33:24 Veda done / 08:33:24 VAEs 重载 / 08:34:04 Prompt executed in 494.82 seconds
-08:34:11 平台 task 512 completed / 08:34:22 mp4 下载回 static/videos / 08:34:43 merge completed
-```
+**已下架/被否的臂**：PDD5 图（`h3_refall_pdd5_gpute.json`）与 PDD8 图留盘但平台不选；4 步 turbo 由 `no_lora:true` 摘除；分镜 lora 不再透传（要恢复 = adapter 两行取消注释 + 确认桥节点 210）。saved 图的 LoRA/BasicScheduler 限制随 PDD5 下架一并失效。
 
-产物 `static/videos/d6cbb3a4-9eed-4124-8973-199cd214c05a.mp4`（ffprobe 1024×768 / 294 帧 / 12.250 s / AAC）+ `static/merged/f4630870-16ab-499b-8f6e-7b49de21d4ac.mp4`。
+**验证入口**：`curl :6006/queue` 读 4 号 CLIPLoader 的 `device`（必须 `default`）、10 号 `BasicScheduler.steps=20`、图里无 `LoraLoaderModelOnly`。
 
-**第二例（task 517，sb89，2026-10-18 09:28:44Z 发车）**：平台发车→completed **491.4 s**，与 494.82 s 同量级；产物同样 1024×768 / 294 帧 / 12.250 s。
 
-**8 步臂判超：** 同图同链 `steps:8`（294 帧），fire→采样 59 s，步时 82.25 / 81.78 / 81.28 s ⇒ 8×82 = **656 s 采样**，整单预计 ≈780 s > 600，跑到 3/8 主动停。**6 步**外推 = 6×81+53+40 ≈ **579 s**（贴近上限，未实测）。
+### 提示词结构锁（1018 用户「镜头切来切去 / 声音没了」）
 
-**8 步完整补测（243 帧 / 10.125 s，sb9 #95，task 525）：** ComfyUI `Prompt executed in 00:10:22`（622 s），平台发车→completed **631 s**，步时 67.4 / 68.5 / 70.0 / 70.7 / 70.8 / 69.8 / 69.0 / 68.5 s（采样 553 s）⇒ 仍超 600 线 **31 s**；同帧数 5 步 #93 = ComfyUI 410.44 s / 平台 422 s。步时随帧数涨：294 帧 82 s，243 帧 69 s。产物 `static/videos/46234612-8ed1-4e07-a1f4-fb9bb629dc11.mp4`。
-
-**为什么 PDD 每步 81 s 而不是 36 s：** 294 帧下 unet 仍然全 offload（`0.00 MB usable, 0.00 MB loaded, 11945.45 MB offloaded, lowvram patches: 308`）⇒ PDD 的 308 条权重 patch 在**每次权重流送时重贴**；task 509 的 35.8 s/step 证明去掉 PDD 就回到基线。要 8 步进 600 只剩「把 patch 烘进权重」或「让 unet 部分常驻（缩帧数）」。
-
-**文件与接线（都在 git 外）：**
-- 节点 `E:\AI\ComfyUI\custom_nodes\comfyui_minimax_h3_pdd\`（fbjr 转换自 alibaba-pai 官方 PDD LoRA；MIT 代码、权重是 H3 社区许可）
-- 权重 `E:\AI\ComfyUI\models\loras\minimax_h3_ref2va_pdd_8step_comfy.safetensors`（1,121,976,776 B；同仓库另有 `..._adaln2688_comfy` 通用档）
-- 图 `ComfyUI-OpenAI-Bridge/workflows/h3_refall_pdd5_gpute.json` / `h3_refall_pdd8_gpute.json`（从 `h3_refall_cpuTE.json` 改：+PDD 节点 17、11 的 model 接 17、12 的 sigmas 接 17 输出 1、9 采样器 `euler`、删 10 号 BasicScheduler、4 号 device default）
-- 驱动：`EP7_GRAPH=h3_refall_pdd5_gpute.json node data/generated/.ep7_remake.mjs 88`
-- PDD 节点日志指纹（正常）：`partition check ok`、`Loading the full sidecar unchecked`（nvfp4 pruned 探针非 int8 形状，属预期）、`308 weight patches, all merged, 50 adaln baked`、`heads fused per block`
+- **切镜数 = description 的【镜头N】数 − 1**。硬校验在 `backend/src/agents/tools/storyboard-tools.ts` 的 `update_storyboard`：中文数「切到/切回/切至」、英文数 5 个 cut 短语（`the camera/shot cuts/transitions/changes/switches to`），不符直接拒绝保存并把应有刀数写回给 Agent；批量 runner（`video-prompts.ts`）落库后再查一次，不符记 failed。
+- 批量消息带 `shotPlan`：把 description 的镜头清单、镜头数、应有刀数直接写给模型（模型不会自己数）。
+- 分镜拆解技能：**8-12 秒默认 2 个子镜头，12-15 秒最多 3 个**；同一组人物的中近景 ↔ 双人中近景 / 正反打属于同一镜的距离变化，用推拉/摇移，不切。
+- **声音**：无对白 ≠ 无声；`overall_soundscape` 至少两个可听见的具体声源，禁 `faint` / `barely audible` / 极静 / 无人说话。实测：旧提示词写 faint 的 sb94/sb95 成片 **-55 dB**（等于没声音），有对白的 sb96 **-28.3 dB**；生成侧没有静音 bug（全部有 AAC 轨）。
+- **数据损坏已修**：提示词 Agent 会回传整行占位值（`""` / `"..."`），旧过滤只挡 null/undefined ⇒ sb95/sb96/sb91 的 description/atmosphere/angle/image_prompt 被清空。现在空串与纯省略号一律当「没改」丢弃；description 不含【镜头N】时不许覆盖。受影响字段已按同场标准值重建。
+- 1018 18:5x 验证：6 条提示词全部 `vp切 = full_ref cut = 镜头数−1`（#94 3 镜 2 刀；#95/#96/#97/#91 2 镜 1 刀；#98 3 镜 2 刀）。#94 原 description 有 4 个镜头（后两个近乎同机位），已合并为一个镜头内缓拉的双人中近景。
 
 ### 现役链路（用户 1018 定案：尾帧接首帧 + 首帧图走 fl2va NVFP4）
 
@@ -57,29 +40,29 @@ tqdm 84.09 / 81.12 / 80.32 / …（5 步 ≈ 405 s）
 - **首帧图走 fl2va NVFP4**：image adapter `backend/src/services/adapters/comfyui-h3-still.ts` + 模板 `h3-still-workflow.json`（`MiniMaxH3ImageToVideo` 无 keyframe、length 5、20 步、`ImageFromBatch(0,1)`；UNET `minimax_h3_fl2va_pruned_nvfp4`、TE heretic nvfp4 钉 CPU）。DB 配置 id 5（provider `h3-still`、priority −1 ⇒ 不当默认）；前端首帧按钮自动选它且不传参考图。**实测 254.39 s/张**（20 步采样只 11 s，其余是 TE + unet 冷读），产物 1024×768。
 - **驱动重启规矩（用户「以后的 不要重启 要优先解决问题」）**：6006 健康 + 队空 + 上一单 history `success` ⇒ 同进程连跑、0 加载税；仅上一单 error/interrupted 或队非空才硬杀。
 
-### 生产档（用户 1016 定案「就用这个」）：20 步单采 @1024×768，无 turbo LoRA
+### 生产档（现役 = 上方 native 20 步零 LoRA）
 
 | 项 | 值 |
 |---|---|
 | 采样 | **单采 20 步** @ **1024×768 满画布**；`BasicScheduler(simple)` + `KSamplerSelect(res_multistep)` + cfg 1.0（`BasicGuider`+`SamplerCustomAdvanced`） |
 | 权重 | `minimax_h3_ref2va_pruned_nvfp4`（用户锁死，不动） |
-| LoRA | **无**（turbo 4 步 LoRA 摘除） |
-| 注意力 | Veda sp24（不动） |
+| LoRA | **无**（`no_lora:true` 摘掉 4 步 turbo；分镜 lora 也不透传） |
+| 注意力 | Veda sp24（native 图读 env `HUOBAO_H3_SPARSITY`，默认 24） |
 | 参考 | 双参考 + 六段骨架提示词带 `<Picture 1>/<Picture 2>` 标签（绑定修复实证：左=青衣、右=雪琪银新月冠/耳环/额印） |
 | 首尾帧 | native `MiniMaxH3AddGuide`（`frame_idx` 0 / -1、节点 43-46；与 `ref_image_0~8` 同单不互斥）。探针实测首帧 vs 锚 PSNR 31.2/SSIM 0.92、**精确末帧**（第 242 帧）28.5/0.86、交叉对照 10.3 ⇒ **判尾帧必须取精确末帧**（`-sseof -0.2` 抓到 238 帧会误读） |
-| 实测 | 243 帧首发执行 **674 s**（`test/fresh_x2432s20.mp4`）；294 帧 20 步 task 504 = **20 分 10 秒**（35.8-36.8 s/步、`--reserve-vram 1.5`，单样本）；cpuTE 固定税 427 s（速度臂已治） |
-| 接线 | 桥 `_wf_video_native` 吃 body `steps/no_lora/first_frame/last_frame`（平台显式传 20/true）；adapter `comfyui-video.ts` 写死 `DEFAULT_SIZE='1024x768'`、`steps:20`、`no_lora:true`、`UPSCALE=0`；saved 图 `h3_refall_cpuTE.json` |
+| 实测 | 243 帧首发执行 **674 s**（`test/fresh_x2432s20.mp4`）；294 帧 **task 542 = 14 分 24 秒**（864 s，GPU TE，用户看片判「这个可以」）；旧 cpuTE 的 294 帧 20 分 10 秒（task 504）作废 |
+| 接线 | adapter `comfyui-video.ts` 写死 `PROD_GRAPH='native'`、`steps:20`、`no_lora:true`、`DEFAULT_SIZE='1024x768'`、`UPSCALE=0`；桥 `_wf_video_native` 按 body 组图（CLIP `device:"default"`、AddGuide 首尾帧） |
 
 ### 配置详情（现役）
 
 | 项 | 值 |
 |---|---|
 | 主模型 | `minimax_h3_ref2va_pruned_nvfp4.safetensors`（12.53 GB）；回退 `..._pruned_int8_convrot`（20.97 GB） |
-| 文本编码器 | `qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors`（15.68 GB，无审查）—— 生产图 `device:"cpu"`、**速度臂 `device:"default"`（GPU）** |
+| 文本编码器 | `qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors`（15.68 GB，无审查）—— 生产图 **`device:"default"`（GPU）**；cpuTE 旧图已下架 |
 | 视频 / 音频 VAE | `minimax_h3_video_vae_int8_convrot` + `minimax_h3_audio_vae_fp32`（都上 GPU） |
 | 注意力 | Veda 学习稀疏（`Veda-on-ComfyUI` + `models/veda/minimax_h3_r2va_veda_preview_fp8.safetensors`），`HUOBAO_H3_SPARSITY=24` |
-| 加速 LoRA | 生产无；速度臂 `minimax_h3_ref2va_pdd_8step_comfy.safetensors` + `MiniMaxH3PDDLoRA` `steps:5` |
-| 采样器 | 生产 `res_multistep` + `simple` 20 步；速度臂 `euler` + PDD 节点 sigmas 5 步 |
+| 加速 LoRA | **生产无**（`no_lora:true`，分镜 lora 也不透传）；PDD 5 步图留盘但平台不选 |
+| 采样器 | 生产 `res_multistep` + `simple` 20 步 |
 | 段落 | `SEG=15` / `MAXSEG=1` ⇒ 12 秒分镜 = **294 帧一段出完**（≈12.25 s）；`framesForDuration` 把帧数夹进训练区间 124-362 |
 | 实例 / 启动参数 | ComfyUI **v0.39.2** + `.venv-cu130`（torch 2.14.1+cu130）on **5060 Ti**（UUID 钉卡）；`--disable-dynamic-vram --disable-comfy-compiler --disable-mmap --disable-pinned-memory --disable-smart-memory --reserve-vram 1.5 --cache-none`；env `HUOBAO_H3_SPARSITY=24` / `TORCH_ALLOW_TF32_CUBLAS_OVERRIDE=1` / `PYTHONUTF8=1` |
 | 自启 | `Start-ComfyUIHidden.ps1`（参数已与上表同步，含 `--disable-smart-memory`） |

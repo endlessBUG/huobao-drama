@@ -52,6 +52,11 @@ const SIZE_480P = '864x480'
 // 去 LoRA 后 nvfp4 裸权重 27.5 s/步 ⇒ 20 步实测 674 s/条（test/fresh_x2432s20.mp4，账在
 // docs/comfyui-h3-configs.md「1016 定案」）。1472×832 在 20 步口径下 ≈16 min/条，超耐心预算，故画布同步收到 768p。
 const DEFAULT_SIZE = '1024x768'
+// 1018 深夜用户：「刚才的效果不好」→ 先试了仓库 4 步 turbo LoRA，仍判不好 →
+// 定案「换成1采 20步 试试 只改这个 不要lora」⇒ 走桥的 native 图（`_wf_video_native`），
+// 单采 20 步、`no_lora:true` 摘掉 4 步 turbo、也不再透传分镜 lora。
+// PDD5 图保留在盘上（`h3_refall_pdd5_gpute.json`），但平台不再选它。
+const PROD_GRAPH = 'native'
 // 2026-10-07 加：以前 `is480` 之外全走 DEFAULT_SIZE，所以选「1080p」和选「720p」出图完全一样（空设置）。
 // 1007 实测完：1920×1080 会被吸到 **1920×1072**（1080 不是 16 的倍数，H3 VAE 空间下采 = 16）= 2.07 MP，
 // 不 OOM 但每条 **117.64 min**（vs 1.22 MP 的 9.94 min = 11.8×）、每像素信息只 1.18–1.39×（13 s 反而 0.96）
@@ -178,23 +183,23 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
         // 高分 1 步 8 块 308.9 ⇒ 下掉省的是 321 s/条，代价是画布掉到 1280×720、细节改由交付端 VOSR2 补
         // （`ffmpeg-merge` 的 `body.upscale="vosr2"`）。回退 = 这行改回 `!firstFrameFile`。
         selflift: false,
-        // 1016 定案（用户拍板）：20 步单采 + 去 turbo LoRA —— 桥那支 `no_lora:true` 摘掉 LoraLoaderModelOnly
-        // 节点、model 直吃 UNETLoader。首尾帧走同一条（用户「首尾帧也要支持」）：桥在 7 号 conditioning
-        // 后面串 MiniMaxH3AddGuide（首帧 frame_idx 0 / 尾帧 -1），画布与步数没有例外。480p/1080p/rawSize
-        // 同样 20 步（档位是用户显式选择，耗时自己承担；1080p 会到 ≈26 min）。实测锚 = x2432s20 674 s。
+        // 1018 深夜第二次（用户「换成1采 20步 试试 只改这个 不要lora」）：native 图的单采 20 步、
+        // 不带任何 LoRA（`no_lora:true` 摘掉桥的 4 步 turbo 节点 2；分镜的 lora 也不再透传）。
+        // steps 填 native 的 BasicScheduler(simple)。首尾帧仍走 AddGuide（0 / -1）。
+        // 参考锚：243 帧 20 步 674 s（test/fresh_x2432s20.mp4）；294 帧约 20 分钟（GPU TE 已把固定税降到 ~53 s）。
         steps: 20,
         no_lora: true,
         first_frame: firstFrameFile,
         last_frame: lastFrameFile,
-        // 1017（用户「保存 然后接入」）：给文件名就换图跑（桥 `_wf_saved`，按消费者角色填动态量）；
-        // 不给 = 桥默认 native（1016 定案那条），与之前逐字节一致。
-        graph: record.graph || undefined,
+        // graph:"native" 走桥的 _wf_video_native；no_lora 下模型直吃 UNETLoader，不带任何 LoRA。
+        graph: PROD_GRAPH,
         guide: guideFile,
         prev_latent: record.prevLatent || undefined,
         save_name: record.saveName || undefined,
         trim: record.trimFrames || 0,
-        lora: record.lora || undefined,
-        lora_strength: record.lora ? (record.loraStrength ?? 1.0) : undefined,
+        // 1018 用户「不要lora」⇒ 暂不透传分镜 lora（先前 4 步臂实测把 Vagina lora 挂上后效果不好）。
+        // lora: record.lora || undefined,
+        // lora_strength: record.lora ? (record.loraStrength ?? 1.0) : undefined,
         // 不传 = 桥里那格整段不出现，图与老行为逐字节一致（和 lora 同一个口径）。
         // 1016 夜改：`false` 要能真发出去。桥 `__init__.py:1012` 判的是 `b.get("sparse") is False`，
         // 老写法 `record.sparse ? true : undefined` 把 false 和「没传」混成一谈 ⇒ dense 对照臂永远进不去。
@@ -240,7 +245,7 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
 
   // 实测锚（history `execution_start→execution_success`，124 帧整单、含解码+存盘）：
   // 576x320 = 126 s（1.016 s/帧）· 864x480 = 364 s（2.936）· 1472x832 = 270 s（2.177，4 步 turbo 时代）。
-  // 1024x768 = 674 s/243 帧 = 2.774 s/帧（1016 定案 20 步无 LoRA 实测，换算 124 帧 ≈344 s）。
+  // 1024x768 = 20 步无 LoRA 旧口径 2.774 s/帧（243 帧 674 s 实测；1018 深夜用户指定「1采 20步 不要lora」）。
   // 1920x1080 没测过，按像素比从 1472x832 外推（3.70 s/帧）—— 冷跑/排队/装载都不在锚里，进度只是估算，
   // 上限 95%，真完成由 poll 的 succeeded 定。
   progressHint(record: VideoGenerationRecord): number | undefined {

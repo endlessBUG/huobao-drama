@@ -91,44 +91,53 @@ export function framesForDuration(seconds?: number | null): number {
   return Math.min(MAX_LENGTH, Math.max(MIN_LENGTH, n))
 }
 
-// 社区 LoRA 的登记表：触发词口径 + 「它是干什么的」。note 直接显示在工作台那个下拉的名字后面
-// （用户要求「lora 后面要写上 lora 的作用」），措辞与数抄各家 README / 我们自己的实测，不是编的。
-// 没登记的文件 = 只显示文件名、不塞触发词。登记了就必须写 note（测试锁这条）。
-export const LORA_REGISTRY: Record<string, { t?: string; replace?: RegExp; concept?: string; note: string }> = {
-  'h3-realism-people-t2v-i2v-r2v.safetensors': { t: 'r34l1sm',
-    note: '真人质感·去塑料光泽（实测：画面暗 10%、形状不变）' },
+// LoRA 登记表：**按类型 key 登记，key = 这条 LoRA 给模型加的功能**（1019 用户「每个lora应该有个类型key
+// 传列表给导演 让导演决定有哪个key，然后分镜根据key获取触发词 视频生成挂key对应的lora」「key是描述模型功能的」）。
+//   key      = 功能（导演按镜头需要什么功能来挑；写进 storyboards.lora_key）
+//   file     = 生成时挂的文件（桥 native 图的节点 210，`__init__.py:463-465`）
+//   t        = 要**前置**的触发 token（作者把 token 当开关的那类）
+//   concept  = 要**写进句子**的英文短语（解剖那类）—— 不前置：前置生造 token 会撞六段式格式
+//   note     = 功能的详细说明 + 实测（显示在工作台下拉名字后面、也是导演挑 key 的依据；
+//              用户「lora 后面要写上 lora 的作用」「lora登记的时候也要登记触发词」）
+// 没登记的文件 = 下拉里只显示文件名、没有 key、不塞词。登记了就必须写 note（测试锁这条）。
+export const LORA_REGISTRY: Record<string, { file: string; t?: string; concept?: string; note: string }> = {
+  skin_realism: { file: 'h3-realism-people-t2v-i2v-r2v.safetensors', t: 'r34l1sm',
+    note: '功能：真人皮肤质感、去塑料光泽（实测：画面暗 10%、形状不变）' },
   // 作者 README 原话（繁体中文+英文对照）：「正強度偏向 2d 動漫風格，負強度則為寫實」，
   // 且「一開始訓練此 lora 的目的其實是因為 H3 的 2d 動漫風格比較偏向 3d，不夠平面化」——
   // 也就是说这条天生就是治「半 3D 质感」的。推荐区间 -5~5、±3 就足以定风格（不是我们默认的 1.0）。
   // 落点实测 208/208 全中（qkv_proj/out_proj/fc1/fc2，与现役 turbo 同一套目标），无触发词。
-  'H3_Ref2V_Anime_Slider_v1.safetensors': {
-    note: '2D 动画 ↔ 真人 风格滑杆（正强度偏 2D、负偏写实；作者说 ±3 才定风格、默认 1.0 太弱；无需触发词；落点 208/208 实测）' },
+  style_2d3d_slider: { file: 'H3_Ref2V_Anime_Slider_v1.safetensors',
+    note: '功能：2D 动画 ↔ 真人 风格滑杆（正强度偏 2D、负偏写实；作者说 ±3 才定风格、默认 1.0 太弱；无需触发词；落点 208/208 实测）' },
   // 1019 用户定案（「就这个了 其他的都删掉」）：外阴解剖只留这一条 —— civitai 2885332 v0.2
-  // （id 3306941，148MB，LoKr rank16 bf16，ostris/ai-toolkit，作者自报「测试品、10 条片」）。
-  // 触发词登记（用户「lora 登记的时候也要登记触发词」）：Civitai 的 trigger_word = null、
-  // trainedWords 为空 ⇒ 它没有专用 token，概念就是英文短语 `pussy spread`（作者按官方 H3 提示词
-  // 指南写 caption）。所以不写 t：前置生造 token 会撞六段式格式，词由 video-prompts.ts 的无审核
-  // 规则写进 detailed_description。被否掉的同方向文件已删（HMInnie 2853405、HMPussy V1 2846342
-  // 的 74MB stills 半条、Vagina 2835594）——「太丑」的根因就是单挂 stills 半条跑 20 步视频。
-  'minimax_h3_pussy_spread_v0.2.safetensors': { concept: 'pussy spread',
-    note: '外阴张开 · 无官方触发词，概念词 = pussy spread（写进提示词）；作者自报测试品；强度 1.0 起、待 A/B' },
-  'HMNSFW-AIO-V2.5.safetensors': { t: 'hmmotion',
-    note: '动作姿态 AIO V2.5（作者建议强度 0.5–0.9，只动 mlp）' },
-  'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors': {
-    note: '4 步蒸馏 —— 桥已默认挂在第一层，再选它等于挂两遍' },
-  'minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors': {
-    note: '8 步蒸馏（768p 版）—— 换它要连采样步数一起改' },
-  'minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors': {
-    note: 'fl2v（首帧那条）用的 4 步 —— ref2v 别选' },
-  'minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors': {
-    note: 'fl2v 8 步 —— ref2v 别选' },
-  'minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy_resized_avg_rank_21_bf16.safetensors': {
-    note: '第三方 lightx2v 重定量的 fl2v 4 步（rank 21）—— ref2v 别选' },
-  'Qwen-Image-2.1-viggle-turbo-4step-r64-comfyui-T8.safetensors': {
-    note: 'Qwen-Image-2.1 生图的 LoRA，对 H3 视频无效（键名对不上，会被静默跳过）' },
-  'lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors': {
-    note: 'Wan 14B 的蒸馏 LoRA，对 H3 视频无效' },
+  // （version id 3306941，148MB，LoKr rank16 bf16，ostris/ai-toolkit，作者自报「测试品、10 条片」）。
+  // 触发词登记（用户「lora 登记的时候也要登记触发词」）：Civitai 的 trigger_word = null、trainedWords
+  // 为空 ⇒ 没有专用 token，概念就是英文短语 `pussy spread`（作者按官方 H3 提示词指南写 caption）。
+  // 被否掉的文件已删（HMInnie 2853405、HMPussy V1 2846342 的 74MB stills 半条、Vagina 2835594）——
+  // 上一轮「太丑」的根因 = **单挂 stills 半条跑 20 步视频**（作者：视频半条是另一个 597MB 文件、两条一起挂、强度 0.35）。
+  pussy_spread: { file: 'minimax_h3_pussy_spread_v0.2.safetensors', concept: 'pussy spread',
+    note: '功能：把外阴画成张开形态（导演决定「露出外阴」的镜选它）· 概念词 = pussy spread，写进该 [Shot N] 的 detailed_description；作者自报测试品；强度 1.0 起、待 A/B' },
+  sex_motion: { file: 'HMNSFW-AIO-V2.5.safetensors', t: 'hmmotion',
+    note: '功能：性爱动作/姿态 AIO V2.5（作者建议强度 0.5–0.9，只动 mlp）' },
+  distill_ref2v_4step: { file: 'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors',
+    note: '功能：4 步蒸馏（少步数）—— 桥已默认挂在第一层，再选它等于挂两遍' },
+  distill_ref2v_8step: { file: 'minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors',
+    note: '功能：8 步蒸馏（768p 版）—— 换它要连采样步数一起改' },
+  distill_fl2v_4step: { file: 'minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors',
+    note: '功能：fl2v（首帧那条）的 4 步蒸馏 —— ref2v 别选' },
+  distill_fl2v_8step: { file: 'minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors',
+    note: '功能：fl2v 8 步蒸馏 —— ref2v 别选' },
+  distill_fl2v_lightx2v: { file: 'minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy_resized_avg_rank_21_bf16.safetensors',
+    note: '功能：第三方 lightx2v 重定量的 fl2v 4 步（rank 21）—— ref2v 别选' },
+  qwen_viggle_4step: { file: 'Qwen-Image-2.1-viggle-turbo-4step-r64-comfyui-T8.safetensors',
+    note: '功能：Qwen-Image-2.1 生图的 4 步蒸馏 —— 对 H3 视频无效（键名对不上，会被静默跳过）' },
+  wan_i2v_distill: { file: 'lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors',
+    note: '功能：Wan 14B 的蒸馏 —— 对 H3 视频无效' },
 }
+
+// 文件名 → 登记项（下拉与老调用方传的是文件名，key 反查用这张）
+export const LORA_BY_FILE: Record<string, { key: string; file: string; t?: string; concept?: string; note: string }> =
+  Object.fromEntries(Object.entries(LORA_REGISTRY).map(([key, v]) => [v.file, { key, ...v }]))
 
 export class ComfyUIVideoAdapter implements VideoProviderAdapter {
   provider = 'comfyui'
@@ -136,16 +145,10 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
   async buildGenerateRequest(config: AIConfig, record: VideoGenerationRecord): Promise<ProviderRequest> {
     const base = (record.prompt || '').trim()
     if (!base) throw new Error('ComfyUI 视频生成要求必须提供提示词（prompt）')
-    const tr = record.lora && record.loraTrigger !== false ? LORA_REGISTRY[record.lora] : undefined
-    // 只有登记了 t 的才碰词。HMPussy V1 的触发词就是普通词 pussy（我们提示词里本来就有 12 处），
-    // 前置一遍是重复 —— 所以它只登记 note、不登记 t，prompt 一字不改（D 臂实测就是这么跑的）。
-    const prompt = !tr?.t ? base : tr.replace ? base.replace(tr.replace, tr.t) : `${tr.t} ${base}`
-    // 1019 概念词反查（用户「选择是加哪个 lora 的逻辑呢」）：没显式选 LoRA、但提示词里出现了某条登记
-    // LoRA 的 concept 词 ⇒ 自动挂它 ——「词与权重是一套」由代码兜住，不靠人记得。多个命中取登记表靠前的
-    // （现役只有一条解剖）。显式传了 record.lora = 走老路，这条不介入。
-    const autoLora = record.lora ? undefined : Object.keys(LORA_REGISTRY)
-      .find((f) => LORA_REGISTRY[f].concept && prompt.toLowerCase().includes(LORA_REGISTRY[f].concept!.toLowerCase()))
-    const loraFile = record.lora || autoLora
+    // 词由 key 决定（1019 用户「分镜根据key获取触发词」）：token 型（`t`）前置；concept 型的词已经
+    // 写进提示词正文（`video-prompts.ts` 按 key 注入的），调用方给 `loraTrigger:false` = 一个字都不动。
+    const tr = record.lora && record.loraTrigger !== false ? LORA_BY_FILE[record.lora] : undefined
+    const prompt = !tr?.t ? base : `${tr.t} ${base}`
 
     const inputDir = toInputDir(config)
     const images = await stageReferenceImages(parseUrlArray(record.referenceImageUrls), inputDir, MAX_IMAGES)
@@ -207,8 +210,10 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
         // 1019 用户「如果有 后续分镜要挂lora」⇒ 恢复透传。桥的 native 图在 `if lora:` 插节点 210
         // （LoraLoaderModelOnly，__init__.py:463-465），与 `no_lora`（:451 摘 4 步 turbo）互不干扰：
         // turbo=False 时 model = ["1",0] 直吃 UNETLoader、再叠 210。不传 lora = 这格不进图、逐字节老行为。
-        lora: loraFile || undefined,
-        lora_strength: loraFile ? (record.loraStrength ?? 1.0) : undefined,
+        // 1019 用户「视频生成挂key对应的lora」：`record.lora` 已经是文件名 —— 调用方（`tasks.ts`）
+        // 在没显式传 lora 时按分镜的 `lora_key` 查登记表补上（key → file）。不传 = 这格不进图、逐字节老行为。
+        lora: record.lora || undefined,
+        lora_strength: record.lora ? (record.loraStrength ?? 1.0) : undefined,
         // 不传 = 桥里那格整段不出现，图与老行为逐字节一致（和 lora 同一个口径）。
         // 1016 夜改：`false` 要能真发出去。桥 `__init__.py:1012` 判的是 `b.get("sparse") is False`，
         // 老写法 `record.sparse ? true : undefined` 把 false 和「没传」混成一谈 ⇒ dense 对照臂永远进不去。

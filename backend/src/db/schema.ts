@@ -123,6 +123,10 @@ export const storyboards = sqliteTable('storyboards', {
   imagePrompt: text('image_prompt'),
   videoPrompt: text('video_prompt'),
   videoPromptFullRef: text('video_prompt_full_ref'),
+  // 1019 用户「每个lora应该有个类型key 传列表给导演 让导演决定有哪个key，然后分镜根据key获取触发词
+  // 视频生成挂key对应的lora」：导演把「这一镜要哪个 LoRA 功能」写在这列（LORA_REGISTRY 的 key，
+  // 如 pussy_spread / sex_motion / skin_realism）；空 = 这一镜不挂内容类 LoRA。
+  loraKey: text('lora_key'),
   bgmPrompt: text('bgm_prompt'),
   soundEffect: text('sound_effect'),
   description: text('description'),

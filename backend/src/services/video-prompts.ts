@@ -7,6 +7,7 @@ import { db, schema } from '../db/index.js'
 import { mastra } from '../mastra/index.js'
 import { buildAgentRequestContext } from '../agents/context.js'
 import { logTaskError, logTaskProgress, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
+import { LORA_REGISTRY } from './adapters/comfyui-video.js'
 
 export interface VideoPromptBatchStatus {
   status: 'running' | 'done' | 'error'
@@ -76,7 +77,7 @@ export async function startVideoPromptBatch(
     // 判据走集标题，不加 schema 字段（一条线就够，设置页改标题即可切换）。
     const uncensored = /无审核/.test(ep?.title || '')
     const anatomyRule = uncensored
-      ? `**无审核版取景硬规则（1006 实测 + 1019 用户定案「导演决定是否有生殖器，有就挂 LoRA 并带触发词」）**：允许裸胸、乳头、外阴、腰以下入画；露乳房/露生殖器的镜头必须写近景或特写（只框胸口以上、或只框腰以下），全身远景画不出结构；**外阴是否入画以分镜 description 为准**——description 写了露外阴的镜头，英文 full_ref 的该 [Shot N] 必须带解剖 LoRA 的概念词 pussy spread（原样英文、与取景句同段，这条镜生成时平台挂 LoRA，词与权重是一套）；description 没写露的镜头，外阴只写「大阴唇合拢的一条窄缝（the labia pressed together, one thin closed cleft）」、禁 spread/parted/opening/gaping（实测不带 LoRA 的 spread 画成一坨深色）；手指只写「贴着大腿内侧、停在缝外侧摩挲」，禁「卡在缝两侧」；仍禁并躺双腿互相缠绕/盘腰/夹住（跨中线穿模），接触一律点对点表面接触（膝落腰窝外侧、大腿外侧贴胯骨、掌覆乳）。`
+      ? `**无审核版取景硬规则（1006 实测 + 1019 用户定案「导演决定是否有生殖器、分镜按 key 取触发词、生成按 key 挂 LoRA」）**：允许裸胸、乳头、外阴、腰以下入画；露乳房/露生殖器的镜头必须写近景或特写（只框胸口以上、或只框腰以下），全身远景画不出结构；**外阴画不画 = 这一镜的 lora_key（调用方在下面把 key 和它的词给你）**——给了 key 的镜头必须把那个词**原样**写进该 [Shot N] 的 detailed_description（词与权重是一套，生成时平台按 key 挂 LoRA）；没给 key 的镜头，外阴只写「大阴唇合拢的一条窄缝（the labia pressed together, one thin closed cleft）」、禁 spread/parted/opening/gaping（实测不带 LoRA 的 spread 画成一坨深色）；手指只写「贴着大腿内侧、停在缝外侧摩挲」，禁「卡在缝两侧」；仍禁并躺双腿互相缠绕/盘腰/夹住（跨中线穿模），接触一律点对点表面接触（膝落腰窝外侧、大腿外侧贴胯骨、掌覆乳）。`
       : `**床上并躺/侧躺硬规则**：一律腰部以上景别；两条提示词正文不得出现 腿/脚/小腿/膝/髋/腰（「腰部以上」除外）与 leg/calf/thigh/knee/hip/waist（「waist up」除外）；亲密接触只写手、手臂、肩、脸。`
 
     for (const sb of pending) {
@@ -99,9 +100,18 @@ export async function startVideoPromptBatch(
         const shotPlan = shotTexts.length
           ? `\n**本镜镜头清单（硬约束，不许新增）**：description 有 ${shotTexts.length} 个【镜头N】，两条提示词都必须正好 ${shotTexts.length} 个镜头、${shotTexts.length - 1} 次切镜：\n${shotTexts.map((t, i) => `【镜头${i + 1}】${t.slice(0, 50)}${t.length > 50 ? '…' : ''}`).join('\n')}\n把 ${segCount} 个 3 秒段按顺序分配给这 ${shotTexts.length} 个镜头；同一镜头跨 1-2 段，段首写「镜头保持/继续」，切镜只出现在上面 ${shotTexts.length - 1} 个镜头边界上；full_ref 的 [Shot N] 也必须是 ${shotTexts.length} 个。`
           : ''
+        // 1019 用户「分镜根据key获取触发词」：词由代码从登记表取，不让模型自己编
+        let loraInfo = ''
+        if (sb.loraKey) {
+          const reg = LORA_REGISTRY[sb.loraKey]
+          const word = reg ? reg.concept || reg.t : undefined
+          loraInfo = word
+            ? `\n**本镜 lora_key = ${sb.loraKey}**：触发词/概念词 \`${word}\` 必须原样写进英文 full_ref 的 [Shot N]（生成时平台按 key 挂 ${reg!.file}）——不许自己编别的词；这一镜要露生殖器，取景句子只框腰以下。`
+            : `\n**本镜 lora_key = ${sb.loraKey} 不在登记表** ⇒ 当没给：不写露、按合拢窄缝处理。`
+        }
         await agent.generate([{
           role: 'user',
-          content: `请为分镜 #${sb.storyboardNumber}(ID:${sb.id})生成视频提示词(video_prompt) 与全参考提示词(video_prompt_full_ref)。视频模型:${videoLabel}。**本镜视频时长 ${sec.toFixed(1)} 秒，按 3 秒分段共 ${segCount} 段，最后一段的终点写 ${sec.toFixed(1)} 秒，不要写超出这个时长的内容**。${shotPlan}
+          content: `请为分镜 #${sb.storyboardNumber}(ID:${sb.id})生成视频提示词(video_prompt) 与全参考提示词(video_prompt_full_ref)。视频模型:${videoLabel}。**本镜视频时长 ${sec.toFixed(1)} 秒，按 3 秒分段共 ${segCount} 段，最后一段的终点写 ${sec.toFixed(1)} 秒，不要写超出这个时长的内容**。${shotPlan}${loraInfo}
 请先调用 read_storyboard_context 获取该分镜的画面描述(含【镜头N】子镜头与台词/旁白)、氛围及时长，据此生成 video_prompt(第一行是信息头：列出该分镜出场的人物与场景，用 @角色名/@场景名 引用；之后按 3 秒分段换行、用 @角色名/@场景名/@道具名 引用参考素材；**3 秒段只是时间切片、不是镜头**：同一个【镜头N】跨多个 3 秒段时保持同一景别/机位，段间写「镜头保持/继续」、不写「切到」；只有 description 的【镜头N】边界才切镜，整条提示词的切镜次数必须等于【镜头N】数 − 1，不新增子镜头；不跨场景)。同时按技能「六段式英文全参考」生成 video_prompt_full_ref（英文，含 <Subject>/<Picture> 标签，对应同一分镜）。然后调用 update_storyboard 保存到分镜 ID:${sb.id}。update_storyboard 参数只传 storyboard_id、video_prompt、video_prompt_full_ref 三个键,不要回传该分镜的其他任何字段,不要重新拆分整集。
 **工具纪律**：第一步 read_storyboard_context；拿到内容后直接写两条提示词并调用 update_storyboard 保存。**不要再调用任何其他工具**（read_prompt_library 已从本 Agent 摘除，workspace 文件工具也不可用）—— 分镜的画面描述、人物与场景都在 read_storyboard_context 的返回里，多调只会烧步数（1016 实测：一条 60 步全花在无谓探索上、一个字没落库；同一条不探索时 3 步就存好）。
 ${anatomyRule}

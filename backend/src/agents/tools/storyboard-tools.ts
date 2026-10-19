@@ -242,6 +242,9 @@ const storyboardFields = z.object({
   bgm_prompt: z.string().optional(),
   sound_effect: z.string().optional(),
   duration: z.number().optional(),
+  // 导演决定这一镜要哪个 LoRA 功能（1019 用户）：填 LORA_REGISTRY 的 key（清单在指令末尾给你），
+  // 不选就**省略这个键**。提示词层按 key 取触发词、生成层按 key 挂文件。
+  lora_key: z.string().optional(),
   // 与上一段的关系：same_shot = 同一个镜头继续；cut = 硬切到新镜头。判据见 video-prompt SKILL。
   continuity: z.enum(['same_shot', 'cut']).optional(),
   scene_id: z.number().nullable().optional(),
@@ -299,6 +302,7 @@ const saveStoryboards = createTool({
           atmosphere: sb.atmosphere, imagePrompt: sb.image_prompt,
           videoPrompt: sb.video_prompt, bgmPrompt: sb.bgm_prompt,
           soundEffect: sb.sound_effect,
+          loraKey: sb.lora_key || null,
           sceneId: sb.scene_id, duration: sb.duration || 10, continuity: sb.continuity || 'same_shot',
           updatedAt: ts,
         }).where(eq(schema.storyboards.id, existingId))
@@ -315,6 +319,7 @@ const saveStoryboards = createTool({
           atmosphere: sb.atmosphere, imagePrompt: sb.image_prompt,
           videoPrompt: sb.video_prompt, bgmPrompt: sb.bgm_prompt,
           soundEffect: sb.sound_effect,
+          loraKey: sb.lora_key || null,
           sceneId: sb.scene_id, duration: sb.duration || 10, continuity: sb.continuity || 'same_shot',
           createdAt: ts, updatedAt: ts,
         })

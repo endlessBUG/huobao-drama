@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { getConfigById, getActiveConfig } from '../services/ai.js'
 import { baseOf } from '../services/adapters/comfyui-common.js'
-import { LORA_REGISTRY } from '../services/adapters/comfyui-video.js'
+import { LORA_BY_FILE } from '../services/adapters/comfyui-video.js'
 import { success, badRequest } from '../utils/response.js'
 
 const app = new Hono()
@@ -25,7 +25,9 @@ app.get('/', async (c) => {
     // note = 这支是干什么的，前端直接拼在名字后面（用户要求「lora 后面要写上 lora 的作用」）。
     // 没登记的（以后自己下的新文件）回空串、只显示文件名 —— 不会因为「后端没写死」就看不见它。
     const items = (required.lora_name?.[0] || []).map((name: string) => ({
-      name, label: name.replace(/\.safetensors$/, ''), note: LORA_REGISTRY[name]?.note || '',
+      name, label: name.replace(/\.safetensors$/, ''),
+      key: LORA_BY_FILE[name]?.key || '',
+      note: LORA_BY_FILE[name]?.note || '',
     }))
     return success(c, { supported: true, items, strength: required.strength_model?.[1] || {} })
   } catch (e: any) {

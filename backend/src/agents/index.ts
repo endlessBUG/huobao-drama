@@ -15,6 +15,7 @@ import { extractTools } from './tools/extract-tools.js'
 import { storyboardTools } from './tools/storyboard-tools.js'
 import { imagePromptTools } from './tools/image-prompt-tools.js'
 import { loadAgentSkills, skillWorkspaces } from './skills.js'
+import { LORA_REGISTRY } from '../services/adapters/comfyui-video.js'
 import { loadAgentPromptFile, loadBasePromptFile } from './prompts.js'
 import { buildLanguageDirective } from './language.js'
 import { createToolCallRepairFetch } from './tool-call-repair.js'
@@ -451,7 +452,13 @@ function buildInstructions(type: string) {
     const baseInstructions = promptFile?.instructions || defaults.instructions
     const skillInstructions = await loadAgentSkills(type, lang)
     const languageDirective = buildLanguageDirective(lang)
-    return [baseInstructions, skillInstructions, languageDirective]
+    // 1019 用户「传列表给导演 让导演决定有哪个key」：导演从这份「功能 key 清单」里挑、写进该段 lora_key
+    let loraKeys = ''
+    if (type === 'storyboard_breaker') {
+      const keyLines = Object.entries(LORA_REGISTRY).map(([k, v]) => `- ${k} — ${v.note}`).join('\n')
+      loraKeys = `**可选 LoRA 功能 key（save_storyboards 的 lora_key 就填这些；这一镜不需要额外功能就省略该键，不许编清单外的 key）**：\n${keyLines}`
+    }
+    return [baseInstructions, skillInstructions, languageDirective, loraKeys]
       .filter(Boolean)
       .join('\n\n')
   }

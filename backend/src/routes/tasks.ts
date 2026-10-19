@@ -5,6 +5,7 @@ import { success, created, badRequest } from '../utils/response.js'
 import { generateImage, generateVideo } from '../services/generation.js'
 import { getActiveConfig, getConfigById } from '../services/ai.js'
 import { getDramaStylePrompt } from '../services/style-preset.js'
+import { LORA_REGISTRY } from '../services/adapters/comfyui-video.js'
 import { logTaskError, logTaskPayload, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
 
 const app = new Hono()
@@ -123,6 +124,7 @@ app.post('/', async (c) => {
     let configId: number | undefined = body.config_id
     let episodeResolution: string | undefined
     let storyboardDramaId: number | undefined
+    let storyboardLoraKey: string | undefined
     if (body.storyboard_id) {
       const [sb] = await db.select().from(schema.storyboards).where(eq(schema.storyboards.id, Number(body.storyboard_id)))
       if (sb) {
@@ -131,6 +133,8 @@ app.post('/', async (c) => {
         if (locked != null && configId == null) configId = locked
         if (type === 'video' && ep?.resolution) episodeResolution = ep.resolution
         storyboardDramaId = ep?.dramaId ?? undefined
+        // 1019 用户「视频生成挂key对应的lora」：导演在拆镜时把功能 key 写进分镜，这里按 key 查表
+        storyboardLoraKey = sb.loraKey || undefined
       }
     }
 
@@ -167,6 +171,10 @@ app.post('/', async (c) => {
       const stylePrompt = await getDramaStylePrompt(dramaId)
       if (stylePrompt) imagePrompt = `${stylePrompt}，\n${body.prompt}`
     }
+
+    // 1019 用户「视频生成挂key对应的lora」：没显式传 lora、但该分镜有导演写的 lora_key ⇒ 按 key 查登记表挂。
+    // 概念词型（concept）的词已经在提示词正文里（提示词层按 key 注入的）⇒ loraTrigger 默认 false，不再前置。
+    const autoLora = !videoBody?.lora && storyboardLoraKey ? LORA_REGISTRY[storyboardLoraKey] : undefined
 
     const id = type === 'image'
       ? await generateImage({
@@ -206,9 +214,9 @@ app.post('/', async (c) => {
         promptExtend: videoBody!.prompt_extend,
         watermark: videoBody!.watermark,
         chain: videoBody!.chain,
-        lora: videoBody!.lora,
+        lora: videoBody!.lora || autoLora?.file,
         loraStrength: videoBody!.lora_strength ?? videoBody!.loraStrength,
-        loraTrigger: videoBody!.lora_trigger ?? videoBody!.loraTrigger,
+        loraTrigger: videoBody!.lora_trigger ?? videoBody!.loraTrigger ?? (autoLora?.concept ? false : undefined),
         sparse: videoBody!.sparse,   // 桥的 sol-attn 开关（A/B 仪表，默认关）
         configId,
       })

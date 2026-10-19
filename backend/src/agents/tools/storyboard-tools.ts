@@ -194,7 +194,9 @@ const readStoryboardContext = createTool({
           duration: sb.duration || 0,
           description: sb.description || '',
           atmosphere: sb.atmosphere || '',
-          video_prompt: sb.videoPrompt || '',
+          // 不带 video_prompt：重新拆镜时旧提示词毫无用处（saveStoryboards 会整集删旧插新），
+          // 而它是上下文里最大的一块（16 段 × ~1k 字）。1019 实测：带着它 readStoryboardContext
+          // 一次就灌进 ~45k token，小模型（qwen3.8-flash）读完直接停住、不调保存工具。
         }
       }))
 

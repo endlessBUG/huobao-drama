@@ -426,12 +426,14 @@ const AGENT_TOOLS: Record<string, Record<string, any>> = {
   scene_prompt_optimizer: {},
 }
 
-/** 不给 workspace 文件工具的 Agent：两条优化器（只改用户那段字、零工具）+ prompt_generator。
+/** 不给 workspace 文件工具的 Agent：两条优化器（只改用户那段字、零工具）+ prompt_generator + storyboard_breaker。
  *  prompt_generator 1016 摘掉 workspace：探针实测一条 60 步里 57 步是 mastra_workspace_grep /
  *  list_files / read_file 的瞎探索（同一个 pattern 连打 30 次）、一个字没落库；它的 prompt 与
  *  SKILL 文本里没有任何一句要它读文件（技能全文已在 instructions 里服务端拼好，read_* 与
- *  save_ 系列与 update_storyboard 全是 DB/库工具），文件工具纯粹是陷阱。摘掉后模型只剩该调的那几条。 */
-const NO_WORKSPACE_TYPES = new Set(['character_prompt_optimizer', 'scene_prompt_optimizer', 'prompt_generator'])
+ *  save_ 系列与 update_storyboard 全是 DB/库工具），文件工具纯粹是陷阱。摘掉后模型只剩该调的那几条。
+ *  storyboard_breaker 1019 同病同治：指令明令「不许 mastra_workspace_*」后一条仍 57/60 步在
+ *  list_files/read_file 翻找指南、没落库 —— 小模型压不住「工具就在手边」的诱惑，直接从工具表里拿掉。 */
+const NO_WORKSPACE_TYPES = new Set(['character_prompt_optimizer', 'scene_prompt_optimizer', 'prompt_generator', 'storyboard_breaker'])
 
 /** instructions 按请求解析：prompt 文件（或默认）+ 技能全文拼接 + 目标语言指令块
  *  prompt/skill 文本随内容语言切换语言变体（<type>.<lang>.md / SKILL.<lang>.md），缺失回退中文版 */

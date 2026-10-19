@@ -105,7 +105,8 @@ export async function startVideoPromptBatch(
 请先调用 read_storyboard_context 获取该分镜的画面描述(含【镜头N】子镜头与台词/旁白)、氛围及时长，据此生成 video_prompt(第一行是信息头：列出该分镜出场的人物与场景，用 @角色名/@场景名 引用；之后按 3 秒分段换行、用 @角色名/@场景名/@道具名 引用参考素材；**3 秒段只是时间切片、不是镜头**：同一个【镜头N】跨多个 3 秒段时保持同一景别/机位，段间写「镜头保持/继续」、不写「切到」；只有 description 的【镜头N】边界才切镜，整条提示词的切镜次数必须等于【镜头N】数 − 1，不新增子镜头；不跨场景)。同时按技能「六段式英文全参考」生成 video_prompt_full_ref（英文，含 <Subject>/<Picture> 标签，对应同一分镜）。然后调用 update_storyboard 保存到分镜 ID:${sb.id}。update_storyboard 参数只传 storyboard_id、video_prompt、video_prompt_full_ref 三个键,不要回传该分镜的其他任何字段,不要重新拆分整集。
 **工具纪律**：第一步 read_storyboard_context；拿到内容后直接写两条提示词并调用 update_storyboard 保存。**不要再调用任何其他工具**（read_prompt_library 已从本 Agent 摘除，workspace 文件工具也不可用）—— 分镜的画面描述、人物与场景都在 read_storyboard_context 的返回里，多调只会烧步数（1016 实测：一条 60 步全花在无谓探索上、一个字没落库；同一条不探索时 3 步就存好）。
 ${anatomyRule}
-**声音硬规则**：无对白 ≠ 无声。每个无对白段都要写可听见的呼吸/布料摩擦/床架轻响等动作音或环境音，不许用「极静/无声/无人说话/faint/barely audible」把整段压成静音（1018 实测：faint 措辞的成片音频 -55 dB = 没声音）。不新增台词。${handoff}`,
+**声音硬规则**：无对白 ≠ 无声。每个无对白段都要写可听见的呼吸/布料摩擦/床架轻响等动作音或环境音，不许用「极静/无声/无人说话/faint/barely audible」把整段压成静音（1018 实测：faint 措辞的成片音频 -55 dB = 没声音）。不新增台词。
+**full_ref 三必带（1019 实测：full_ref 里表情/眼神词 14/16 段为零 ⇒ 成片人物不看对方、脸上没表情）**：每个 [Shot N] 的 detailed_description 都要写英文 ① 表情过程（bites her lower lip / brow furrows then releases / eyes half-close / breath deepens / blush spreads to her ears）② 视线落点与移动（her gaze drops to his hand, then flicks away）③ 穿着状态（blouse opened below the collar, chest bare / the quilt pooled at the foot of the bed）。中文 video_prompt 里已有的这些描写**必须原样带进英文 full_ref**，不许压缩掉——真正送模型的是 full_ref（episode.vue:3980 把它当 body.prompt 发）。微表情（眼睑/睫毛级）不写。${handoff}`,
         }], { maxSteps: 24, requestContext })
         // 以实际落库为准判定成败：两个字段都要，只查 video_prompt 会把
         // 「full_ref 恒 NULL」误报成成功（本次 bug 即被这条掩盖）

@@ -10,7 +10,7 @@ CLAUDE.md 里只留一条引用，细节在这。
 
 ### 生产默认（1018 深夜用户「换成1采 20步 试试 只改这个 不要lora」）：native 单采 20 步、零 LoRA、GPU 侧 TE
 
-**现役配置**：平台 `backend/src/services/adapters/comfyui-video.ts` 写死 `PROD_GRAPH='native'`、`steps:20`、`no_lora:true`，且不再透传分镜 lora（`lora` 两行已注释）。
+**现役配置**：平台 `backend/src/services/adapters/comfyui-video.ts` 写死 `PROD_GRAPH='native'`、`steps:20`、`no_lora:true`（`no_lora` 只摘桥的 4 步 turbo；分镜 lora 透传 1019 已恢复，见下面「解剖 LoRA 定案」）。
 桥 `_wf_video_native` 生成的图：UNETLoader(nvfp4) → Veda sp24 → BasicGuider；`BasicScheduler(simple)` 20 步 + `res_multistep`；CLIPLoader `device:"default"`（文本编码器在 GPU）；首尾帧走 `MiniMaxH3AddGuide`（frame_idx 0 / -1）；参考图走 `ref_image_0~8`。
 
 **为什么退到 20 步**：1018 深夜两条快档都被用户判「效果不好」——PDD 5 步（task 512，494.82 s）与 4 步 turbo LoRA（task 540，438 s，首帧 PSNR 9.9 没锚住）。20 步无 LoRA 是 1016 的定案档；1018 深夜用户看 task 542 成片（sb98，`static/videos/b5a64c43-…mp4`）判「这个可以 代码以后都用这个方案」⇒ **已锁定为长期方案**。首帧 PSNR 检查在 20 步这条仍报 9.7（驱动自动重发），但用户按画面判通过，重发已停；锚检查阈值 25 只当提示、不再当否决。
@@ -21,7 +21,21 @@ CLAUDE.md 里只留一条引用，细节在这。
 
 **速度账（20 步 @1024×768）**：243 帧 674 s 实测（`test/fresh_x2432s20.mp4`，旧 cpuTE）；294 帧旧实测 20 分 10 秒（task 504，cpuTE 固定税 427 s）。**GPU 侧 TE 把固定税从 427 s 降到 ~53 s**（task 512 分阶段：fire→采样起 53 s，其中 TE 装载+编码 ~37 s；`--disable-smart-memory` 是前提，unet 载入前整块卸掉 TE，`model_management.py:924`）⇒ 294 帧 20 步预计 ≈14 分钟（task 542 实测值回填这里）。
 
-**已下架/被否的臂**：PDD5 图（`h3_refall_pdd5_gpute.json`）与 PDD8 图留盘但平台不选；4 步 turbo 由 `no_lora:true` 摘除；分镜 lora 不再透传（要恢复 = adapter 两行取消注释 + 确认桥节点 210）。saved 图的 LoRA/BasicScheduler 限制随 PDD5 下架一并失效。
+**已下架/被否的臂**：PDD5 图（`h3_refall_pdd5_gpute.json`）与 PDD8 图留盘但平台不选；4 步 turbo 由 `no_lora:true` 摘除；分镜 lora 已恢复透传（1019 夜，桥 `if lora:` → 节点 210 已确认）。saved 图的 LoRA/BasicScheduler 限制随 PDD5 下架一并失效。
+
+### 解剖 LoRA 定案（1019 用户「就这个了 其他的都删掉 导演要决定是否有生殖器 如果有 后续分镜要挂lora 且参考出触发词。 lora登记的时候也要登记触发词」）
+
+**只留一条**：civitai 2885332 **MiniMax H3 – Pussy spread** v0.2（version id 3306941，148MB，LoKr rank16 bf16，ostris/ai-toolkit 0.12.26，作者自报「只是测试品、10 条片、别期望太高」）= `models/loras/minimax_h3_pussy_spread_v0.2.safetensors`（416 tensors 校验过）。被否的同方向三条**文件已删**：HMInnie 2853405（310MB）、HMPussy V1 2846342 的 74MB stills 半条、Vagina 2835594（77MB）—— 上一轮「太丑」的根因就是**单挂 stills 半条跑 20 步视频**（作者 README：视频半条是另一个 597MB 文件、要两条一起挂、强度 0.35）。
+
+**触发词登记口径**：Civitai 的 `trigger_word: null`、`trainedWords` 为空 ⇒ 它没有专用 token，概念就是英文短语 `pussy spread`（作者按官方 H3 提示词指南写 caption）。所以 `LORA_REGISTRY` 不写 `t`（前置生造 token 会撞六段式格式），note 里把这句概念写死；词由 `backend/src/services/video-prompts.ts` 的无审核规则 + `skills/prompt-generator/video-prompt/SKILL.md` 带进 `detailed_description`。
+
+**谁决定画不画**：导演层（`skills/storyboard-breaker/SKILL.md` 的「导演层」节，1019 新增「生殖器是否入画」条）一次决定、整场统一 —— 定画 ⇒ 每个露的【镜头N】近景/特写只框腰以下（全身远景画不出结构）+ `description` 用直白措辞写死；提示词层照 `description` 带 `pussy spread`、生成时平台挂这条 LoRA（词与权重是一套，只挂不带词 / 只带不挂都不算生效）。定不画 ⇒ 外阴按 1006 实测的「合拢窄缝 one thin closed cleft」写，禁 spread/parted/opening/gaping。
+
+**A/B（1019 夜）**：#5「指腹下探」storyboard 224，同 refs / 同首帧 / 12 s / 1024×768 / 20 步 native —— task **574** = 基线（无 LoRA、库里现成的合拢窄缝 full_ref），task **575** = 同镜 + `pussy spread` + LoRA@1.0（arm B 的 prompt 是探针手改的，不是 agent 落库的）。`/queue` 的图已验：574 无节点 210、575 **有 210 + pussy_spread + steps 20 + TE device default**。用户「先停掉」⇒ 两条各 interrupt（queue 空、6006 进程没杀、模型常驻 = 下次发车不付冷读税），无产物；要验这条线 = 同样两条再发（基线锚 784-810 s/条；挂 LoRA 那条若重演 1018 的「294 帧全 offload ⇒ patch 每步重贴」（PDD 臂 81 vs 36 s/步）会到 ≈27 分钟）。
+
+**「有没有生殖器 / 挂哪条」的选择逻辑（1019 夜实现，用户「判断是否有生殖器 选择是加哪个lora的逻辑呢」）**：三层 —— ① 集级标题闸门（`backend/src/services/video-prompts.ts:77`，标题不含「无审核」= 一律腰部以上，词与 LoRA 都不进）② 场级导演决定（storyboard-breaker SKILL「导演层」，**判据 = 这一场的动作落点**：落点在生殖器却不给画面 = 五命题的「关键证据」缺位 = 必须露；落点在上半身/背脊/脚 = 不露）③ 镜级载体（露点镜 `description` 写「露出外阴」+ 只框腰以下）。挂哪条 = `LORA_REGISTRY` 的 `concept` 字段反查：adapter 在 `record.lora` 为空、而提示词里出现某条登记 LoRA 的概念词时**自动挂那条**（强度默认 1.0）——「词与权重是一套」由代码兜住，不靠人记得；显式传 `lora` 时这条不介入。
+
+**ep8 已扩到 21 段（1019 夜，用户「继续加镜头 互相舔脚 摸胸 舔胸 舔阴 插阴」）**：#17-21 = 互相舔脚 / 覆掌揉乳 / 含乳绕晕 / 舔阴露瓣 / 两指抽送（ids 236-240，每段 12 s，整集 252 s）。#20/#21 的 description 写了「露出外阴」、full_ref 带 `pussy spread`；#17-19 不写露 ⇒ 按合拢窄缝、禁 spread。渲染未开（等用户一句话）。
 
 **验证入口**：`curl :6006/queue` 读 4 号 CLIPLoader 的 `device`（必须 `default`）、10 号 `BasicScheduler.steps=20`、图里无 `LoraLoaderModelOnly`。
 

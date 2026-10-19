@@ -94,7 +94,7 @@ export function framesForDuration(seconds?: number | null): number {
 // 社区 LoRA 的登记表：触发词口径 + 「它是干什么的」。note 直接显示在工作台那个下拉的名字后面
 // （用户要求「lora 后面要写上 lora 的作用」），措辞与数抄各家 README / 我们自己的实测，不是编的。
 // 没登记的文件 = 只显示文件名、不塞触发词。登记了就必须写 note（测试锁这条）。
-export const LORA_REGISTRY: Record<string, { t?: string; replace?: RegExp; note: string }> = {
+export const LORA_REGISTRY: Record<string, { t?: string; replace?: RegExp; concept?: string; note: string }> = {
   'h3-realism-people-t2v-i2v-r2v.safetensors': { t: 'r34l1sm',
     note: '真人质感·去塑料光泽（实测：画面暗 10%、形状不变）' },
   // 作者 README 原话（繁体中文+英文对照）：「正強度偏向 2d 動漫風格，負強度則為寫實」，
@@ -110,7 +110,7 @@ export const LORA_REGISTRY: Record<string, { t?: string; replace?: RegExp; note:
   // 指南写 caption）。所以不写 t：前置生造 token 会撞六段式格式，词由 video-prompts.ts 的无审核
   // 规则写进 detailed_description。被否掉的同方向文件已删（HMInnie 2853405、HMPussy V1 2846342
   // 的 74MB stills 半条、Vagina 2835594）——「太丑」的根因就是单挂 stills 半条跑 20 步视频。
-  'minimax_h3_pussy_spread_v0.2.safetensors': {
+  'minimax_h3_pussy_spread_v0.2.safetensors': { concept: 'pussy spread',
     note: '外阴张开 · 无官方触发词，概念词 = pussy spread（写进提示词）；作者自报测试品；强度 1.0 起、待 A/B' },
   'HMNSFW-AIO-V2.5.safetensors': { t: 'hmmotion',
     note: '动作姿态 AIO V2.5（作者建议强度 0.5–0.9，只动 mlp）' },
@@ -140,6 +140,12 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
     // 只有登记了 t 的才碰词。HMPussy V1 的触发词就是普通词 pussy（我们提示词里本来就有 12 处），
     // 前置一遍是重复 —— 所以它只登记 note、不登记 t，prompt 一字不改（D 臂实测就是这么跑的）。
     const prompt = !tr?.t ? base : tr.replace ? base.replace(tr.replace, tr.t) : `${tr.t} ${base}`
+    // 1019 概念词反查（用户「选择是加哪个 lora 的逻辑呢」）：没显式选 LoRA、但提示词里出现了某条登记
+    // LoRA 的 concept 词 ⇒ 自动挂它 ——「词与权重是一套」由代码兜住，不靠人记得。多个命中取登记表靠前的
+    // （现役只有一条解剖）。显式传了 record.lora = 走老路，这条不介入。
+    const autoLora = record.lora ? undefined : Object.keys(LORA_REGISTRY)
+      .find((f) => LORA_REGISTRY[f].concept && prompt.toLowerCase().includes(LORA_REGISTRY[f].concept!.toLowerCase()))
+    const loraFile = record.lora || autoLora
 
     const inputDir = toInputDir(config)
     const images = await stageReferenceImages(parseUrlArray(record.referenceImageUrls), inputDir, MAX_IMAGES)
@@ -201,8 +207,8 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
         // 1019 用户「如果有 后续分镜要挂lora」⇒ 恢复透传。桥的 native 图在 `if lora:` 插节点 210
         // （LoraLoaderModelOnly，__init__.py:463-465），与 `no_lora`（:451 摘 4 步 turbo）互不干扰：
         // turbo=False 时 model = ["1",0] 直吃 UNETLoader、再叠 210。不传 lora = 这格不进图、逐字节老行为。
-        lora: record.lora || undefined,
-        lora_strength: record.lora ? (record.loraStrength ?? 1.0) : undefined,
+        lora: loraFile || undefined,
+        lora_strength: loraFile ? (record.loraStrength ?? 1.0) : undefined,
         // 不传 = 桥里那格整段不出现，图与老行为逐字节一致（和 lora 同一个口径）。
         // 1016 夜改：`false` 要能真发出去。桥 `__init__.py:1012` 判的是 `b.get("sparse") is False`，
         // 老写法 `record.sparse ? true : undefined` 把 false 和「没传」混成一谈 ⇒ dense 对照臂永远进不去。

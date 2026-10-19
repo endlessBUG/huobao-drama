@@ -38,7 +38,9 @@ CLAUDE.md 里只留一条引用，细节在这。
 
 **重走一遍（1019 夜 15:5x→16:2xZ，task 577，用户「重新来 看看效果」）**：这次**让导演自己写 key**（我一条都没回填）—— 拆镜 agent 落库：#17/#18 = `skin_realism`、#19 = `sex_motion`、**#20/#21 = `pussy_spread` 且 description 写了「露出外阴」**（判据在起作用：露的两条它自己挑了解剖那条）。按 key 取词也基本兑现：#17 带 `r34l1sm`、#19 带 `hmmotion`、#20/#21 带 `pussy spread`；**#18 漏词**（给了 key、模型没把词写进 full_ref —— 小模型照做率不是 100%，补写或重生成这条）。#20 出片：12.250 s / 1024×768 / 3.9 MB（`static/videos/fced70fc-…mp4`，已发飞书），**整单 1633 s = 27 分 13 秒** vs 不挂的基线 784-810 s ⇒ **挂 LoRA ≈2.0×、每步 ≈80 s**，与 1018 PDD 臂的「全 offload ⇒ patch 每步重贴」同账。整集 21 段按这个口径 ≈5 小时（露点两条各 27 分钟、其余 19 条 13 分钟）。
 
-**ep8 已扩到 21 段（1019 夜，用户「继续加镜头 互相舔脚 摸胸 舔胸 舔阴 插阴」）**：#17-21 = 互相舔脚 / 覆掌揉乳 / 含乳绕晕 / 舔阴露瓣 / 两指抽送（ids 236-240，每段 12 s，整集 252 s）。#20/#21 的 description 写了「露出外阴」、full_ref 带 `pussy spread`；#17-19 不写露 ⇒ 按合拢窄缝、禁 spread。渲染未开（等用户一句话）。
+**1019 夜用户看片判「阴部太大了 阴部不够粉嫩」+「我是说lora的定义里 加上最优提示词」「描述 lora 的提示词要放到 lora 的定义里 然后引进用来 而不是放到主提示词里」** ⇒ `LORA_REGISTRY` 每条加 **`prompt` 字段 = 这条 LoRA 的最优提示词**，主提示词里那段描述它的话从登记表取、原样引进，模型不许自己编。`pussy_spread` 的 = `a close-up framed below the waist, pussy spread, a small narrow vulva, labia modest in frame, labia rosy pink, soft neutral light on her vulva`，逐条出处：① `extreme close-up` 会把器官画满整幅 = 「太大」（577 的 [Shot 2] 原句就是大特写顶视）② 尺寸词 `small narrow / modest in frame` ③ `labia rosy pink` = 普通英文描述词、不靠 LoRA（HMInnie README 的 Labia colour 轴 matching skin/pink/rosy/brown，文件已删、词留下）④ `candlelight directly illuminating` 实测把粉压成橙 ⇒ 光写中性、烛光只当环境光。机制：`loraBestPrompt(key)` 把这段注进单条消息 + `video-prompts.ts` 的 `ensureLoraBlock` 落库后兜底补写（1019 实测 #18 给了 key、模型漏写词 ⇒ 不靠模型记得）。**重发 #20（强度 0.7、其余同 577）在跑**，出片再发飞书对照。
+
+**ep8 已扩到 21 段（1019 夜，用户「继续加镜头 互相舔脚 摸胸 舔胸 舔阴 插阴」）**：#17-21 = 互相舔脚 / 覆掌揉乳 / 含乳绕晕 / 舔阴露瓣 / 两指抽送（ids 236-240，每段 12 s，整集 252 s）。#20/#21 的 description 写了「露出外阴」、`lora_key = pussy_spread`；#17-19 不写露（导演给的是 `skin_realism` / `sex_motion`）⇒ 外阴按合拢窄缝、禁 spread。整集渲染未开（等用户看 #20 修正版判完）。
 
 **验证入口**：`curl :6006/queue` 读 4 号 CLIPLoader 的 `device`（必须 `default`）、10 号 `BasicScheduler.steps=20`、图里无 `LoraLoaderModelOnly`。
 

@@ -97,10 +97,13 @@ export function framesForDuration(seconds?: number | null): number {
 //   file     = 生成时挂的文件（桥 native 图的节点 210，`__init__.py:463-465`）
 //   t        = 要**前置**的触发 token（作者把 token 当开关的那类）
 //   concept  = 要**写进句子**的英文短语（解剖那类）—— 不前置：前置生造 token 会撞六段式格式
+//   prompt   = 这条 LoRA 的**最优提示词**（1019 用户「我是说lora的定义里 加上最优提示词」「描述 lora 的
+//              提示词要放到 lora 的定义里 然后引进用来 而不是放到主提示词里」）：主提示词里那段描述它的
+//              话从这里取、原样引进，模型不许自己编；不写这个字段 = 它的触发词本身就是全部描述语
 //   note     = 功能的详细说明 + 实测（显示在工作台下拉名字后面、也是导演挑 key 的依据；
 //              用户「lora 后面要写上 lora 的作用」「lora登记的时候也要登记触发词」）
 // 没登记的文件 = 下拉里只显示文件名、没有 key、不塞词。登记了就必须写 note（测试锁这条）。
-export const LORA_REGISTRY: Record<string, { file: string; t?: string; concept?: string; note: string }> = {
+export const LORA_REGISTRY: Record<string, { file: string; t?: string; concept?: string; prompt?: string; note: string }> = {
   skin_realism: { file: 'h3-realism-people-t2v-i2v-r2v.safetensors', t: 'r34l1sm',
     note: '功能：真人皮肤质感、去塑料光泽（实测：画面暗 10%、形状不变）' },
   // 作者 README 原话（繁体中文+英文对照）：「正強度偏向 2d 動漫風格，負強度則為寫實」，
@@ -115,8 +118,15 @@ export const LORA_REGISTRY: Record<string, { file: string; t?: string; concept?:
   // 为空 ⇒ 没有专用 token，概念就是英文短语 `pussy spread`（作者按官方 H3 提示词指南写 caption）。
   // 被否掉的文件已删（HMInnie 2853405、HMPussy V1 2846342 的 74MB stills 半条、Vagina 2835594）——
   // 上一轮「太丑」的根因 = **单挂 stills 半条跑 20 步视频**（作者：视频半条是另一个 597MB 文件、两条一起挂、强度 0.35）。
+  // **最优提示词**（1019 用户「lora 的定义里 加上最优提示词」）—— 出处逐条：景别收到 `close-up`（实测
+  // `extreme close-up` 会把器官画满整幅 = 「阴部太大了」）；`a small narrow vulva, labia modest in frame`
+  // 尺寸词；`labia rosy pink` 颜色词（肤色是普通英文描述词、不靠 LoRA —— HMInnie README 的 Labia colour
+  // 轴 = matching skin/pink/rosy/brown，文件已删、词留下）；`soft neutral light`（实测 `candlelight
+  // directly illuminating` 把粉压成橙）。强度 1.0 是唯一测过的档（task 577 = 27 分/条，用户判太大、
+  // 不够粉嫩）⇒ 下一发试 0.7。
   pussy_spread: { file: 'minimax_h3_pussy_spread_v0.2.safetensors', concept: 'pussy spread',
-    note: '功能：把外阴画成张开形态（导演决定「露出外阴」的镜选它）· 概念词 = pussy spread，写进该 [Shot N] 的 detailed_description；作者自报测试品；强度 1.0 起、待 A/B' },
+    prompt: 'a close-up framed below the waist, pussy spread, a small narrow vulva, labia modest in frame, labia rosy pink, soft neutral light on her vulva',
+    note: '功能：把外阴画成张开形态（导演决定「露出外阴」的镜选它）· 概念词 = pussy spread；作者自报测试品；1.0 实测显大、偏橙 ⇒ 搭配语见 prompt 字段、强度试 0.7' },
   sex_motion: { file: 'HMNSFW-AIO-V2.5.safetensors', t: 'hmmotion',
     note: '功能：性爱动作/姿态 AIO V2.5（作者建议强度 0.5–0.9，只动 mlp）' },
   distill_ref2v_4step: { file: 'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors',
@@ -138,6 +148,15 @@ export const LORA_REGISTRY: Record<string, { file: string; t?: string; concept?:
 // 文件名 → 登记项（下拉与老调用方传的是文件名，key 反查用这张）
 export const LORA_BY_FILE: Record<string, { key: string; file: string; t?: string; concept?: string; note: string }> =
   Object.fromEntries(Object.entries(LORA_REGISTRY).map(([key, v]) => [v.file, { key, ...v }]))
+
+/** 这条 LoRA 的「最优提示词」= 主提示词里描述它的那段话，从登记表取、原样引进（1019 用户
+ *  「描述 lora 的提示词要放到 lora 的定义里 然后引进用来 而不是放到主提示词里」）。
+ *  没单独写 prompt 字段的 = 它的触发词本身就是全部描述语。 */
+export function loraBestPrompt(key?: string | null): string {
+  const reg = key ? LORA_REGISTRY[key] : undefined
+  if (!reg) return ''
+  return reg.prompt || reg.concept || reg.t || ''
+}
 
 export class ComfyUIVideoAdapter implements VideoProviderAdapter {
   provider = 'comfyui'

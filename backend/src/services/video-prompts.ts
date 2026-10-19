@@ -7,7 +7,7 @@ import { db, schema } from '../db/index.js'
 import { mastra } from '../mastra/index.js'
 import { buildAgentRequestContext } from '../agents/context.js'
 import { logTaskError, logTaskProgress, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
-import { LORA_REGISTRY } from './adapters/comfyui-video.js'
+import { LORA_REGISTRY, loraBestPrompt } from './adapters/comfyui-video.js'
 
 export interface VideoPromptBatchStatus {
   status: 'running' | 'done' | 'error'
@@ -21,6 +21,22 @@ export interface VideoPromptBatchStatus {
 }
 
 const tasks = new Map<number, VideoPromptBatchStatus>()
+
+/** 把 LoRA 的最优提示词引进 full_ref（1019 用户「描述 lora 的提示词要放到 lora 的定义里 然后引进用来」）：
+ *  整段已在 = 不动（幂等）；只有触发词、没写整段 = 用整段替换那个词；连触发词都漏 = 补在
+ *  detailed_description 末尾（overall_soundscape 之前）。小模型会漏写（实测 #18 给了 key、词没进
+ *  full_ref），所以这条兜底由代码做，不靠模型记得。 */
+function ensureLoraBlock(fr: string, best: string): string {
+  if (!fr || !best) return fr
+  const low = fr.toLowerCase(), b = best.toLowerCase()
+  if (low.includes(b)) return fr
+  const head = best.split(',')[0].trim()
+  const at = low.indexOf(head.toLowerCase())
+  if (at >= 0) return fr.slice(0, at) + best + fr.slice(at + head.length)
+  const end = low.indexOf('overall_soundscape:')
+  const cut = end > 0 ? end : fr.length
+  return `${fr.slice(0, cut).trimEnd()} ${best}\n${fr.slice(cut)}`
+}
 
 /** 启动批量生成（立即返回）；运行中返回 started:false,total:-1；无待生成分镜返回 started:false,total:0；
  *  传入 storyboardIds 时只处理所选分镜（即使已有提示词也重新生成），否则处理全部缺失提示词的分镜 */
@@ -100,13 +116,14 @@ export async function startVideoPromptBatch(
         const shotPlan = shotTexts.length
           ? `\n**本镜镜头清单（硬约束，不许新增）**：description 有 ${shotTexts.length} 个【镜头N】，两条提示词都必须正好 ${shotTexts.length} 个镜头、${shotTexts.length - 1} 次切镜：\n${shotTexts.map((t, i) => `【镜头${i + 1}】${t.slice(0, 50)}${t.length > 50 ? '…' : ''}`).join('\n')}\n把 ${segCount} 个 3 秒段按顺序分配给这 ${shotTexts.length} 个镜头；同一镜头跨 1-2 段，段首写「镜头保持/继续」，切镜只出现在上面 ${shotTexts.length - 1} 个镜头边界上；full_ref 的 [Shot N] 也必须是 ${shotTexts.length} 个。`
           : ''
-        // 1019 用户「分镜根据key获取触发词」：词由代码从登记表取，不让模型自己编
+        // 1019 用户「我是说lora的定义里 加上最优提示词」「描述 lora 的提示词要放到 lora 的定义里 然后引进
+        // 用来 而不是放到主提示词里」：那段话从登记表取（loraBestPrompt），模型只许原样引进
         let loraInfo = ''
         if (sb.loraKey) {
           const reg = LORA_REGISTRY[sb.loraKey]
-          const word = reg ? reg.concept || reg.t : undefined
-          loraInfo = word
-            ? `\n**本镜 lora_key = ${sb.loraKey}**：触发词/概念词 \`${word}\` 必须原样写进英文 full_ref 的 [Shot N]（生成时平台按 key 挂 ${reg!.file}）——不许自己编别的词；这一镜要露生殖器，取景句子只框腰以下。`
+          const best = loraBestPrompt(sb.loraKey)
+          loraInfo = best
+            ? `\n**本镜 lora_key = ${sb.loraKey}**：把它在登记表里的**最优提示词**整段原样写进英文 full_ref 的 [Shot N]（生成时平台按 key 挂 ${reg!.file}），一个字都不许改、不许只取其中几个词、不许自己加描述：\n\`${best}\``
             : `\n**本镜 lora_key = ${sb.loraKey} 不在登记表** ⇒ 当没给：不写露、按合拢窄缝处理。`
         }
         await agent.generate([{
@@ -121,6 +138,17 @@ ${anatomyRule}
         // 以实际落库为准判定成败：两个字段都要，只查 video_prompt 会把
         // 「full_ref 恒 NULL」误报成成功（本次 bug 即被这条掩盖）
         const [fresh] = await db.select().from(schema.storyboards).where(eq(schema.storyboards.id, sb.id))
+        // 兜底引进：小模型会漏写或只写一半（1019 实测 #18 给了 key、词没进 full_ref）——
+        // 整段以登记表为准，由代码补进去，不靠模型记得
+        const bestBlock = loraBestPrompt(sb.loraKey)
+        if (bestBlock && fresh?.videoPromptFullRef) {
+          const fixed = ensureLoraBlock(fresh.videoPromptFullRef, bestBlock)
+          if (fixed !== fresh.videoPromptFullRef) {
+            await db.update(schema.storyboards).set({ videoPromptFullRef: fixed, updatedAt: new Date().toISOString() })
+              .where(eq(schema.storyboards.id, sb.id)).run()
+            fresh.videoPromptFullRef = fixed
+          }
+        }
         const missing = [
           !(fresh?.videoPrompt || '').trim() && 'video_prompt',
           !(fresh?.videoPromptFullRef || '').trim() && 'video_prompt_full_ref',

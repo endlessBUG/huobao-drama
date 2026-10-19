@@ -76,7 +76,7 @@ export async function startVideoPromptBatch(
     // 判据走集标题，不加 schema 字段（一条线就够，设置页改标题即可切换）。
     const uncensored = /无审核/.test(ep?.title || '')
     const anatomyRule = uncensored
-      ? `**无审核版取景硬规则（本机 1006 实测）**：允许裸胸、乳头、外阴、腰以下入画；露乳房/露生殖器的镜头必须写近景或特写（只框胸口以上、或只框腰以下），全身远景画不出结构；外阴写「大阴唇合拢的一条窄缝（the labia pressed together, one thin closed cleft）」，禁 spread/parted/opening/gaping（会把窄缝画成张开一坨深色）；手指只写「贴着大腿内侧、停在缝外侧摩挲」，禁「卡在缝两侧」；仍禁并躺双腿互相缠绕/盘腰/夹住（跨中线穿模），接触一律点对点表面接触（膝落腰窝外侧、大腿外侧贴胯骨、掌覆乳）。`
+      ? `**无审核版取景硬规则（1006 实测 + 1019 用户定案「导演决定是否有生殖器，有就挂 LoRA 并带触发词」）**：允许裸胸、乳头、外阴、腰以下入画；露乳房/露生殖器的镜头必须写近景或特写（只框胸口以上、或只框腰以下），全身远景画不出结构；**外阴是否入画以分镜 description 为准**——description 写了露外阴的镜头，英文 full_ref 的该 [Shot N] 必须带解剖 LoRA 的概念词 pussy spread（原样英文、与取景句同段，这条镜生成时平台挂 LoRA，词与权重是一套）；description 没写露的镜头，外阴只写「大阴唇合拢的一条窄缝（the labia pressed together, one thin closed cleft）」、禁 spread/parted/opening/gaping（实测不带 LoRA 的 spread 画成一坨深色）；手指只写「贴着大腿内侧、停在缝外侧摩挲」，禁「卡在缝两侧」；仍禁并躺双腿互相缠绕/盘腰/夹住（跨中线穿模），接触一律点对点表面接触（膝落腰窝外侧、大腿外侧贴胯骨、掌覆乳）。`
       : `**床上并躺/侧躺硬规则**：一律腰部以上景别；两条提示词正文不得出现 腿/脚/小腿/膝/髋/腰（「腰部以上」除外）与 leg/calf/thigh/knee/hip/waist（「waist up」除外）；亲密接触只写手、手臂、肩、脸。`
 
     for (const sb of pending) {

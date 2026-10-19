@@ -410,7 +410,13 @@ async function getModel(fileModel: string | undefined, modelOverride?: string, t
 const AGENT_TOOLS: Record<string, Record<string, any>> = {
   script_rewriter: scriptTools,
   extractor: extractTools,
-  storyboard_breaker: storyboardTools,
+  storyboard_breaker: {
+    // 1019 摘掉 update_storyboard：保存完它忍不住逐段去「修 video_prompt_full_ref」——
+    // 一条 60 步里 57 步是 updateStoryboard 空转、最后 4 段直接复读前 4 段。
+    // 拆镜唯一该走的落库路径就是分批 save_storyboards（每批 ≤8），full_ref 归提示词步骤管。
+    readStoryboardContext: storyboardTools.readStoryboardContext,
+    saveStoryboards: storyboardTools.saveStoryboards,
+  },
   prompt_generator: {
     ...imagePromptTools,
     // 1018：read_prompt_library 已摘 —— 批量生成时模型会陷入「同参数连调 56 次」，

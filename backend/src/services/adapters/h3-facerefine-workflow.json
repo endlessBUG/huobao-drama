@@ -102,7 +102,9 @@
    "filename_prefix": "huobao_facerefine",
    "format": "video/h264-mp4",
    "pingpong": false,
-   "save_output": true
+   "save_output": true,
+   "save_metadata": true,
+   "trim_to_audio": false
   }
  },
  "31": {

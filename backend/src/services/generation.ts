@@ -9,7 +9,7 @@ import { now } from '../utils/response.js'
 import { downloadFile, fetchImageAsCompressedDataUrl, generateImageThumb, readImageAsCompressedDataUrl, saveBase64Image } from '../utils/storage.js'
 import { extractVideoPoster, extractLastFrame } from '../utils/video-poster.js'
 import { getImageAdapter, getVideoAdapter } from './adapters/registry'
-import { refineVideoFace } from './adapters/face-refine'
+import { refineVideoFace, wantsFaceRefine } from './adapters/face-refine'
 import { framesForDuration } from './adapters/comfyui-video'
 import type { AIConfig } from './adapters/types'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess, logTaskWarn, redactUrl } from '../utils/task-logger.js'
@@ -587,11 +587,12 @@ async function writeBackImageAssets(record: SysTaskRecord, localPath: string) {
 
 async function handleVideoComplete(record: SysTaskRecord, config: AIConfig, videoUrl: string, duration: number | null | undefined) {
   const localPath = await downloadFile(videoUrl, 'videos')
-  // 1024 用户「先做minimax小脸修复…加到平台流程 然后用GPU」：comfyui 基片生成后，按任务 params.refine
-  // （或全局 env HUOBAO_FACE_REFINE=1）跑一发小脸修复二采，成片替换基片。失败保留基片（不阻断任务）。
+  // 1024 用户「先做minimax小脸修复…加到平台流程 然后用GPU」：comfyui 基片生成后跑一发小脸修复二采，
+  // 成片替换基片。失败保留基片（不阻断任务）。**1025 用户「默认全开、不加开关」** ⇒ 不用再传 refine，
+  // 显式 `refine:false` 才关（见 face-refine.ts 的 wantsFaceRefine）。
   let finalPath = localPath
   const params = parseTaskParams(record.params)
-  const wantRefine = record.provider === 'comfyui' && (params.refine === true || process.env.HUOBAO_FACE_REFINE === '1')
+  const wantRefine = wantsFaceRefine(record.provider, params)
   if (wantRefine && record.prompt) {
     const refined = await refineVideoFace({
       config,

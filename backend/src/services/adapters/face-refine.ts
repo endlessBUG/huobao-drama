@@ -13,6 +13,14 @@ import type { AIConfig } from './types'
 
 const nodeRequire = createRequire(import.meta.url)
 
+/** 1025 用户「默认全开、不加开关」：comfyui 基片一律二采；任务显式 `refine:false` 才关（API 口子，UI 不暴露）。 */
+export function wantsFaceRefine(
+  provider: string | null | undefined,
+  params: { refine?: boolean } | null | undefined,
+): boolean {
+  return provider === 'comfyui' && params?.refine !== false
+}
+
 export interface RefineInput {
   config: AIConfig
   videoLocalPath: string // 'static/videos/xxx.mp4'（基片，已落盘）

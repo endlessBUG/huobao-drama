@@ -455,7 +455,14 @@ function buildInstructions(type: string) {
     // 1019 用户「传列表给导演 让导演决定有哪个key」：导演从这份「功能 key 清单」里挑、写进该段 lora_key
     let loraKeys = ''
     if (type === 'storyboard_breaker') {
-      const keyLines = Object.entries(LORA_REGISTRY).map(([k, v]) => `- ${k} — ${v.note}`).join('\n')
+      // 1023 用户「分镜选择 lora 的时候要产出 lora 的配置」：每条 key 后面把它登记的 config 一起产出
+      // （导演挑 key 时看得到这条 LoRA 的用法/出处；生成层也从同一份 config 取 steps/strength）。
+      const keyLines = Object.entries(LORA_REGISTRY).map(([k, v]) => {
+        const c = v.config
+        const cfg = c ? ` ｜ 配置: ${(['strength', 'steps', 'sampler', 'trigger', 'base', 'trainedOn', 'source', 'num_frames', 'do_i2v'] as const)
+          .filter((f) => c[f] !== undefined).map((f) => `${f}=${String(c[f])}`).join(', ')}` : ''
+        return `- ${k} — ${v.note}${cfg}`
+      }).join('\n')
       loraKeys = `**可选 LoRA 功能 key（save_storyboards 的 lora_key 就填这些；这一镜不需要额外功能就省略该键，不许编清单外的 key）**：\n${keyLines}`
     }
     return [baseInstructions, skillInstructions, languageDirective, loraKeys]

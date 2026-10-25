@@ -194,6 +194,11 @@ const readStoryboardContext = createTool({
           duration: sb.duration || 0,
           description: sb.description || '',
           atmosphere: sb.atmosphere || '',
+          // 1025 用户「还要有合适的BGM」：配乐文本必须进 read 上下文，否则 prompt_generator 只能从
+          // atmosphere 现编 non_diegetic_music、把分镜里存好的 bgm_prompt 整个丢掉（实测库里写了
+          // 「肃杀古风弦乐，鼓点渐起」却从没进过视频）。它短（每段 ~20 字），不像 video_prompt
+          // 那样会灌爆上下文，所以放心带上。SKILL 已规定「配乐只进 non_diegetic_music」。
+          bgm_prompt: sb.bgmPrompt || '',
           // 不带 video_prompt：重新拆镜时旧提示词毫无用处（saveStoryboards 会整集删旧插新），
           // 而它是上下文里最大的一块（16 段 × ~1k 字）。1019 实测：带着它 readStoryboardContext
           // 一次就灌进 ~45k token，小模型（qwen3.8-flash）读完直接停住、不调保存工具。

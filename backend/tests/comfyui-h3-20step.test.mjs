@@ -5,9 +5,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ComfyUIVideoAdapter } from '../src/services/adapters/comfyui-video.ts'
 
-// 1016 定案（用户看片拍板「就用这个」）：生产 = 20 步单采 @1024×768，无 turbo LoRA，nvfp4 + Veda sp24。
-// 实测锚 = x2432s20 674 s（docs/comfyui-h3-configs.md「1016 定案」）。锁三处：
-//   ① 适配器默认画布 1024×768、body 带 steps:20 + no_lora:true（ref2v 路径）
+// 1024 定案（用户「重做 换成不要lora 1采 20步」）：生产回 native 单采 20 步、无 LoRA（PDD 撤回）。
+// 实测锚 = 1018 task 542 294 帧整单 864 s（docs/comfyui-h3-configs.md「当前最优」）。锁三处：
+//   ① 适配器默认画布 1024×768、body 带 steps:20 + no_lora:true + graph:'native'（ref2v 路径）
 //   ② 桥 `_wf_video_native(turbo=)` 只为真时摘节点 2、默认路径逐字节不变（其他调用方共用这座桥）
 //   ③ 首尾帧不吃例外（1016 用户「首尾帧也要支持」）：桥把首/尾帧当 MiniMaxH3AddGuide 锚进 7 号
 //      conditioning（frame_idx 0 / -1），画布与步数跟定案一致；老 fl2va 图（576×320 / 4 步）
@@ -23,11 +23,12 @@ const cfg = { baseUrl: 'http://127.0.0.1:6006' }
 const rec = (o) => ({ prompt: 'x', referenceImageUrls: '[]', ...o })
 const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
-test('定案：ref2v 默认 = 1024x768 满画布 + 20 步 + no_lora', async () => {
+test('定案：ref2v 默认 = 1024x768 满画布 + 20 步 + no_lora（1024 重做回 native）', async () => {
   const { body } = await a.buildGenerateRequest(cfg, rec({ duration: 10, resolution: '720p' }))
   assert.equal(body.size, '1024x768')
   assert.equal(body.steps, 20)
   assert.equal(body.no_lora, true)
+  assert.equal(body.graph, 'native')
   assert.equal(body.length, 243)
 })
 
@@ -62,9 +63,16 @@ test('桥：turbo 只为真时摘节点 2；no_lora body 键默认缺省（老�
   assert.match(bridge, /turbo=\(False if b\.get\("no_lora"\) is True else True\)/)
 })
 
-test('适配器只发 no_lora:true 这一种写法，且 20 步没有分支', () => {
+test('1025：body 显式 graph 原样透传（1018 写死 PROD_GRAPH 会把它吞掉）', async () => {
+  const { body } = await a.buildGenerateRequest(cfg, rec({ duration: 10, graph: 'h3_refall_cpuTE.json' }))
+  assert.equal(body.graph, 'h3_refall_cpuTE.json')
+})
+
+test('适配器：native 生产 = no_lora:true + steps 默认 20（1024 重做回 native）', () => {
   assert.match(adapter, /const DEFAULT_SIZE = '1024x768'/)
-  assert.match(adapter, /^\s+steps: 20,$/m)
+  assert.match(adapter, /const PROD_GRAPH = 'native'/)
+  assert.match(adapter, /graph: record\.graph \|\| PROD_GRAPH,/) // 1025：显式图优先，缺省才 native
+  assert.match(adapter, /steps: record\.lora \? \(LORA_BY_FILE\[record\.lora\]\?\.config\?\.steps \?\? 20\) : 20,/)
   assert.match(adapter, /no_lora: true/)
   assert.doesNotMatch(adapter, /no_lora: false/)
   assert.doesNotMatch(adapter, /steps: firstFrameFile/) // 首尾帧不再有步数例外

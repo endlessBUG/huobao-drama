@@ -13,11 +13,14 @@ description: 视频提示词规范 — 根据分镜段落内容生成按时间�
 
 ```
 出场人物：@小明、@小红；场景：@咖啡厅。
+不脱离常识与物理规则：身体各部位始终连着本人、伸出体外的动作都有落点与幅度、不越出画面边界、时长内做得完。
 0-3秒：@咖啡厅，近景固定镜头，@小明低头看手机，手指反复敲桌面，表情焦虑。
 3-6秒：镜头保持同一近景，@小明的拇指停在屏幕上，抬眼看向门口，呼吸放轻。
 6-9秒：切到门口全景，门铃响，@小红推门走入，带进一阵冷风。
 ```
 上例的 description 只有两个【镜头N】：前两段是同一个近景镜头（3-6秒写「镜头保持」，不切），唯一的一刀在 6 秒进【镜头2】。**切镜次数 = 【镜头N】数 − 1**。
+
+**信息头之后必须加一行「不脱离常识与物理规则：…」（1019 用户「分镜提示词开始要加个 不要脱离常识和物理规则」）**：这一行**逐字照写、每条都有**，位置固定在信息头与第一个时间段之间。它是给模型的总约束，不替代下面各条的具体写法（归属/落点/幅度/画面内边界、关节极限、施动者）—— 具体规则仍然要照写进各段。
 
 信息头规则：
 - 只列该分镜段落实际出场的人物和绑定的场景，不要列没出场的
@@ -51,7 +54,7 @@ description: 视频提示词规范 — 根据分镜段落内容生成按时间�
   **只是距离（景别）或轻微角度变化，不要切，改用运镜**：`中景 → 特写` 该写成 `The camera pushes in with small amplitude at slow speed...`，
   不是在两段之间切一刀。同一主体、同一空间、同一时间点上「中景→特写→中景」来回切，就是「为切而切」，模型会照做，成片只是没有信息量的跳来跳去
 - **景别/运镜**：每个 `【镜头N】` 一个镜头状态（近景/中景/全景/特写；运镜用下面 full_ref 那节的官方词汇）；同一子镜头的连续段内运镜连续，切镜后才更换运镜方式。**工作景别**：对话/亲密场的主景别是近景或中近景，宽景别与特写是**标记事件**——用完必须回到工作景别，不许整条漂在两个极端
-- **一切一个运镜，不叠加（社区导演手感表 + 官方 §4.3）**：每个镜头只选一个运镜动作（推 / 拉 / 摇 / 跟 / 移 / 环绕 / 固定），不许一句里又推又摇；写 `Static Shot` 要给出理由（这一镜不需要信息变化，或人物自己在动）。一条视频里运镜种类超过两种 = 炫技，观众找不到该看哪
+- **一切一个运镜，不叠加（社区导演手感表 + 官方 §4.3）**：每个镜头只选一个运镜动作（推 / 拉 / 摇 / 跟 / 移 / 环绕 / 固定），不许一句里又推又摇；**默认必须有运镜，`Static Shot` 是例外（1019 用户「没有镜头移动的感觉 纯粹是切换」）**：实测 #19/#21 两条成片用的提示词里，机位句全是 `camera holds a static shot` / `camera continues static`、`with small|large amplitude` 一个都没有 ⇒ 模型照做，成片就是一串静止画框中间硬切。所以：一条分镜里**最多一个镜头**写 static，且要在同一句给理由（这一镜不需要信息变化，或人物自己在动）；其余每个 `[Shot N]` 都要写一条**三件齐**的运镜句（动作类型 ＋ `with small amplitude` 或 `with large amplitude` ＋ `at slow speed` 或 `at fast speed`）。一条视频里运镜种类超过两种 = 炫技，观众找不到该看哪
 - **动作**：每段一个主动作，动词具体可见（走、转身、抬头、攥紧、停顿）。**物体位移必须点名施动者（1018 实测）**：写「薄被从床榻外侧滑落」这种没有手的句子，模型就画成被子自己掀开、凭空滑下去；要写成「谁的右手把薄被从自己腰上往下拉，布料滑过她大腿外侧、堆到床垫上」。纯光线、烛火、影子、烟雾的变化**不算主动作**——连续几段只有光线变化时模型没有动作可跟，会自己加小动作，人物显得随意。**动作要可行、量化**：这个动作几秒能做完就写几秒，肢体细化到部位＋程度（「右手抬起三寸」「向前两步」），低缓连续的动作优先（一次大跳模型算不出中间帧），本段第一个动作从上一段末态起手。**微表情不写**：眼睑颤动、睫毛、指腹轻摩这类 3 秒内做不到的细节，写了模型会画成抽搐
 - **情绪全部转为可见描写**：不要"他很伤心/气氛紧张"这类抽象词，写成"他低下头、手指攥紧杯沿、呼吸变重"（悲伤＝低头肩膀微颤、愤怒＝双拳紧握下颌绷紧、羞耻＝视线躲开脸红到耳根、享受＝仰头闷哼手指收紧）。**每个 3 秒段都要有脸上可见的大表情描写**（咬唇、抿唇松开、眉头收紧、眼神失焦、仰头闷哼、呼吸变重、脸红到耳根），与身体动作同步——1018 用户「人物也需要有表情描述」：只有身体动作、脸上没表情的成片，人物看着空洞随意（微表情除外，见上面「动作」条）。**视线落点与移动逐段必写**：这一段里他看谁/看哪件物件、从哪移到哪（「视线从她脸上滑到她的手、又抬回去」）——1019 实测 full_ref 里 14/16 段一个眼神词都没有 ⇒ 成片人物不看对方。
 - **互动镜头写双方（1018 用户「如果是互动 要描写互动双方的反应」）**：施动者的动作 + 受动者的可见接收反应同段或下一段必须都有——被碰到的人的眼神、呼吸变重、身体绷紧或往后躲、手指收紧；只写施动者 = 对方像木头
@@ -105,6 +108,7 @@ retention_analysis:
 <Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - identity and costume exactly as supplied by <Picture 2>; on the right of frame by the [固定陈设].
 <Subject 3> (appears in all shots): fully_preserved - room layout, fixed furnishing positions and light direction exactly as supplied by <Picture 3>.
 detailed_description:
+No anatomy or physics violations: every body part stays attached to its own body, every movement has a landing point and an amplitude it can finish in, nothing leaves the frame.
 [Shot 1] a medium-wide shot frames... The camera [motion] as <Subject 1> [动作] —— 段首 1 秒只写画面/动作，不写 `<d>`（衔接窗口，必须无对白）。At 00:01.500, <Subject 1> (S1) says: <d>[Chinese] 台词原文</d> The same shot continues with [同一镜头内的后续动作]。[Shot 2] At 00:04.000, the shot cuts to [下一子镜]...（**description 有几个【镜头N】，这里就只能有几个 [Shot N]、N−1 个 cut 短语；同一镜头跨多个时间点写在同一段 [Shot N] 里，不新增 [Shot N]**）
 overall_soundscape:
 [环境音描述]
@@ -115,7 +119,9 @@ non_diegetic_music:
 **标签规则**：
 - **画风词不写**：`detailed_description` 里不许出现任何媒介/画风词（`Live-action` / `实拍` / `真人` / `photoreal` / `anime` / `2D` / `3D`）。画风由调用方在提示词最前方注入的项目风格预设决定，自己写一句等于跟预设打架（实测：预设是 3D CG，模板例句的 `Live-action` 被照抄 → 出片变实拍质感）。
 - `<Subject N>`：角色写**两样**——它是 `<Picture N>` 里的谁（角色名），以及它在画面里的位置（如 `on the left of frame by the nightstand lamp`，左右 ＋ 相对固定陈设，两样都要）。**妆造一律不写**：脸型、五官、发型、妆容、服装、配饰全部直接取自参考图，也不要加造型形容词（`elegant` / `beautiful` / `in a silk dress` 都算造型）。你**看不到**参考图，编出来的外貌和穿着必然跟角色图打架。**但穿着状态必须写**（脱到哪一步、哪里还穿着/盖着、裸露范围），见下面「`detailed_description` 必带三件事」。场景/道具同理：只写参考图确实承载的布局，不要往里加人。
+- **`detailed_description` 第一行 = 物理/常识总约束（逐字照写，1019 用户「分镜提示词开始要加个 不要脱离常识和物理规则」）**：`No anatomy or physics violations: every body part stays attached to its own body, every movement has a landing point and an amplitude it can finish in, nothing leaves the frame.` —— 放在 `detailed_description:` 之后、`[Shot 1]` 之前，每条 full_ref 都要有；它不含 `cuts to` / 「切到」，不会被切镜数校验误计。这句是总纲，**不替代**具体规则（归属/落点/幅度/画面内边界、关节极限、施动者、承重点），各段该写的仍然要写。
 - **`detailed_description` 每个 [Shot N] 必带三件事（1019 实测：full_ref 里表情/眼神词 14/16 段为零 ⇒ 成片人物不看对方、脸上没表情）**：① **表情过程**，英文大表情词表：`bites her lower lip` / `lips press then part` / `brow furrows then releases` / `eyes half-close` / `breath deepens` / `blush spreads to her ears` / `jaw tightens` / `head tilts back with a muffled moan`；② **视线落点与移动**：`her gaze drops to his hand, then flicks away` / `looks at her face, eyes drift to the window`；③ **穿着状态**：`the front of her blouse opened below the collar, chest bare` / `the quilt pooled at the foot of the bed, both hips exposed`。中文 `video_prompt` 里写到的表情、视线、衣着状态**必须原样带进英文 full_ref**，不许压缩掉——真正送模型的是 full_ref（`frontend/app/views/drama/episode.vue:3980` 与驱动都把它当 `body.prompt` 发给 comfyui provider，中文那条只是给人看的）。微表情（眼睑颤动、睫毛）仍然不写。
+- **登记表那段与机位句必须同尺度（1020 实测 #21 挂了 `pussy_spread` 成片「和没挂一样」）**：那条提示词把 `a close-up framed below the waist, pussy spread…` 和 `the camera holds a static overhead wide-angle shot as…` 写在同一个 `[Shot 1]` 里 = 自己打自己，模型跟**宽**的那条走，解剖只占画面一小块、必然糊（本机 1006 实测原话记在 `docs/prompt-vulva-terms.md`：「取景带全身时解剖只占画面一小块，必然糊」）。**凡是带解剖 key（`pussy_spread` 这类）的 `[Shot N]`，机位句里不许出现 `wide-angle` / `wide shot` / `full body` / `overhead wide` / 全景 / 全身**；要静止就写同尺度的那句 ＋ 一处微副运动：`the camera holds a static shot framing only her hips and inner thighs, the vulva filling the lower half of the frame, her breathing deepens and the quilt edge shifts a little`。**带解剖 key 的镜机位必须是正面（front）、不是顶视（1022 用户「中间永远有条竖肉 不是缝」）**：顶视把外阴的前后轴压成画面里一条竖线 = 正是「竖肉」，正面从摊开的两腿之间看过去才画得出左右两瓣 + 中间开缝；登记表那段已写死 `from the front, framed between her spread thighs, her vulva facing the camera`，机位句要与之同向（`a static front shot facing her vulva from between her spread thighs`），**不许写 `overhead` / `top-down` / `bird's-eye` / 俯拍**。
 - **LoRA 的描述语从登记表引进、不许自己写（1019 用户「分镜根据key获取触发词 视频生成挂key对应的lora」「我是说lora的定义里 加上最优提示词」「描述 lora 的提示词要放到 lora 的定义里 然后引进用来 而不是放到主提示词里」）**：调用消息给了本镜 `lora_key` 与它在 `LORA_REGISTRY`（`backend/src/services/adapters/comfyui-video.ts`）里的**最优提示词整段** ⇒ 把那段**原样**写进该 `[Shot N]` 的 `detailed_description`（生成时平台按 key 挂对应 LoRA，**词与权重是一套**：只挂不写、或只写不挂都不算生效）；不许改写、不许只取其中几个词、也不许往里加自己编的描述。消息没给 key ⇒ 这一镜不露生殖器，外阴按合拢窄缝写、禁 `spread` / `parted` / `opening` / `gaping`（实测不带 LoRA 的 spread 画成一坨深色）。落库后服务端按登记表兜底补写（1019 实测：小模型给了 key 也会漏词）。
 - `<Picture N>`：参考图序号，与中文 `@图片N` 同一套 N（角色 1..k、场景 k+1、道具 k+2..）。
 - 场景 `<Picture k+1>` 若用九宫格图，**必须**写明 "is a storyboard reference for [Shot N], defining its viewpoint, subject placement, and shot order"（九宫格场景锚定的精髓）。锚多镜时按官方写法并列：`for [Shot 1] and [Shot 2]`。
@@ -151,8 +157,10 @@ non_diegetic_music:
 - **每段复述躯干姿态与头朝向**：不只写左右站位，还要写这一段里每个人是卧（俯卧 / 仰卧 / 侧卧）、坐、站、跪、半撑还是倚靠、承重点在哪、脸朝哪一侧。切镜后重新交代一次；与上一段不一致时必须写出可见的翻身、撑起或转身过程。
 - **不得发明 description 没有的姿态**：description 没写躯干姿态时，沿用上一镜末态，或按 description 的动作反推最省关节的姿势；不要自行添加会改变躯干朝向的描写。模型会把没写清的姿态按参考图和惯性补出来，补出来的往往与动作冲突。
 - **头相对躯干转 0–90°**：脸朝自己的后背方向是物理上做不到的；人要看身后或脚侧的对象时，本段先写翻身、转身或改成侧卧。
+- **运镜跟动作同轴（1019 用户「舔脚的镜头放不下人物和脚 可以用镜头平移的方式」）**：动作沿身体**长轴**位移（颈窝→脚、嘴→阴部、头→膝以下）时，**机位必须跟着走** —— `Truck Left/Right` / `Pan` / `Tilt` / `Pedestal` 四选一，写慢速（`at slow speed`，12 秒一镜走得完），例：`The camera trucks along <Subject 2>'s body from her neck hollow down to her extended right foot at slow speed, her mouth staying in frame the whole time.` **不许「近景 + `The camera holds a static shot` + 嘴从画面这头走到那头」**：装不下「来源 + 落点」还硬塞，模型就把那条舌头画成脱离本人的脸（1019 实测 #17 舔脚、#20 舌头出脸外）。**嘴→乳、手→胸这类上半身内的短距离不算**（近景装得下，1019 #19 含乳镜就没这问题 —— 服务端按「近景/特写 + 头面词 ↔ 腰以下词」判，跟这条一致）。走不完有四条活路：① 机位沿长轴走（上面那条）② **过肩（OTS）**：把来源的肩/头当前景框住画面、落点在景深里清楚（`over-the-shoulder shot from <Subject 2>'s shoulder, her extended foot sharp in the background`）③ **焦点转移（Rack Focus）**：机位不动、焦点从来源移到落点（`rack focus from her face to her foot`）④ 拆成两个 `[Shot N]`（来源近景 → 落点特写，切镜过准入）或来源整段画外、只写被作用方反应（`no mouth in frame`）。②③ 是上游分镜智能体在用的专业写法（见下面「构图 / 机位类型表」）
+- **伸出体外的部位写全四件：归属 ＋ 落点 ＋ 幅度 ＋ 画面内边界（1019 实测「舌头都出脸外了 这种不符合常理的」）**：舌头、手指、头发、布料边缘这类会离开身体轮廓或离开画面的东西，每一句要同时给四样：① **归属**（`<Subject 1>'s tongue`，不许只写 `the tongue`）② **落点**（碰到对方哪个部位、哪件物件）③ **幅度**（`a little` / 一寸；`从脚趾缝一路划到脚背` 这种没有终点的长距离模型画不出中间帧）④ **画面内边界**（`the tip stays within frame`）。**局部取景不许要求画外身体的器官动作可见**：写了 `framing only below the waist`，执行方的头就在画外 —— 要么把头也框进来（`her head inside frame at the bottom of frame, her tongue touching ...`），要么把这个动作挪出画面、只写被作用方的反应（`her labia parted by pressure from outside frame, no mouth in frame`）。缺归属或缺边界，模型就把那条舌头画成脱离本人的脸、穿出画框。正向状态写法，不写负向词（采样没有负面分支）。**要写嘴/舌时借这条已被上游节点验证过的句式**（本机已装的 BSAI lipsync 节点 `E:/AI/ComfyUI/custom_nodes/BSAI-ComfyUI-Sol-H3/h3_t8/mv_lipsync_advanced.py:759` 就是这么治「嘴画飞」的，它还在 `:655` 直接校验成品提示词、缺词就抛错）：`The full face and unobstructed mouth remain visible for the entire shot; <Subject 1>'s tongue touches <Subject 2>'s inner thigh with a small amplitude, the tip stays within frame.`
 - **近距离的头部动作（耳边呼吸 / 低语 / 贴面 / 亲吻等）**：靠近的一方从对方头侧接近，或两人面对面侧卧 / 一坐一卧且上身朝向对方；把两人躯干朝向和头朝向一起写。只写「唇贴近耳廓」而不写两人怎么躺，模型会让脸和背同时朝向镜头。
-- **大角度转头段用固定机位**：头相对躯干转 ≥45° 的 3 秒段写 `Static Shot` / `the camera holds a static shot`，不叠加环绕 / 推拉。
+- **大角度转头段不许叠加运镜**：头相对躯干转 ≥45° 的 3 秒段只允许**一条**机位句，二选一（`the camera holds a static shot` 或单一运镜），不许又环绕又推拉。**不是必须写 static**（1019 实测：这条原先写成「用固定机位」，小模型读成「默认就写静止」，两条成片的机位句因此全是 static、用户判「没有镜头移动的感觉 纯粹是切换」；选 static 时按上面「静止镜头也要留 1 处微副运动」补一处动）。
 - **一个 3 秒段一个精准接触**：接触点之外的肢体写清在哪（`her left hand stays braced on the mattress`），不要同时安排翻身、转头、抬手。
 - 正向陈述，负向词不写（与上面同一原则）。
 
@@ -161,14 +169,23 @@ non_diegetic_music:
 - `retention_analysis` 每个 subject 一行，格式 = `<Subject N> (appears in [Shot N], ...): <状态词> - <保留项>`。出现过的 shot 要列全，没出现的不列，场景写 `appears in all shots`。
 - 保留项**只写参考图负责的结构性事实**：角色写身份/妆造“as supplied by <Picture N>”、画面侧与固定陈设；场景写布局、陈设在哪一侧、光从哪来；道具写形状与标记。**不编具体五官、发型、服装**（与本技能「妆造一律不写」同一理由）。角色的 `costume` 只指**款式**由图定，**穿着状态另写**：`identity and costume style as supplied by <Picture 1>; clothing state: blouse opened below the collar, chest bare`（照抄「costume exactly as supplied」而不写状态，模型会把整套衣服穿回来）。
 - 状态词：`fully_preserved`（强保留，**场景一律用它**）/ `partially_preserved` / `attribute_transfer` / `weak_reference`。
-- `non_diegetic_music` 段必须保留：有配乐就写，没有就写 `N/A (no non-diegetic music)`——不许删掉这个段名或留空。
+- `non_diegetic_music` 段必须保留：`read_storyboard_context` 给了该分镜的 `bgm_prompt`（分镜里定好的配乐，如「肃杀古风弦乐，鼓点渐起，紧张对峙」）时，**把它译成英文写进 `non_diegetic_music`**，这是平台存好的 BGM、不许自己另编、也不许因为有它就写 `N/A`；`bgm_prompt` 为空才自己按 atmosphere 补一句或写 `N/A (no non-diegetic music)`——不许删掉这个段名或留空。
 
 **镜头词汇表**（官方 §4.3，13 类全表）：`Zoom In` / `Zoom Out`、`Push In` / `Pull Out`、`Pan Left` / `Pan Right`、`Truck Left` / `Truck Right`、`Tilt Up` / `Tilt Down`、`Pedestal Up` / `Pedestal Down`、`Arc Shot`、`Tracking Shot`、`Static Shot`、`Shake Slightly` / `Shake Strongly`、`POV`、`Roll Clockwise` / `Roll Counterclockwise`。
 
-**运镜写法**：三维度 = 动作类型 ＋ `with small amplitude` / `with large amplitude` ＋ `at slow speed` / `at fast speed`（中幅、常速通常省略不写）。
+**构图 / 机位类型表（上游 BSAI 的分镜智能体在用，`E:/AI/ComfyUI/custom_nodes/BSAI-ComfyUI-Sol-H3/workflows/SolH3_FastH3_FilmFactory.json:3151`）**：景别七档 = 大全景 / 全景 / 中全景 / 中景 / 中近景 / 近景 / 特写；构图 = 单人镜头、双人镜头、多人关系镜头、**过肩镜头（OTS）**、**主观镜头（POV）**、客观镜头、环境空镜、道具微观镜头、明暗交界线构图；运动 = 极缓推、微移、**焦点转移（Rack Focus）**、手持微晃、环绕、升降。英文写法：`over-the-shoulder shot`、`POV shot`、`rack focus from her face to her foot`、`empty shot of the room`、`insert close-up of the letter`、`hard light cutting across the cheekbone`。**视觉融合公式（同一节点）**：`[镜头运动] + [景别/构图] + [光影氛围] + [角色空间坐标 + 肢体微动作 + 视线方向] + [道具微观交互]` —— 与我们「段内结构」那条同序。
+
+**运镜写法**：三维度 = 动作类型 ＋ `with small amplitude` / `with large amplitude` ＋ `at slow speed` / `at fast speed`。
+官方说中幅、常速通常可省，**这台模型实测省了就等于没写运镜**（1019：#19/#21 两条的机位句全是 `camera holds a static shot` / `camera continues static`、`amplitude` 词零个 ⇒ 用户判「没有镜头移动的感觉 纯粹是切换」）⇒ **三件一律写全，`with small|large amplitude` 这一件不许省**。
 必须写成镜头句里的**自然英文动作**，不要当标签堆在句尾。官方例句：
 `The camera pushes in with small amplitude at slow speed toward the folded letter in her hands.`
 `The camera holds a static shot as the runner exits the frame.`
+- **每个 3 秒段都要有一条运镜句（上游 JZL 的镜头规则口径：`E:/AI/ComfyUI/custom_nodes/ComfyUI-JZL-MiniMax-H3/sheding/h3_shot_rules.py:82`「每个分段必须写全七要素……⑤运镜（类型+幅度+速度）」）**：不是整条只有一个、也不是只在 `[Shot N]` 开头写一次；同一段内运镜连续（`the camera continues pushing in ...`），换段才允许换类型或转 static。英文八类 = `Static` / `Push In` / `Pull Out` / `Pan` / `Truck` / `Tilt` / `Pedestal`（升/降）/ `Tracking`，**升降两类也要会用**（俯拍渺小、仰拍高大靠 Pedestal/Tilt，不是只有推拉摇移）。
+- **静止镜头也要留 1 处微副运动（同上游 `h3_shot_rules.py:75`「静止镜头也要有 1 处微副运动（呼吸/衣角/光影/尘埃/水汽）避免画面死板」）**：写了 static 就得同时写画面里还在动的东西 —— `her breathing deepens, the quilt edge shifts a little, candlelight flickers across her skin`。只有人物摆好不动、机位也不动 = 成片就是一张静照。
+- **运镜要写成「它在画面里的效果」（官方分镜表规范 `…/MiniMax-H3/skills/3d-animation-short-generator/references/shot-table-spec.md:64` 的例句就是这种：`door-frame moves from right third to center as camera orbits left`）**：光写 `The camera trucks … at slow speed` 模型常常不执行（1019 实测三条提示词的机位句全是 static / `camera continues`、用户判「没有镜头移动的感觉 纯粹是切换」）；同一句里要给出**画面里什么在位移**——`The camera trucks left, the bed post sliding from the right edge of frame to the centre`、`the camera pedestals up, her foot leaving the bottom of frame as her face reaches the centre`。官方同一规范 `:39` 点名禁止含糊措辞（`avoid vague timing such as "continues moving" without body, camera, or prop detail`）——`camera continues static` 就是这种。
+- **每段五要素齐、不许有时间缝（同官方 `shot-table-spec.md:38/:65`）**：每个时间段都要写 ①动作/姿态/表情 ②机位（含运镜或「static + 一处微副运动」）③空间位置（画面哪侧、相对哪件陈设、朝向）④声音 ⑤末态承接；`Per-Second Directives` 必须从第一帧覆盖到最后一帧，段与段之间不留空档（`2.0–2.5s` 这种亚秒拍允许，但不许漏）。
+- **专业词表与「何时用」住在子技能 `camera-grammar`（本目录下 `camera-grammar/SKILL.md`，整份注入、设置页可编辑，25 KB）**：里面是 ① 社区 152★ 的 Claude Skill `Rylaispirit/cinematic-video-prompt-skill` 原样照搬的约 50 条景别/角度 ＋ 约 45 条运镜 Golden Prompt（每条带「何时用」：`God's eye spiral` = 床上/餐桌正俯视盘旋、`Arc shot 360-degree orbit` = 妆造展示与心动对视、`Tilt up from feet to face` = 介绍服装、`Crash zoom` = 惊愕、`Dutch Tilt` = 不安、`Rack focus from her face to her foot` = 焦点转移、`Over-the-shoulder` = 对话与画外来源）② 官方分镜表规范 `shot-table-spec.md` 的逐拍五要素与「写成画面里的效果」③ JZL 的八类与每段七要素 ④ 各家运镜方言对照表 ⑤ 社区同栈项目实测的 H3 运镜 LoRA 档位。**选型去那里，写进句子的格式照上面这几条（三件齐 ＋ 画面位移效果 ＋ 一镜一条，不叠加）。**
+- **每秒 ≥2 个「相机拍得到的事实」（同上游 `h3_shot_rules.py:88`）**：可见事实 = 肢体位置/朝向变化、接触点、受力形变、位移、道具状态、表情、环境反应、副运动、**镜头运动**、同步声音、引用元素登场；形容词与心理描写（「气场强大」「气氛暧昧」）不算事实、不许顶替。一段 3 秒 = 至少 6 件，写不满就补动作/补运镜，别补修饰词。
 
 **切镜写法（官方 §4.2，硬规则）**：
 - **`[Shot 1]` 不带时间戳**；后续用 `[Shot N] At MM:SS.mmm, ...`，切点**严格递增且不得超过片长**
@@ -184,7 +201,7 @@ non_diegetic_music:
 - **说话人规则（官方 §4.4）**：只有真发声的角色才给 `(Sx)`，从不发声的角色**不给** speaker ID；多个已编号说话人**同时**说/唱用复合 ID `(S1,S2)`；同一说话人跨镜头保持同一 ID。写不清谁在说，模型就自己补，表现成两个人同时开口。
 - **说话人首次出现**要给出声音身份（人物类型、年龄、性别、是否画外、音高、音色、语速、口音）与这一句的语气/节奏（`low and steady` / `hurried`），例：`<Subject 1> (S1), a young woman in her mid-20s, speaking in a warm mid-range voice at an unhurried pace, says:`；身份短语、ID、动作和 delivery 写在 `<d>` **外**，`<d>` 内只放语言 tag 和原文台词。
 - **段首 1 秒内不得有任何 `<d>` 对白**（台词/旁白/内心独白全算），最早台词时间戳 ≥ 1s，这 1 秒只允许画面/氛围/动作。衔接窗口（22 帧 ≈ 0.92 s）正是这一段 —— 窗口里说话会和上一段的音频撞。
-- **台词时长**：按自然语速估（中文 ≈4–5 字/秒、英文 ≈2–3 词/秒，含停顿），台词必须装得进该镜头时长；装不下就延 `[Shot N]` 时间戳，或跨相邻镜头拆并用 `<scenetrans>` 标连续。**绝不把长台词塞进太短的镜头**（破坏口型和节奏）。
+- **台词时长**：按自然语速估（中文 ≈4–5 字/秒、英文 ≈2–3 词/秒，含停顿），台词必须装得进该镜头时长；装不下就延 `[Shot N]` 时间戳，或跨相邻镜头拆并用 `<scenetrans>` 标连续。**绝不把长台词塞进太短的镜头**（破坏口型和节奏）。**上游同一节点给的硬矩阵**（`FilmFactory.json:3151`）：3 秒段台词上限 = 缓 7 字 / 中 9 字 / 快 12 字 / 极快 15 字；4 秒段 = 8 / 10 / 12 / 15（中文字数，超了必须拆段或拆镜）。
 - `<Audio N>` 槽按**本段说话顺序**编号：第一个说话者 = item 1（= `<Audio 1>` = `ref_audio_0`），第二个 = item 2；**绝不按槽位名 A/B/C 排**。只在段内真有人说话时才写 `<Audio N>`。
 - 台词/旁白**不创作**，从 `description` 的【镜头N】提取，**原样**塞进 `<d>`，并加语言 tag（如 `<d>[Chinese] …</d>`）。
 - 模板其余部分恒英文，无论会话语言；`<d>` 内台词保留**原文语言**。

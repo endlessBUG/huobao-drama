@@ -57,7 +57,7 @@ function normalizeVideoRequest(body: any) {
   }
 }
 
-function validateVideoRequest(body: any, provider?: string): string | null {
+export function validateVideoRequest(body: any, provider?: string): string | null {
   for (const key of ['reference_image_urls', 'reference_video_urls', 'reference_audio_urls']) {
     if (body[key] !== undefined && !Array.isArray(body[key])) return `${key} 必须为数组`
     if (Array.isArray(body[key]) && body[key].some((url: any) => typeof url !== 'string' || !url.trim())) {
@@ -102,6 +102,19 @@ function validateVideoRequest(body: any, provider?: string): string | null {
 
   if (!String(body.prompt || '').trim() && imgs + vids + auds === 0 && !first && !last && !file && !link) {
     return '视频生成需要至少一个参考素材或 prompt'
+  }
+
+  // 1025 用户「要」平台守卫（画面差的真因 = full_ref 引用了 N 个 <Picture>、却只送了 M<N 张参考图，
+  // 场景/道具图没生成 → <Picture> 绑空槽 → 场景和道具纯靠文字现编、画面塌）。以前这条是**静默照发**，
+  // 只有人眼事后才发现。comfyui 的 ref2v 才吃 <Picture N> 标签，所以只在它这条上判、别的厂商不受影响。
+  if ((provider || '').toLowerCase() === 'comfyui') {
+    const pics = [...String(body.prompt || '').matchAll(/<Picture (\d+)>/g)].map((m) => Number(m[1]))
+    const maxPic = pics.length ? Math.max(...pics) : 0
+    if (maxPic > imgs) {
+      return `提示词引用了 <Picture ${maxPic}>，但只有 ${imgs} 张参考图 —— 场景/道具图没生成就会这样。` +
+        `先把缺的资产图生成齐（<Picture> 按 角色1..k、场景k+1、道具k+2.. 编号，一张都不能空）再发车，` +
+        `否则多出来的 <Picture> 绑到空槽、画面会塌。`
+    }
   }
   return null
 }
@@ -218,6 +231,7 @@ app.post('/', async (c) => {
         loraStrength: videoBody!.lora_strength ?? videoBody!.loraStrength,
         loraTrigger: videoBody!.lora_trigger ?? videoBody!.loraTrigger ?? (autoLora?.concept ? false : undefined),
         sparse: videoBody!.sparse,   // 桥的 sol-attn 开关（A/B 仪表，默认关）
+        refine: videoBody!.refine,   // 1024 小脸修复二采（comfyui 专属，body 带 refine:true 即开）
         configId,
       })
 

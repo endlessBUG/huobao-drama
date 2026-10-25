@@ -28,6 +28,8 @@ app.get('/', async (c) => {
       name, label: name.replace(/\.safetensors$/, ''),
       key: LORA_BY_FILE[name]?.key || '',
       note: LORA_BY_FILE[name]?.note || '',
+      // 1023 用户「分镜选择 lora 时产出 lora 的配置」：下拉里选中一条也把它登记的 config 带出来
+      config: LORA_BY_FILE[name]?.config || null,
     }))
     return success(c, { supported: true, items, strength: required.strength_model?.[1] || {} })
   } catch (e: any) {

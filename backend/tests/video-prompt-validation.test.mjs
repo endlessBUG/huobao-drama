@@ -34,3 +34,20 @@ test('missing fully_preserved fails', () =>
 test('missing <d> dialogue fails', () =>
   assert.equal(isVideoPromptFullRefFull(GOOD.replace(/<d>.*?<\/d>/, '')), false))
 test('empty string fails', () => assert.equal(isVideoPromptFullRefFull(''), false))
+
+// 1019 用户「舔脚的镜头放不下人物和脚 可以用镜头平移的方式」：#17 的 [Shot 1] 写的是 `a close-up` +
+// `The camera holds a static shot`，却要 A 的嘴从 B 的颈窝走到她脚趾（≈1.6 m 长轴）⇒ 画框装不下来源 + 落点，
+// 成片就是「放不下人物和脚 / 舌头脱离脸」（#20 的 `framing only below the waist` + `tongue tip` 同一个病）。
+// 判据与「有没有机位移动句」由代码把关（社区口径 = BSAI `mv_lipsync_advanced.py:655`：校验成品、缺词就抛错）。
+test('近景里「来源 + 落点」分在身体两头 ⇒ 该 [Shot N] 必须有机位移动句；身体动作里的 tilts 不算', async () => {
+  const { needsCameraAlongBodyAxis, hasCameraMove } = await import('../src/services/video-prompts.ts')
+  assert.ok(needsCameraAlongBodyAxis('【镜头1】近景：A 的头从 B 左颈窝里抬起、顺着 B 伸出的右腿移到 B 的脚前，俯身含住 B 的脚趾舔'),
+    '舔脚这条该被点出来（来源=头、落点=脚、景别=近景）')
+  assert.ok(needsCameraAlongBodyAxis('【镜头2】特写：B 露出外阴，A 的舌尖从大阴唇外侧往上舔到阴蒂'), '露点镜同理')
+  assert.ok(!needsCameraAlongBodyAxis('【镜头1】全景：两人并排站在窗边说话'), '全景装得下两端，不该要求运镜')
+  assert.ok(!needsCameraAlongBodyAxis('【镜头1】近景：A 的右手覆上 B 的左乳，B 仰头闷哼'), '来源与落点都在胸口 = 装得下')
+  const fr = 'detailed_description:\n[Shot 1] a close-up. The camera trucks along her body from her neck hollow down to her foot at slow speed.\n' +
+    '[Shot 2] The camera holds a static shot as her head tilts back.\noverall_soundscape:\nbed creaks'
+  assert.ok(hasCameraMove(fr, 1), '[Shot 1] 有 camera trucks ⇒ 过')
+  assert.ok(!hasCameraMove(fr, 2), '[Shot 2] 只有 static + 身体里的 tilts ⇒ 不算机位移动（这条误判会把「固定机位」放过去）')
+})

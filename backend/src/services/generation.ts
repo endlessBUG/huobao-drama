@@ -9,6 +9,8 @@ import { now } from '../utils/response.js'
 import { downloadFile, fetchImageAsCompressedDataUrl, generateImageThumb, readImageAsCompressedDataUrl, saveBase64Image } from '../utils/storage.js'
 import { extractVideoPoster, extractLastFrame } from '../utils/video-poster.js'
 import { getImageAdapter, getVideoAdapter } from './adapters/registry'
+import { refineVideoFace } from './adapters/face-refine'
+import { framesForDuration } from './adapters/comfyui-video'
 import type { AIConfig } from './adapters/types'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess, logTaskWarn, redactUrl } from '../utils/task-logger.js'
 
@@ -81,6 +83,8 @@ interface GenerateVideoParams {
   loraTrigger?: boolean | null
   /** 桥的块稀疏注意力 sol-attn（comfyui 桥专属，见 adapters/types.ts 的注释：cu130 才有内核、挂 LoRA 出伪影） */
   sparse?: boolean | null
+  /** 1024 小脸修复二采：基片生成后再跑一发 ComfyUI-H3-FaceRefine（comfyui 专属，见 adapters/face-refine.ts） */
+  refine?: boolean
 }
 
 export async function generateImage(params: GenerateImageParams): Promise<number> {
@@ -159,6 +163,7 @@ export async function generateVideo(params: GenerateVideoParams): Promise<number
     loraStrength: params.loraStrength,
     loraTrigger: params.loraTrigger,
     sparse: params.sparse,   // 必须进快照：processTask 读的是 DB 里的 params，不进就等于从没传过
+    refine: params.refine,   // 小脸修复二采开关：handleVideoComplete 读 DB params.refine 决定是否跑二采
   })
 
   logTaskStart('VideoTask', 'enqueue', {
@@ -393,7 +398,7 @@ async function processTask(id: number, config: AIConfig) {
 
     if (!isAsync && videoUrl) {
       logTaskProgress(label, 'sync-complete', { id, videoUrl })
-      await handleVideoComplete(record, videoUrl, params.duration)
+      await handleVideoComplete(record, config, videoUrl, params.duration)
       return
     }
 
@@ -475,7 +480,7 @@ async function pollTask(record: SysTaskRecord, config: AIConfig, taskId: string)
           }
         } else if (pollResp.videoUrl) {
           logTaskSuccess(label, 'poll-complete', { id: record.id, taskId, videoUrl: pollResp.videoUrl })
-          await handleVideoComplete(record, pollResp.videoUrl, pollResp.duration)
+          await handleVideoComplete(record, config, pollResp.videoUrl, pollResp.duration)
           return
         }
       }
@@ -580,22 +585,42 @@ async function writeBackImageAssets(record: SysTaskRecord, localPath: string) {
   }
 }
 
-async function handleVideoComplete(record: SysTaskRecord, videoUrl: string, duration: number | null | undefined) {
+async function handleVideoComplete(record: SysTaskRecord, config: AIConfig, videoUrl: string, duration: number | null | undefined) {
   const localPath = await downloadFile(videoUrl, 'videos')
+  // 1024 用户「先做minimax小脸修复…加到平台流程 然后用GPU」：comfyui 基片生成后，按任务 params.refine
+  // （或全局 env HUOBAO_FACE_REFINE=1）跑一发小脸修复二采，成片替换基片。失败保留基片（不阻断任务）。
+  let finalPath = localPath
+  const params = parseTaskParams(record.params)
+  const wantRefine = record.provider === 'comfyui' && (params.refine === true || process.env.HUOBAO_FACE_REFINE === '1')
+  if (wantRefine && record.prompt) {
+    const refined = await refineVideoFace({
+      config,
+      videoLocalPath: localPath,
+      prompt: record.prompt,
+      length: framesForDuration(duration ?? params.duration),
+      seed: params.seed ?? undefined,
+    })
+    if (refined) {
+      finalPath = refined
+      logTaskSuccess('VideoTask', 'face-refined', { id: record.id, base: localPath, refined })
+    } else {
+      logTaskWarn('VideoTask', 'face-refine-failed', { id: record.id, base: localPath })
+    }
+  }
   // 海报帧供列表/封面展示，避免前端为显示首帧缓冲整个视频
-  await extractVideoPoster(localPath)
+  await extractVideoPoster(finalPath)
   await db.update(schema.sysTask)
-    .set({ resultUrl: videoUrl, localPath, status: 'completed', completedAt: now(), updatedAt: now() })
+    .set({ resultUrl: videoUrl, localPath: finalPath, status: 'completed', completedAt: now(), updatedAt: now() })
     .where(eq(schema.sysTask.id, record.id))
 
-  logTaskSuccess('VideoTask', 'downloaded', { id: record.id, localPath, storyboardId: record.storyboardId, duration })
+  logTaskSuccess('VideoTask', 'downloaded', { id: record.id, localPath: finalPath, storyboardId: record.storyboardId, duration })
 
   if (record.storyboardId) {
     // 不要回写 duration：它是**创作意图**，同时是 length 的输入（comfyui-video.ts framesForDuration）。
     // 回写会自锁——生成 5.2s 就把「这条要拍 12s」改成 5.2s，下一轮按 5.2s 算 length，永久锁死 5.2s。
     // 实测：09-25 首轮拆解出的 12/12/12/12/8，在第一次渲染成功后全被覆写成 5.1667，此后再没出过 5 秒以上的片子。
     await db.update(schema.storyboards)
-      .set({ videoUrl: localPath, updatedAt: now() })
+      .set({ videoUrl: finalPath, updatedAt: now() })
       .where(eq(schema.storyboards.id, record.storyboardId))
   }
 }

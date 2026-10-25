@@ -28,7 +28,7 @@ const BACKEND_BUNDLE = path.join(DESKTOP_ROOT, 'build', 'backend.mjs')
 /** workspace 模板版本：内置模板更新时递增，触发向用户目录补缺失文件 */
 // 6 = 1016 社区技法收割：scene/character/prop-prompt 的 references/*.md 是新文件、会被补进去；
 // 主 SKILL.md 的索引段对老安装不覆盖（force:false），但「先拿库清单再写提示词」的口径在工具描述里（随代码更新）
-const TEMPLATE_VERSION = '6'
+const TEMPLATE_VERSION = '7'
 const STORAGE_CONFIG_FILE = 'storage-config.json'
 
 let mainWindow: BrowserWindow | null = null

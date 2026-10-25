@@ -24,11 +24,13 @@ CLAUDE.md 里只留一条引用，细节在这。
 
 **1025 小脸修复二采默认全开（用户「默认全开、不加开关」）**：`handleVideoComplete` 改为 `wantsFaceRefine(provider, params)` —— comfyui 的片子基片落地后自动跑 `ComfyUI-H3-FaceRefine`（`VHS_LoadVideoPath` → 逐帧脸检测裁 768² → H3 img2img 8 步 denoise 0.4 → `H3FaceStitch` 贴回），成片替换基片，二采失败保留基片不阻断任务。**二采用另一套 unet（`minimax_h3_fl2va_pruned_int8_convrot` + turbo 8step + GPU TE）⇒ 每条都要付一次换载税**；实测只有 task 654（5 s 片、1024）= 整条 633 s 含二采，294 帧的增量待首跑回填。显式 `refine:false` 仍可关（API 口子，UI 不暴露）。此前 `face-refine.ts` 与工作流 JSON 一直是 untracked、而 `generation.ts` 已 import ⇒ 干净检出编译不过，1025 已补提交。
 
+**1025 分辨率后处理 RTX VSR ×2 默认全开（用户「分辨率能在高点吗」）**：`handleVideoComplete` 在二采之后走 `wantsUpscale(provider, params)` —— comfyui 成片一律 `upscaleVideoVSR`（`backend/src/services/adapters/vsr-upscale.ts` + `backend/scripts/vsr2x.py`，nvidia-vfx 硬件引擎；`VSR_GPU` 默认 1 号卡 4060，不占 6006 的 0 号卡；进程内串行、一次一条）。**实测 task 683 那条 294 帧生产片**：1024×768 → **2048×1536**，294 帧 / 24 fps / 12.250 s 不变、aac 音轨保留、产物 23,999,672 字节；脚本内计时 **10.9 s（0.04 s/帧，热）/ 29.1 s（0.10 s/帧，首次含引擎加载）**，端到端含落盘拷贝 13.4 s。**亮度 YAVG 101.97 → 101.64（−0.32%）** —— 不是 1012 那条 4K 档的 −1.2%，不加 eq。**为什么值得做**：合并端（`ffmpeg-merge.ts` 的 `OUT_W/OUT_H=1920×1080`、`scale=…:force_original_aspect_ratio=increase,crop`）本来就把 1024 宽拉到 1920（**1.875× 双线性 = 软**）；先 ×2 到 2048 再让合并 **0.9375× 降采样**，交付细节才是真超出来的。**为什么不抬生成画布**：1472×832 实测 1.9× 时间且构图漂（arm25，1021），PDD LoRA 也是 1024 口径。开关 = API 显式 `upscale:false`（UI 不暴露，同二采口径）；找不到 `VSR_PYTHON` / 脚本（别的机器）就静默跳过、保留原片。**口径注明：以上三条读数（10.9/29.1 s、YAVG）是对已落盘成片的后处理探针，没走平台流程**；平台链路待下一条真任务回填。
+
 **1025 接线 bug（已修 + 已锁测试）**：`comfyui-video.ts` 的 `graph` 被写死成 `PROD_GRAPH`，body 里显式传的工作流被硬吞（判据 = `/queue` 读 4 号 CLIPLoader 仍 `device:"default"`）—— 与 1017「record 字面量漏抄 graph」同一类病、方向相反（那次是漏、这次是覆盖）。已改 `graph: record.graph || PROD_GRAPH`；`tests/comfyui-h3-20step.test.mjs` 锁两条：默认必须 `native`、显式传图必须原样透传。
 
 ### 生产默认（1018 深夜用户「换成1采 20步 试试 只改这个 不要lora」）：native 单采 20 步、零 LoRA、GPU 侧 TE
 
-> **1025 19:5x 起分两档**：无 LoRA 的镜 = **PDD 5 步快图**（542 s/294 帧，用户看片「可以」）；挂 `lora_key` 的镜 = 下面这条 native 20 步（saved 图吃不到 body `lora`）。其它参数（1024×768、零 turbo、GPU TE、首尾帧 AddGuide）两档相同。
+> **1025 19:5x 起分两档**：无 LoRA 的镜 = **PDD 5 步快图**（542 s/294 帧，用户看片「可以」）；挂 `lora_key` 的镜 = 下面这条 native 20 步（saved 图吃不到 body `lora`）。其它参数（1024×768、零 turbo、GPU TE、首尾帧 AddGuide）两档相同。**两档之后都自动过「小脸修复二采 → RTX VSR ×2（2048×1536）」（1025 默认全开，见上）。**
 
 **现役配置**：平台 `backend/src/services/adapters/comfyui-video.ts` 写死 `PROD_GRAPH='native'`、`steps:20`、`no_lora:true`（`no_lora` 只摘桥的 4 步 turbo；分镜 lora 透传 1019 已恢复，见下面「解剖 LoRA 定案」）。
 桥 `_wf_video_native` 生成的图：UNETLoader(nvfp4) → Veda sp24 → BasicGuider；`BasicScheduler(simple)` 20 步 + `res_multistep`；CLIPLoader `device:"default"`（文本编码器在 GPU）；首尾帧走 `MiniMaxH3AddGuide`（frame_idx 0 / -1）；参考图走 `ref_image_0~8`。

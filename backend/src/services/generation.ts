@@ -10,6 +10,7 @@ import { downloadFile, fetchImageAsCompressedDataUrl, generateImageThumb, readIm
 import { extractVideoPoster, extractLastFrame } from '../utils/video-poster.js'
 import { getImageAdapter, getVideoAdapter } from './adapters/registry'
 import { refineVideoFace, wantsFaceRefine } from './adapters/face-refine'
+import { upscaleVideoVSR, wantsUpscale } from './adapters/vsr-upscale'
 import { framesForDuration } from './adapters/comfyui-video'
 import type { AIConfig } from './adapters/types'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess, logTaskWarn, redactUrl } from '../utils/task-logger.js'
@@ -606,6 +607,18 @@ async function handleVideoComplete(record: SysTaskRecord, config: AIConfig, vide
       logTaskSuccess('VideoTask', 'face-refined', { id: record.id, base: localPath, refined })
     } else {
       logTaskWarn('VideoTask', 'face-refine-failed', { id: record.id, base: localPath })
+    }
+  }
+  // 1025 用户「分辨率能在高点吗」：二采之后走 RTX VSR 硬件 ×2（1024×768 → 2048×1536，294 帧实测 29 s、
+  // 跑 1 号卡）。合并端本来就把 1024 拉到 1920×1080（1.875× 双线性），先 ×2 再降采样才有真细节。
+  // 失败保留上一版（不阻断任务）；显式 `upscale:false` 才关（同 wantsFaceRefine 的口子）。
+  if (wantsUpscale(record.provider, params)) {
+    const up = await upscaleVideoVSR(finalPath)
+    if (up) {
+      finalPath = up
+      logTaskSuccess('VideoTask', 'vsr-upscaled', { id: record.id, base: localPath, upscaled: up })
+    } else {
+      logTaskWarn('VideoTask', 'vsr-upscale-skipped', { id: record.id, base: finalPath })
     }
   }
   // 海报帧供列表/封面展示，避免前端为显示首帧缓冲整个视频

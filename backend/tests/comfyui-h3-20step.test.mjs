@@ -23,13 +23,19 @@ const cfg = { baseUrl: 'http://127.0.0.1:6006' }
 const rec = (o) => ({ prompt: 'x', referenceImageUrls: '[]', ...o })
 const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
-test('定案：ref2v 默认 = 1024x768 满画布 + 20 步 + no_lora（1024 重做回 native）', async () => {
+test('1025 定案：无 LoRA 的镜默认走 PDD 5 步快图（1024x768 满画布、20 步键照传）', async () => {
   const { body } = await a.buildGenerateRequest(cfg, rec({ duration: 10, resolution: '720p' }))
   assert.equal(body.size, '1024x768')
   assert.equal(body.steps, 20)
   assert.equal(body.no_lora, true)
-  assert.equal(body.graph, 'native')
+  assert.equal(body.graph, 'h3_refall_pdd5_gpute.json') // saved 图里 5 步烘在 PDD 节点，body steps 被桥忽略
   assert.equal(body.length, 243)
+})
+
+test('1025：挂 LoRA 的镜仍走 native（桥的 saved 图分支不认 body lora，挂上去会静默丢）', async () => {
+  const { body } = await a.buildGenerateRequest(cfg, rec({ duration: 10, lora: 'free_pussy.safetensors' }))
+  assert.equal(body.graph, 'native')
+  assert.equal(body.lora, 'free_pussy.safetensors')
 })
 
 test('定案：显式 480p 仍是 864x480（档位是用户选择，步数/去 LoRA 跟着走）', async () => {
@@ -71,7 +77,9 @@ test('1025：body 显式 graph 原样透传（1018 写死 PROD_GRAPH 会把它�
 test('适配器：native 生产 = no_lora:true + steps 默认 20（1024 重做回 native）', () => {
   assert.match(adapter, /const DEFAULT_SIZE = '1024x768'/)
   assert.match(adapter, /const PROD_GRAPH = 'native'/)
-  assert.match(adapter, /graph: record\.graph \|\| PROD_GRAPH,/) // 1025：显式图优先，缺省才 native
+  assert.match(adapter, /const PROD_GRAPH_FAST = 'h3_refall_pdd5_gpute\.json'/)
+  // 1025：显式图优先；缺省按 LoRA 分档（无 LoRA = PDD5 快图、有 LoRA = native）
+  assert.match(adapter, /graph: record\.graph \|\| \(record\.lora \? PROD_GRAPH : PROD_GRAPH_FAST\),/)
   assert.match(adapter, /steps: record\.lora \? \(LORA_BY_FILE\[record\.lora\]\?\.config\?\.steps \?\? 20\) : 20,/)
   assert.match(adapter, /no_lora: true/)
   assert.doesNotMatch(adapter, /no_lora: false/)

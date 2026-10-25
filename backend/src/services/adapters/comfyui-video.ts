@@ -59,6 +59,11 @@ const DEFAULT_SIZE = '1024x768'
 // no_lora:true 摘掉任何 LoRA（PDD 5 步那档判「效果不好」，撤回）。PDD 图仍在盘上（h3_refall_pdd5_gpute.json），
 // 要再加速改回 PROD_GRAPH + steps 即可。回退记录见 docs/comfyui-h3-configs.md「当前最优」。
 const PROD_GRAPH = 'native'
+// 1025 19:5x 用户看片判「可以」⇒ 不挂 LoRA 的镜走 PDD 5 步快图（task 683 = 542 s 整单 vs native 20 步 992 s，
+// 同尺 MAD 5.15 ≤ 5.82、高频 338 vs 644 更软但用户认）。**只给无 LoRA 的镜**：桥的 saved-graph 分支
+// （`__init__.py:1123-1128` 调 `_wf_saved`）只填提示词/画布/帧数/参考/首尾帧/seed/前缀，**不认 body `lora`**
+// ⇒ 解剖镜挂到这张图上会静默丢 LoRA。挂 `lora_key` 的镜照旧走 native（20 步 + LoRA，1023 定案）。
+const PROD_GRAPH_FAST = 'h3_refall_pdd5_gpute.json'
 // 2026-10-07 加：以前 `is480` 之外全走 DEFAULT_SIZE，所以选「1080p」和选「720p」出图完全一样（空设置）。
 // 1007 实测完：1920×1080 会被吸到 **1920×1072**（1080 不是 16 的倍数，H3 VAE 空间下采 = 16）= 2.07 MP，
 // 不 OOM 但每条 **117.64 min**（vs 1.22 MP 的 9.94 min = 11.8×）、每像素信息只 1.18–1.39×（13 s 反而 0.96）
@@ -300,8 +305,9 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
         last_frame: lastFrameFile,
         // graph:"native" 走桥的 _wf_video_native；no_lora 下模型直吃 UNETLoader，不带任何 LoRA。
         // 1025：`record.graph` 曾在 1018 定案时被写死成 PROD_GRAPH，导致 body 里显式传的 graph 全被吞
-        // （和 1017 那个"漏抄 graph"是同一类病，只是这次是硬覆盖）。显式传的优先、不传才走 native。
-        graph: record.graph || PROD_GRAPH,
+        // （和 1017 那个"漏抄 graph"是同一类病，只是这次是硬覆盖）。显式传的优先；不传时按有无 LoRA 分档：
+        // 无 LoRA = PDD 5 步快图（1025 用户「可以」，542 s），有 LoRA = native 20 步（saved 图吃不到 body lora）。
+        graph: record.graph || (record.lora ? PROD_GRAPH : PROD_GRAPH_FAST),
         guide: guideFile,
         prev_latent: record.prevLatent || undefined,
         save_name: record.saveName || undefined,

@@ -86,6 +86,9 @@ interface GenerateVideoParams {
   sparse?: boolean | null
   /** 1024 小脸修复二采：基片生成后再跑一发 ComfyUI-H3-FaceRefine（comfyui 专属，见 adapters/face-refine.ts） */
   refine?: boolean
+  /** 1025 分辨率后处理 RTX VSR ×2：默认全开，显式 false 关（见 adapters/vsr-upscale.ts 的 wantsUpscale）。
+   *  以前只有 `wantsUpscale` 认这个参数、route 没透传 ⇒ body 写 upscale:false 是空设置 */
+  upscale?: boolean
 }
 
 export async function generateImage(params: GenerateImageParams): Promise<number> {
@@ -165,6 +168,7 @@ export async function generateVideo(params: GenerateVideoParams): Promise<number
     loraTrigger: params.loraTrigger,
     sparse: params.sparse,   // 必须进快照：processTask 读的是 DB 里的 params，不进就等于从没传过
     refine: params.refine,   // 小脸修复二采开关：handleVideoComplete 读 DB params.refine 决定是否跑二采
+    upscale: params.upscale, // VSR ×2 开关（同上，读 DB params.upscale）
   })
 
   logTaskStart('VideoTask', 'enqueue', {

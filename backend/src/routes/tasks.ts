@@ -232,6 +232,7 @@ app.post('/', async (c) => {
         loraTrigger: videoBody!.lora_trigger ?? videoBody!.loraTrigger ?? (autoLora?.concept ? false : undefined),
         sparse: videoBody!.sparse,   // 桥的 sol-attn 开关（A/B 仪表，默认关）
         refine: videoBody!.refine,   // 1024 小脸修复二采（comfyui 专属，body 带 refine:true 即开）
+        upscale: videoBody!.upscale, // 1025 RTX VSR ×2 默认全开，body `upscale:false` 关（以前没透传 = 关不掉）
         configId,
       })
 

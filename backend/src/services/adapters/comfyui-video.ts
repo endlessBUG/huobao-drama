@@ -191,6 +191,18 @@ export const LORA_REGISTRY: Record<string, {
   sex_motion: { file: 'HMNSFW-AIO-V2.5.safetensors', t: 'hmmotion',
     config: { strength: 0.7, steps: 20, trigger: 'hmmotion', base: 'MiniMax H3', trainedOn: 'video', source: 'civitai HMNSFW-AIO-V2.5' },
     note: '功能：性爱动作/姿态 AIO V2.5（作者建议强度 0.5–0.9，只动 mlp）' },
+  // 1028 用户「社区看看」→「接」：Licon VBVR I2V（HF `LiconStudio/Minimax-H3-VBVR`，142.3 MB，10-23，
+  // apache-2.0）。作者 README：VBVR-Pro-SFT-Video 按 H3 管线重制，434,894 条 / 7000 步 @1280×720、
+  // rank=alpha=16、只监督视频（音轨不动）、目标只 attn.qkv_proj/out_proj + mlp.fc1/fc2。
+  // 治 I2V 三病：物体增生（=「一人演两角色」那类）、穿模、动作顺序乱。**无触发词**（README 没给，
+  // 故不写 t/concept/prompt —— 一个字都不进正文）。
+  // 落点实测（本机，2026-10-28）：kohya 键 200 层全中生产 `minimax_h3_ref2va_pruned_nvfp4`（1132 键）、
+  // 0 缺失、覆盖全部 50 个 block —— 键能挂；**作者训练底座是 fl2va bf16、我们跑 ref2va，效果未验**。
+  // 社区风险：0.42 上有「效果变差」报障（我们 0.39.2 不在坑里）；有人报它会毁换脸。
+  // 选了它 ⇒ adapter 走 native 20 步图（saved-graph 分支不认 body lora，这条已知）。
+  motion_consistency: { file: 'H3-Licon-VBVR-I2V.safetensors',
+    config: { strength: 1.0, steps: 20, base: 'MiniMax H3', trainedOn: 'video', source: 'hf LiconStudio/Minimax-H3-VBVR' },
+    note: '功能：物体不增生、不穿模、动作顺序不乱（I2V 一致性；无触发词；落点 200/200 全中生产 NVFP4；选它=走 native 20 步）' },
   distill_ref2v_4step: { file: 'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors',
     config: { steps: 4, base: 'MiniMax H3', trainedOn: 'video', source: '官方 ref2v turbo 4step' },
     note: '功能：4 步蒸馏（少步数）—— 桥已默认挂在第一层，再选它等于挂两遍' },

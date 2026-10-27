@@ -104,10 +104,17 @@ test('登记表里每支 LoRA 的落点与它写的 note 一致（说无效的�
   // NVFP4、1132 键）—— 不是 fl2va-int8（那是另一个模型）。落点键名与量化档无关，但参照必须是我们真跑的。
   const unetPath = 'E:/AI/ComfyUI/models/diffusion_models/minimax_h3_ref2va_pruned_nvfp4.safetensors'
   const unetKeys = new Set(Object.keys(headerOf(unetPath)).filter((k) => k !== '__metadata__'))
+  // 键命名有两派：PEFT 的 `lora_A/lora_B`（Civitai 那批）与 kohya 的 `lora_down/lora_up` + `lora_unet_` 前缀
+  // （1028 的 Licon VBVR 那批）。ComfyUI 的 `comfy/lora.py` 两派都认，kohya 靠前缀+下划线换点号落到
+  // `blocks.N.<attn|mlp>.<模块>.weight` —— 这里照它的口径还原，否则会把能挂的 LoRA 误判成「400 个键没落点」。
+  const kohya = (k) => {
+    const m = k.match(/^lora_unet_blocks_(\d+)_(attn|mlp)_(out_proj|qkv_proj|fc1|fc2)\.weight$/)
+    return m ? `blocks.${m[1]}.${m[2]}.${m[3]}.weight` : k
+  }
   const targetsOf = (path) => {
     const h = headerOf(path)
     return [...new Set(Object.keys(h).filter((k) => k !== '__metadata__' && k.endsWith('.weight'))
-      .map((k) => k.replace(/\.lora_[AB]\.weight$/, '.weight').replace(/^diffusion_model\./, '')))]
+      .map((k) => kohya(k.replace(/\.lora_(?:[AB]|down|up)\.weight$/, '.weight').replace(/^diffusion_model\./, ''))))]
   }
   const control = 'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors'
   const ctl = targetsOf('E:/AI/ComfyUI/models/loras/' + control).filter((k) => !unetKeys.has(k))

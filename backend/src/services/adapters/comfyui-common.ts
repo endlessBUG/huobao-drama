@@ -15,6 +15,14 @@ export function toInputDir(config: AIConfig): string {
 }
 
 export function guessExtension(value: string): string {
+  // data URL 没有文件名，扩展名只能从 MIME 来。默认 .png 会让音频床落成 huobao_ref_xxx.png
+  // （1107 锁音：LoadAudio 按扩展名解，喂 .png 名字的 wav 会静默解不出来）。
+  const dataMime = /^data:([^;,]+)/.exec(value.trim())?.[1]?.toLowerCase()
+  if (dataMime) {
+    const ext = ({ 'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/mpeg': '.mp3',
+      'audio/mp4': '.m4a', 'audio/aac': '.aac' } as Record<string, string>)[dataMime]
+    if (ext) return ext
+  }
   const base = value.split('?')[0].split('#')[0].replace(/^data:[^,]+/, '')
   const name = (base.split(/[/\\]/).pop() || base) || ''
   const dot = name.lastIndexOf('.')

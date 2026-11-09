@@ -6,7 +6,325 @@ CLAUDE.md 里只留一条引用，细节在这。
 
 > **历史已删（1018，用户「删掉所有历史记录 保存当前版本」）**：1012–1018 的旧台账（VOSR2/SeedVR2、X2 半分辨率线、SLA/sol-attn、T8 BlockCache、1015-1017 的差分实验与段长之争等）不在文件里；要翻旧账 `git log -- docs/comfyui-h3-configs.md`。
 
-## 当前最优（2026-10-25）
+## 当前最优（2026-11-09）
+
+**1109 画布重存**：`H3_R2V_0.9MP_补帧_RelayVSR_一条龙.json` 摘掉 `VedaSparseAttention`（节点 208，开关直连
+BasicScheduler/BasicGuider）、`PrimitiveInt` 步数 4→**6**，现在与平台缺省提交图逐节点同构；旧 4 步 + Veda
+画布另存 `..._4步Veda回退.json`。双纨绔第 1 集已按这条重开（14 镜，task 793–806）。
+
+### 1109 小脸二采接回一条龙（用户「加上小脸修复」）
+
+**入口**（`generation.ts` `handleVideoComplete`）：只有缺省图 `native`（`effectiveGraph(...) === PROD_GRAPH`）
+放行二采；其它自带后处理的图（两采 / 三采 / 锁音，画布 3072×1728）仍 `refine:false` + `upscale:false`，
+二采图口径对不上。任务在二采跑完前保持 `processing`，`MAX_INFLIGHT` 才算得住它。
+
+**二采图改造**（`backend/src/services/adapters/h3-facerefine-workflow.json`，28 节点）：
+
+- `VHS_LoadVideoPath`：`force_rate 24`、`1280×736` —— 一条龙成品是 2560×1472@48，取回 24 fps 基帧再修脸。
+- 新增节点 57 `BanZhang_VRAM_Cleaner`（`卸载模型:true`，插在 9→10 之间）：int8 TE 11.73 GB + 视频 VAE
+  4.97 GB 常驻时 `H3InjectVideoLatent` 申请 992 MiB 直接 OOM（已分配 14.97 GiB / CUDA free 0）。
+- TE 换 `qwen3vl_32b_minimax_h3_nvfp4_awq` —— **1108「int8 全量」的唯一例外**（int8 版同样常驻不下来）。
+- 尾巴不变：`H3FaceStitch` → RIFE ×2 → RelayVSR detail 0.4 → VHS 48 fps；音轨直接取基片
+  （VHS 产出 `<name>-audio.mp4`，`face-refine.ts` 取的 `gifs[0]` 就是它，不是无声那条）。
+
+**帧数口径**：桥的 job JSON 不回 `length`，poll 的 duration 恒 5.17 s ⇒ 旧代码算 124 帧、和基帧（294/277…）
+对不上。改成 `framesForDuration(params.duration)`（适配器提交时的同一口径）。
+
+**实测成本（5060 Ti）**：**约 24 分钟/条** —— 预采样 3:18–4:22、8 步采样 ×~116 s = 15:44、RIFE/VSR 4–5 min。
+基片 30–42 min ⇒ 单镜整条约 55–60 min。产物实测 2560×1472 / 48 fps / 551 帧 / 11.456 s / AAC
+（sb9 = task 825 用的就是这条；最终 585 帧 / 12.19 s，deflicker 后 12.9 → 19.1 MB）。
+
+**为什么 supervisor 在飞改 1 条**：ComfyUI 是 FIFO 单队列；第二条基片在跑时二采要排 30+ min，超过
+`face-refine.ts` 的 40 分钟上限 ⇒ 白跑再丢（sb7/sb8 踩过）。队列空出来二采立刻开跑（≈24 min ≪ 40），
+GPU 本来就串行，吞吐不变。
+
+### 1108 晚定案：一条龙缺省 **6 步**（用户「这次不错 更新文档 接入平台」）
+
+**改**：`backend/src/services/adapters/comfyui-video.ts` 无 LoRA 的 `steps` 4 → **6**（挂分镜 LoRA 的镜仍按
+LoRA config = 20 步）。平台另加可选 body 字段 `steps`（`routes/tasks.ts` → `generation.ts` 快照 → adapter），
+只用于单变量 A/B；不传 = 缺省。回归锁 `backend/tests/comfyui-h3-20step.test.mjs`（19/19 通过）。
+
+**依据（社区，一手）**：
+- turbo LoRA 作者 README：4 步是推荐下限，「6–8 步明显更好」，>8 步开始过锐；过锐颗粒 → 强度 0.8–0.95。
+- HF 讨论 #20，同型号 `minimax_h3_*_pruned_int8_convrot`：4 步 = 高频纹理爆炸 / screen-door / 描边重影 /
+  黑白边缘振铃；质量排序 20 步 > 8 步 >> 4 步，评论「至少 6 步」。
+- LightX2V 1.0 横评：高动态下各版 LoRA 都有稳定性问题；我们这条 0.1 版的特征是面部「模糊 + 颗粒」。
+- RelayVSR 社区实测：detail 1.0 偏硬、0.5 更自然；**高动态像素化不是超分能修的** ⇒ 只能改生成侧。
+
+**同种子 A/B**（种子 `1034188182` / 10 s / 2 图 / 1280×736 / dense / 一条龙，唯一变量 = 步数）：
+
+| 项 | 4 步（task 782 → `data/static/videos/a3cf211c-…mp4`） | **6 步（task 789 → `d94c45a7-…mp4`）** |
+|---|---|---|
+| 执行耗时 | 1187 s | **1519 s（+28%）** |
+| 成片 | 2560×1472 / 48.01 fps / 10.10 s | 同左 |
+| 码率 | 15.8 Mbps | **11.0 Mbps**（高频噪点/假细节减少） |
+| 用户判断 | 「整幅都糙 / 像素在晃」 | **「这次不错」** |
+
+注意：「已判死」的 8 步 LoRA 是**另一个权重文件**；这里是同一个 4 步 LoRA 多跑 2 步，不是一回事。
+
+### 1108 闪测定案：生产缺省改**全注意力**（不挂 Veda）
+
+用户「好的 停掉。开全注意力」⇒ `backend/src/services/adapters/comfyui-video.ts` 的 body 从
+`sparse: record.sparse ?? undefined` 改成 **`?? false`**：不传就是 dense，桥（`__init__.py` 判
+`b.get("sparse") is False`）不插 `VedaSparseAttention`，走模型原生全注意力。
+显式 `sparse: true` 仍是回退到 Veda 32/32 的唯一入口（做 A/B 时才传）。
+
+- 提交图实证（`/queue` 抓的）：**26 节点、`VedaSparseAttention` 0 个**、243 帧。
+- **1109 起画布已重存为同一口径**：`H3_R2V_0.9MP_补帧_RelayVSR_一条龙.json` 摘掉 Veda、步数 4→6，
+  与平台图逐节点同构（只剩 UI 辅助节点）；旧的 4 步 + Veda 32/32 画布在同一目录
+  `H3_R2V_0.9MP_补帧_RelayVSR_一条龙_4步Veda回退.json`，需要 A/B 或回退时直接打开。
+- 回归锁在 `backend/tests/comfyui-sparse.test.mjs`（反着锁：`?? undefined` 和 `? true : undefined` 都红）。
+**同种子 A/B（唯一变量 = 注意力）**：种子 1412815817 / 6 图 / 294 帧 / 12 s / 0.9 MP：
+
+| 项 | Veda 32/32（task 780 → `h3_36203c76`） | **全注意力 → `h3_a1a6a892`** |
+|---|---|---|
+| 执行耗时 | 896 s | **1519 s（+69%）** |
+| 逐帧亮度最大跳变 | **+13.9**（deflicker 压到 +2.3） | **0.63**，>4 的跳变 0 |
+| 画面 | 干净 | 干净（无复制、无多余头发） |
+| 294 帧显存 | 通过 | **通过，没 OOM** |
+
+另一种形状（10 s / 2 图，对 task 779）：sparse 767 s → dense 1187 s（+52%），跳变 0.66。
+
+⇒ 闪烁确实来自 Veda 稀疏注意力；代价是采样慢 2/3。deflicker 留着（1.4 s 检测，不触发时零成本）。
+
+**「多了很多头发 / 画面里好几个她」不是注意力造成的**：同种子 4093447592 + 1 张**四视图**参考时，sparse 和 dense
+**都**复制（sparse = 两个她 + 半透明背影，dense = 四个她）；换回 6 图 + 同种子，两种注意力都干净。
+⇒ 锅在参考图配置（拿四视图 / 多角色图当主参考、6 张只绑 `<Picture 1>`），不在注意力。
+
+### 1108 平台侧 = 一条龙（同构已证）+ 12 秒镜 0.9 MP 跑通（净化节点）
+
+**同构证明**：把 `/queue` 里平台实际提交的图与一条龙基准（`.fire_full_chain_10s.py` 的 `g`）逐节点比对
+（忽略节点 id、把 link 归一成 `目标class_type[输出号]`，脚本 `backend/.diff_onechain_graph.py`）—— 唯一差异
+是基准里的 UI 辅助节点（`ResolutionSelector` / `Primitive*` / `ComfyMathExpression` / 两个 `ComfySwitchNode`），
+它们解析出来的字面量正是平台发的 `1280 / 736 / 243` + turbo LoRA 选中（当时步数 4；1108 晚起缺省 6 步，
+diff 会报 steps 4≠6，见上一节）；`CreateVideo` 省略的参数
+等于基准的显式值（`bit_depth 8 / sRGB / codec none`）。其余差的是 seed / 提示词 / 参考图文件名 / filename_prefix。
+⇒ **平台跑不出 = 配置有错，不是图不一样。** 台架 task 779（10 s / 2 图 / 0.9 MP）：执行 767 s（平台 781 s），
+成片 2560×1472 / 48 fps / 485 帧 / 10.103 s，与基准 834.2 s / 485 帧同形。
+
+**12 秒镜（294 帧 + 6 图）过不去的不是画布，是采样期被 TE+两个 VAE 占掉的显存**（用户「画布是 0.9」⇒ 不缩）：
+
+| 场景 | DiT 载入前可用 | ComfyUI 自估 min_req | 结果 |
+|---|---|---|---|
+| 294 帧 / 6 图，无净化 | **7,942 MB** | 19,127 MB | OOM `comfy/ldm/minimax/model.py:211`（swiglu→fc2），`request 705 MiB / CUDA Free 0` |
+| 同上 + 净化 | **15,086 MB** | 19,127 MB | **跑通** |
+
+那 7,144 MB 是 TE(2,665 MB) + 视频 VAE + 音频 VAE；`MiniMaxH3ReferenceToVideo.execute()` 里这三个只在节点
+内部各用一次（`vae.encode` / `_encode_ref_audio` / `clip.encode_from_tokens_scheduled`），**7 号节点之后到解码
+之间一个都用不上**（`comfy_extras/nodes_minimax_h3.py:301-375`）。
+
+**接法**：桥里在 `AddGuide` 之后、`BasicScheduler` 之前插 `BanZhang_VRAM_Cleaner`（`卸载模型`/`清理缓存` 开），
+输出当 CONDITIONING 直通给 KSampler.positive —— 照三采图 `9002 → 277` 的接法。节点 id 48（避开 20-28
+参考图区、31-46）。开关 `HUOBAO_H3_PURGE=1`，`_restart_6006_nofd.ps1` + `Start-ComfyUIHidden.ps1` 两处已加
+（改后必须重启）；**不设时节点不进图，图与基准逐节点相同**。
+
+**实测 task 780**：294 帧 / 6 图 / 1280×736 → 执行 **896 s**（平台 906 s）→ 2560×1472 / 48 fps / **587 帧 /
+12.228 s** / AAC 立体声 / 20.4 MB（`output/openai/h3_36203c76_00001_.mp4`）。净化对 ≤10 s 镜只多一次 VAE 重载
+（几秒），没有质量影响 —— 它只卸模型，不碰权重/种子/步数。
+
+### 1108「画面有的时候会闪烁」= 生成侧的全局亮度跳变（交付前已压制）
+
+**是什么**：同一批 6 条成片里 5 条有 —— 某几帧**整幅**亮度 110 → 134 → 十几帧内回落到 110。
+判据：4×6 网格逐格求亮度差，每格 **+10~+21**（全域一起抬，不是局部光效/镜头光斑）；对比度增强后的
+帧间差分图是一片均匀色，没有集中在任何物体上。
+
+**不是补帧超分**：RIFE+RelayVSR 的成片（`h3_36203c76`）和两采+RTX VSR 的成片（`~p467_*`）是同形波形
+⇒ 生成侧 H3（4 步 turbo + Veda 32/32 这套加速栈）的曝光不稳。周期性因素也排除了：逐帧边缘能量在
+lag 15/30/2 上没有周期峰（`mod15` 均值散布 8–10%，就是内容本身的变化）；RIFE 偶数/奇数帧边缘能量差 −1.2%。
+
+**修法**：交付前 `ffmpeg deflicker=mode=am:size=10`（时域亮度归一），**只在检测到跳变时重编码**。
+
+| 项 | 值 |
+|---|---|
+| 判据 | `scale=320 + signalstats` 取逐帧 YAVG，相邻差 **>4** 才算有闪（正常运动 <1、闪烁 ≥8） |
+| 检测成本 | 1.4 s（12 s 片） |
+| 实测（task 780 那条 12 s / 2560×1472 / 587 帧） | 最大跳变 **+13.9 → +2.3**；>\\|4\\| 的跳变 8 → **0** |
+| 副作用 | 全片均值 111.0 → 110.5（不变暗）、帧数/时长 12.229 s/AAC 音轨都不变；CRF 17 重编码 **19.2 s**，体积 20.4 → 23.0 MB |
+| 代码 | `backend/src/services/video-deflicker.ts`，挂在 `generation.ts` 的 `handleVideoComplete`（VSR 之后、海报帧之前） |
+| 开关 | `HUOBAO_DEFLICKER=0` 整条关掉（真·光效会被压平成 0.3 s 渐变时用） |
+| 测试 | `backend/tests/video-deflicker.test.mjs`（3 条，合成片当锚） |
+
+根因侧随后按用户决定改成**全注意力（不挂 Veda）**，见本节开头的「1108 闪测定案」；deflicker 留着当交付端保险。
+
+### 1108 一条龙 10 秒片跑通：243 帧 @ 0.9 MP（用户「可以了」）
+
+**图**：`E:\AI\ComfyUI\user\default\workflows\H3_R2V_0.9MP_补帧_RelayVSR_一条龙.json`（38 节点），
+API 版 `backend/.fire_full_chain_10s.py`。生成 + RIFE ×2 + RelayVSR ×2，一个 prompt 跑完。
+
+| 项 | 值 |
+|---|---|
+| 生成 | R2V 0.9 MP → **1280×736**，**243 帧** / 24 fps（17k+5：10 s → 243） |
+| 注意力 | **`VedaSparseAttention`**，predictor `minimax_h3_r2va_veda_preview_fp8`，sparsity 32/32 |
+| 补帧 / 超分 | RIFE ×2 → 48 fps；RelayVSR ×2 `detail` 0.4 |
+| 成片 | 2560×1472 / **48.01 fps / 485 帧 / 10.102 s / 15.97 MB** |
+| 整单 | **834.2 s**（含冷启加载） |
+| 音轨 | AAC，mean −46.1 dB / max −11.2 dB |
+
+**Veda 的位置**：LoRA/switch 之后、`BasicScheduler`/`BasicGuider` 之前（画布节点 208、API 节点 147）。
+它是 attention override（`transformer_options["optimized_attention_override"]`）、不改权重，
+所以 int8 convrot + turbo 4 步 LoRA 都能共存。桥的 `_wf_video_native` 早就默认挂它，手搓图容易漏。
+
+**能跑通的真因是分配器，不是显存**（三次失败换来的判据，以后先按这条认）：
+- 243 帧 @ 0.9 MP 连炸三次，每次都是 `Currently allocated 14.49 GiB / Requested 704.33 MiB / Device limit 15.90 GiB`。
+- **关掉 Chrome 腾出 1.7 GB 显存后重跑，失败点一个字节没动** ⇒ 不是物理显存不够，是 PyTorch
+  缓存分配器在「每层 malloc/free」的流式加载下拼不出连续的 704 MiB。
+- 修法：`$env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"`（`_restart_6006_nofd.ps1` +
+  `Start-ComfyUIHidden.ps1` 两处已加；改后必须重启，CUDA 初始化前读取）。
+- 爆点在 MLP 的 `swiglu → fc2`（`comfy/ldm/minimax/model.py:211`），**不是 attention** ⇒ Veda 救不了这一块。
+- ComfyUI 自估（读 `.log.err` 的 `[LOWVRAM] min_req`）：124 帧 **8862 MB** / 243 帧 **16094 MB**（1.82×），
+  卡 15900 MB ⇒ 这个尺寸天生压在容量线上，能不能过全看分配器。
+- 顺带排除：`--reserve-vram`（1101 已证 1.5→0 只涨 42 MB）、桌面程序抢卡（关 Chrome 前后失败点相同）。
+
+**已知缺陷**：成片两人脸几乎一样。两张参考图不同，但 `<Picture N>` 绑定塌成一人。修法在提示词
+`subject_definitions` 里把两人的发型/脸型差异写死（参考 memory `minimax-h3-picture-tag-binding`）。
+
+### 1108 配置同步（int8 全量 / HD LoRA alpha 修复 / 预设文案）
+
+- **文本编码器全线 int8**：4 张生产线图（`h3_2pass_12step_int8(.hdlora)`、`h3_3pass_1031_probe3_q12(.hdlora)`）的 256 CLIPLoader、锁音回退 `h3_3pass_lock.json:56`，全部 → `qwen3vl_32b_minimax_h3_int8_convrot.safetensors`。nvfp4 档按 CLAUDE.md 留着当回退，不删。**例外（1109）**：平台小脸二采 `h3-facerefine-workflow.json` 回到 `qwen3vl_32b_minimax_h3_nvfp4_awq` —— 取 24 fps 基帧后 int8 TE 常驻 11.73 GB 让 `H3InjectVideoLatent` OOM（见「1109 小脸二采接回一条龙」）。
+- **HD LoRA 之前一直是死的**：`MiniMax-H3/4步电影高清化-v11.safetensors` 里 259 个 `.alpha` 张量全是 0 ⇒ `comfy/weight_adapter/lora.py` 的 `alpha = alpha / rank` 恒 0，strength 填多少都不进权重。已拷 `4步电影高清化-v11-alpha.safetensors`（alpha 改成各自 rank，逐模块核过 36/36、8/8），391 节点指向它、`lora_strength` 1.0。
+- **风格预设**：`style_presets.id=9` 原文 `with progressively softer contrast` / `rich depth of field` 等于明写「越远越糊」⇒ 改 `crisply resolved far-field detail` / `deep focus`（DB 与 `backend/src/db/sqlite-schema.ts` 种子同步，`/api/v1/style-presets` 已验证返回新文案）。
+- **场景参考图**：新增宽图档 `_r` 896×512（576 token）、`_r2` 672×384（336）；`.fire_ep1_wanku.mjs` 加 `EP1_SCENE=wide`（场景送宽图）/ `EP1_SCENE_R=1`（场景固定 `_r`），默认仍是九宫格 = 1018 口径。
+
+### 1108 RelayVSR ×2 顶替二采（实测跑通，**未定案**，等用户看片）
+
+社区口径（ComfyUI Wiki 2026-10-29 / PR #17511）：整图只有 `RelayVSRConditioning` + `VSRDecode` 两个节点加一个 KSampler，
+**1 步、cfg 1.0、euler/simple**。只有每 15 帧中的 1 帧过模型（`relay_keyframes = range(0, N-1, 15) + [N-1]`），
+Flash 解码器补回全部帧。倍数由权重写死（x2），不是参数。前置：ComfyUI 0.44.0（master `bdb0816a`）+ `comfy_kitchen` 0.2.41。
+
+**本机实测（5060 Ti 16 GB，`--disable-*` 全套常驻参数；源 = 一采真片 `~p467_h3_fd9d4146_N467_0003.mp4` 1024×576×345）**：
+
+| 段 | 配方 | execution | 输出 |
+|---|---|---|---|
+| RelayVSR | 5.16 GB `relayvsr_x2_lightx2v_int8_convrot` + `relayvsr_flash_vae_x2_fp32`，1 步 cfg1 | **66.2 s** | 2048×1152 |
+| RTX VSR ×1.5 | `backend/scripts/vsr2x.py … 1.5 ULTRA`（4060 跑） | **23.6 s（0.07 s/帧）** | 3072×1728 |
+
+⇒ 一采之后从 **~1590 s（二采 6 窗口×8 步 ≈1320 s + VSR×2 ≈270 s）压到 ~90 s，约 17×**。
+
+- **倍数是 x2 写死的**：1024×576 → 2048×1152，要回 3072×1728 得再接一道 RTX VSR ×1.5（上表第二行就是这条）。
+- **无块边界闪烁**：逐帧差 YAVG 在关键帧位置（每 15 帧）2.73 vs 其余 2.59 —— 没有尖峰（源片同口径 1.98 vs 2.27）。
+- **观感**：3072×1728 裁块与现役「二采 + VSR×2」成片同量级，脸部/剑柄细节不输（两张不是同一条 take，只能定性）。
+- **代价**：RelayVSR 是**修复**不是**重绘** —— 一采里的坏手/坏脸不会被修好；二采的 `音频重绘强度 0.3` 也没有了（音轨直接透传一采）。
+- ⚠ 本次 ComfyUI 已升级到 **0.44.0**（`relayvsr-x2` 分支，回滚点 `3c1b7a17`），5 个本地补丁已重贴；`comfy_kitchen` 从 Spark 定制 0.2.37 换成官方 0.2.41（回滚轮子在 `custom_nodes/ComfyUI-Spark-H3/wheelhouse/`）。
+
+### 时间分块会不会降质量（1108，源码结论，非实测）
+
+现役图 391 只接了「时间分块参数」（393 output 2），**空间分块没接**（`n_tiles=1`），采样器 euler ⇒ 走 `_sample_temporal_sync`（`ComfyUI-Banzhang-All-1031/banzhang_mmh3_upscale.py:2083`，分派在 `:2291`）。
+
+- **不是「每段各跑一遍」**：整条时间轴共享同一条 Euler 轨迹 —— 每个 sigma 步依次前向所有窗口，只把各窗口**核心区**写回同一份全局 latent，再统一推进一步；重叠区羽化融合。总前向次数与不分块完全相同 ⇒ 没有段边界的「成品 vs 新起噪」突变，也不会重复生成。
+- **唯一真实差别**：每次前向只看本块 + 重叠（56 帧 ≈ 2.3 s），长程时间注意力比整条（124 帧 ≈ 5.2 s）短。二采去噪 0.5、底图主导时影响很小；去噪 ≥0.99 才是致命场景（节点自己在 `:2557` 警告：每段从噪声长、容易按块循环）。
+- **54/12 会被吸附成 56/5**（合法档只有 5+17k，小于 56 的是 5/22/39，离 12 最近的是 5）⇒ 实际重叠只有 5 帧 ≈ 0.2 s。124 帧（36 latent 步）的窗口：[0,17) / [15,32) / [19,36)，共 3 段。
+- **免费的质量旋钮**：重叠改 22（≈0.9 s）后窗口还是 3 段（[0,17)/[10,27)/[19,36)），**前向次数不变**，但每段看到的重叠上下文从 5 帧变 22 帧。要提块间连贯就填 22，不花时间。
+- **别同时接空间分块参数**：`n_tiles>1` 会退回 `_sample_temporal_windows`（`:2273`）逐段接力，节点会打 `[H3时间] ⚠ …段边界可能有画面突变`（`:2295`）。
+
+### 1108 定案：有床的镜 = 两采 12+8（补帧 + 二采），一采 12 步（用户「对的 补帧 二采 加上 1采12步」）
+
+**缺省切换**：`effectiveGraph()` 有床分支 → `h3_2pass_12step_int8.json`（和 `h3_2pass_12step_nvfp4.json` 逐节点相同，只是名字历史遗留）。无床的镜仍走三采链（1101 不变）；挂 LoRA 的镜仍 native 20 步。两采图已加进 `isSelfContainedGraph` ⇒ 平台小脸二采 / VSR 自动关（图自带 RIFE ×2 + VSR ×2）。床走 CSGlide 媒体架当原生参考音频，桥 `[huobao-1108]` 自动补 `<Audio 1>` 声明（无 LoadAudio 时才补，锁音图不叠第二套）。
+
+**图**：`workflows/h3_2pass_12step_int8.json`（38 节点）
+
+| 段 | 节点 | 步数 | 说明 |
+|---|---|---|---|
+| 一采 | 277 KSampler | **12** | euler/beta，1024×576 × 124 帧 |
+| 二采 | 391 MMH3_Upscale | **8 / 去噪 0.5** | latent 放大模型 `minimax_h3_latent_upscaler_3d_bf16` ×1.5 → 1536×864，分块 54/12 |
+| 出片 | 307 RIFE ×2 → 306 RTX VSR ×2 | — | 24→48 fps，→ 3072×1728（档位「常规放大·极致」10-bit） |
+
+**同镜同 seed 实测（int8 DiT，1024×576×124，成片 5.117 s / 3072×1728 / 48 fps）**：
+
+| task | 配方 | 锐度（面部边缘 YAVG） | execution | 音轨对床 r | 女口 peak/mean | 男口 peak/mean |
+|---|---|---|---|---|---|---|
+| 735 | nvfp4 两采，无床 | **2.745** | 748 s | — | 5.23 / 2.11 | 4.58 / 1.80 |
+| 747 | nvfp4 两采 + 床 | 2.353 | 796 s | 0.979 | 4.13 / 2.20 | 1.80 / 1.33 |
+| 748 | int8 三采，无床 | 1.994 | 1369 s | — | 2.91 / 1.49 | 5.00 / 2.08 |
+| 750 | int8 两采 + 床 | 1.909 | 922 s | **0.999** | 2.63 / 1.23 | 4.00 / 1.82 |
+| 751 | int8 1采20步 + 床（VSR ×3） | 1.659 | 577 s | 0.977 | 2.13 / 1.11 | 3.99 / 1.58 |
+
+锐度口径：女性面部 480×360 裁块（3072×1728 帧 x880 y400），`edgedetect=0.05:0.15,signalstats` 的 YAVG 均值（先缩到 12 fps，取 0.5–4.5 s）。嘴部：24 fps tblend 差 YAVG，女 260×140@990,580 / 男 220×150@1940,390。
+
+**结论**：
+- **锐度主因是 DiT 精度，不是放大链**：同图同参数 nvfp4 vs int8 −27%（1.994 vs 2.745）；int8 还慢 24%（20.97 GB 塞不进 16 GB、逐层搬运）。**nvfp4 两采 748 s 比 int8 两采 922 s 更快也更锐**。
+- 三采 vs 两采（int8）：+4%（1.994 vs 1.909），多花约 446 s。
+- 1采20步没有模型放大那一遍，VSR 从 1024×576 硬拉 ×3 ⇒ 锐度最低 1.659，但最快 577 s。
+- 有床路线的音轨 r=0.977–0.999（落点可信）；女角嘴部动作弱于无床（峰值 2.1–2.6 vs 5.2）。
+
+### 1101 新基础版本 = 三采链 12/8/8（用户「这次不错 记录下来」「作为新的基础版本」）
+
+**这条就是现在的基准档**：后续所有分块 / 常驻 / 功耗 / 采样参数的实验，一律拿它当对照；判「变好/变坏」都是相对这条。
+
+> **1101 已切生产默认**（用户「切」）：`comfyui-video.ts` 的 `effectiveGraph()` —— 无 LoRA 的镜缺省走这张图，挂 `lora_key` 的镜仍走 native 20 步（三采链没验过叠 LoRA）。**1108 更新：有台词床的镜改走两采图，见上节；无床的镜仍是这张。**走这张图时平台后处理（小脸二采 / RTX VSR）**自动关**（图自带 RIFE ×2 + VSR ×2，再叠一遍就是白跑）。
+> **验证单 task 717**（不传 `graph`、不传 `refine`/`upscale`，走的就是新默认档）：**1082 s** → 3072×1728 / 244 帧 / 48 fps / 11.6 MB；ComfyUI history 里**只有一条 39 节点的执行**（15:21:59 → 完成），没有第二条 ⇒ 二采和 VSR 确实都没跑。代价：单条从 9 分钟涨到 18 分钟（124 帧口径），294 帧档未实测。
+
+**图**：桥 `workflows/h3_3pass_1031_probe3_q12.json`，原样提交、一个参数不改。
+
+| 段 | 节点 | 步数 | 去噪 | 其它 |
+|---|---|---|---|---|
+| 一采 | 277 KSampler | **12** | 1.0 | euler / beta，seed 8，1024×576 × 124 帧 |
+| 二采 | 391 BanZhang_MMH3_Upscale | **8** | 0.5 | 分块 54/12，×1.5 → 1536×864 |
+| 三采 | 370 BanZhang_MMH3_Upscale | **8** | 0.45 | 分块 54/12，最近邻 ×1，预显影 1 步 |
+| 出片 | 307 RIFE → 306 RTX VSR | — | — | 24→48 fps，再 ×2 → 3072×1728 |
+
+**成片**：`E:\AI\ComfyUI\output\probe_q_N458_0002.mp4` = 3072×1728 / 245 帧 / 48 fps / 5.117 s / 8.96 MB。
+
+**耗时 998 s（16 分 38 秒）**。分节点：装载 3:04 → 一采 2:27 → 二采 4:33 → 三采 4:26 → 三次解码 16 / 26 / 35 s → RIFE 9.9 s → RTX 特效 ≈20 s。
+
+**同参数今早那条 2039 s（34 分）**（`probe_q_N458_0001.mp4`，13:46 落盘）⇒ **快了一倍**。最可能的变量是当天撤掉的 `[huobao-1015]` 卸载补丁（显存账本不再虚报已卸载 ⇒ 下一段拿到真空闲、少搬运，见 `comfyui-gpu-full-power.md` §3.5）；**未做单变量验证，别当已归因**。
+
+**2 步版为什么被否**：`probe_c39` / `probe_c56b` 是**分块档位探针**（2/2/2 步），只为量常驻和功率，不是画质档 —— 用户 1101 看片判「差多了」说的就是它们。判三采链画质一律拿 12/8/8 这条当基线。
+
+### 1101 三采链接入平台（用户「保留当前工作流 然后接入平台」）
+
+平台侧**零改动**：`POST /api/v1/tasks` 的 body 带 `graph:"h3_3pass_1031_probe3_q12.json"` 就走这张图（`tasks.ts:216` → adapter `record.graph` → 桥按 `.json` 后缀进 `_wf_saved`）。
+
+**桥 `_wf_saved` 新增 block 4c**（`E:/AI/ComfyUI/custom_nodes/ComfyUI-OpenAI-Bridge/__init__.py`，仓库外、升级要重贴）：班长 CSGlide 版式把提示词/画布/帧数/参考图埋在三个 STRING 大 JSON 里，老的扁平填充够不着。填四处 —— `desk_data.global`=提示词、`h3_data` 的 `prompt/width/height/length`、`rack_data.slots.images`=参考图、`KSampler.seed`。**步数归图**（这张图没有 BasicScheduler，body 的 `steps:20` 进不来）。
+
+- **两处 `chain` 必须清空**（h3_data + desk_data）：图里存着 UI 当时的工程名 `未命名工程 42`/`clip_0001`，该目录真有 `project.db`。不清 ⇒ 文案台把平台提示词**归档写回 `shots.meta_json.prompt_seg`**（`csglide_desk.py:406`，1101 实测真写了），且库里旧词会被兜底拼到词尾。清后 `_seg_dir_of` 返回空串。
+- **中间产物会被产物 glob 抢**：一采/二采/三采各挂一个 `banzhangVideoCombine`，桥按 `glob(prefix*)`+mtime 取最新。中间那几个改成 `~p<节点号>_` 前缀（去掉开头 `h3_` 就匹配不上），只有真终端用原名。
+- **平台后处理必须关**：`refine:false` + `upscale:false`。图自带 RIFE ×2 + RTX VSR ×2，不关会再跑一发小脸二采 + 再 ×2。
+- **轮询上限 600×10 s = 100 分钟**（`generation.ts:38`），超了平台判 failed 而 ComfyUI 还在跑。
+
+**实测（task 712，512×288 × 124 帧，refine/upscale 关）**：全链 **377 s**，平台正常落盘 `data/static/videos/ed39cbd0-….mp4`。尺寸链路实测 **512×288 →（二采）736×416 →（RTX ×2）1472×832 / 48 fps**。⇒ 平台给的宽高确实生效；**二采不是死 ×1.5**（512 档落 16 对齐成 ×1.4375，1024 档才是 ×1.5 → 1536×864 → 3072×1728）。
+
+发车脚本 `backend/.fire_3p_platform.mjs`（默认 refine/upscale 关；`1024x576 5` 就是好版本那条 3072×1728）。
+
+### 1107 锁音版三采链 = 台词落点由我们定（平台已打通）
+
+**图**：桥 `workflows/h3_3pass_lock.json` = q12 三采链 + `9501 LoadAudio` + `9502 MiniMaxH3TimedAudioBedLockT8`（`tail_lock_start_seconds=0`、`tail_denoise_strength=0` ⇒ 整条锁死），9502 的输出接一采 `277 KSampler` 的 `latent_image`；二/三采 `音频重绘强度 = 0` 把一采音轨原样透传。
+
+**平台**（1107 代码改动）：`POST /api/v1/tasks` 带 `reference_audio_urls:["<上传的 wav>"]`（先 `POST /api/v1/upload/audio`）⇒ 适配器把第一条落到 ComfyUI `input/`、body 带 `bed`（桥 `[huobao-1107]` 换掉图里 LoadAudio 文件名）；**不传 graph 时缺省选这张锁音图**（有 LoRA 也选它，LoRA 由桥 `[huobao-1029]` 4b 插进 saved 图），平台小脸二采 / VSR 自动关。comfyui 不再要求 `PUBLIC_BASE_URL`（本地 `static/` 路径直接读）。
+
+**实测 task 741**（5 s / 124 帧 / 2 张参考图 / 床 `bed740.wav`，故意与图里写死的 `lockprobe.wav` 不同）：**962 s** → 3072×1728；`/queue` 里 `9501 LoadAudio` = staging 后文件名、`9502` 在、`chain` 已清空；成片音轨 vs bed **r = 1.004、lag 0.04 s**，vs `lockprobe.wav` lag0 **−0.26** ⇒ 锁的就是新喂的床。出片音轨 AAC 32 kHz，lag 0.04 ≈ 一帧（AAC priming）。
+
+**约束**：床必须**全长**（帧数 / 24 秒；124 帧 → 5.1667 s），长度吸附交给节点 `audio_latent_fit_policy`。**未验**：挂 LoRA + 床（lora 在 12/8/8 步上挂，非其 config 的 20 步）。
+
+### 1107 用户「都用INT8」= DiT 全换 int8_convrot（实测在案）
+
+**改动**：桥 `workflows/*.json` 全部 40 个文件 + 桥代码里的 native 图 + 平台 `h3-still-workflow.json` + UI 工作流，`minimax_h3_ref2va_pruned_nvfp4` → `minimax_h3_ref2va_pruned_int8_convrot`（fl2va 同）。nvfp4 两个文件仍留盘可回退（改回来只需反向替换）。文本编码器**没有 32B int8**（只有 nvfp4_awq / w4a8），保持 `qwen3vl_32b_minimax_h3_nvfp4_awq`；视频 VAE 本来就是 `minimax_h3_video_vae_int8_convrot`，音频 VAE 只有 fp32。
+
+**实测 task 748**（生产默认三采链 q12，1024×576×124、2 张参考图、seed 8、没有任何 graph/refine/upscale 参数）：
+- **execution 1369 s（22.8 min）** vs nvfp4 同链 998–1082 s（16.6–18 min）⇒ **+27%**
+- 出片 3072×1728 / 245 帧 / 48 fps / 15.3 Mbps
+- 画质：同镜 1.4 s 女角脸部边缘能量 **1.33**（nvfp4 二采 task 735 = 1.40），肉眼同档 ⇒ **int8 没有画质提升，也没有退化，只是更慢**
+- 21 GB 权重在 16 GB 卡上走部分加载/流式，跑通无 OOM
+
+**同时段音频路线实验**（详见 memory `h3-audio-lock-fixes-dialogue-timing`）：锁音版（742/743）女角嘴部峰值运动 2.96（24 fps 口径）vs 无锁 735 = 5.23 ⇒ 锁音把嘴磨弱；原生 `<Audio 1> fully_copy` 路线 746（单采低档探针）r=0.979，747（满档二采）**r=0.979 / lag −0.02 s、女角 2.13 vs 735 的 2.06** ⇒ 保嘴部动作，音轨几乎原样复述。桥 `[huobao-1107]` 已扩展：`bed` 除了换 LoadAudio，还写进 CSGlide 媒体架 `rack_data.slots.audios`（`[{"file": bed}]`），供没有 LoadAudio 的班长图喂参考音频。**生产默认（有床）仍走锁音图，未切换**。
+
+### 1029 桥补丁 `[huobao-1029]`：saved 图认 body `lora` ⇒ 挂 LoRA 也能走 5 步快图
+
+**改动**（`E:/AI/ComfyUI/custom_nodes/ComfyUI-OpenAI-Bridge/__init__.py`，**仓库外、不在 git**，备份 `/tmp/bridge_init.bak.py`；改桥必须重启 ComfyUI 才生效，已重启）：
+- `_wf_saved(...)` 签名加 `lora=None, lora_strength=1.0`；在第 4 步（采样量）与第 5 步（孤儿剪枝）之间插「4b」：body 带 `lora` ⇒ 找图里的 `UNETLoader`，在后面插一个 `LoraLoaderModelOnly`（节点 id 从 `9999` 起找空位），并把 UNETLoader 原来的下游全部改接到它 —— 结构同 native 图里的 210 号。原图自带 LoRA（PDD 图的 17 号）时是**叠在它前后各管各的强度**，不是替换。
+- `videos()` 的 `.json` 分支调用处补 `lora=b.get("lora") or None, lora_strength=(b.get("lora_strength") if b.get("lora") else 1.0)`。
+
+**验证（task 707，`/queue` 读图）**：`1 UNETLoader(nvfp4) → 9999 LoraLoaderModelOnly(H3-Licon-VBVR-I2V) → 3 Veda(sp32) → 17 MiniMaxH3PDDLoRA(5 步) → 11 BasicGuider`；加载零 `lora key not loaded` 警告。
+
+**同镜三臂（ep8 sb220「薄被下滑」，294 帧 / 1024×768 / 同 prompt / 同 3 参考 / 同首帧 / VBVR@1.0）**：
+
+| task | 图 | 时间 | MAD | p95 | 高频 |
+|---|---|---|---|---|---|
+| 558 | 零 LoRA 基线（PDD5） | 782 s（13:02） | 1.20 | 2.05 | 232.39 |
+| 706 | native 20 步 + VBVR | **1727 s（28:47）** | 1.14 | 3.45 | 241.34 |
+| 707 | **PDD5 + VBVR** | **533 s（8:53）** | 1.08 | 2.04 | **136.48** |
+| 708 | **PDD8 + VBVR** | 783 s（13:03，ComfyUI 775.5 s） | 0.70 | 1.15 | **121.15** |
+
+⇒ **补丁前挂 LoRA 要付 2.0-2.2×（200 条 patch 每步重贴），补丁后挂 LoRA 与不挂在同一档（533 vs 542 s）**。**代价 = 锐度：高频 136 vs 232/241（−41%）** —— 5 步蒸馏底叠 LoRA 明显发软。**8 步中间档判死（task 708）**：慢 47% 而高频掉到 **121（更软）** ⇒ 软是 PDD 蒸馏图本身的画法、不是步数不够；挂 LoRA 只剩 5 步 8:53（软）或 native 20 步 28:47（锐）两条路，等用户看片判。**质量判定下来之前不改 `comfyui-video.ts:322` 的 `record.lora ? PROD_GRAPH : PROD_GRAPH_FAST`。**
 
 ### 1025 定案：零 LoRA 治抖动（`--cpu-vae` 判死）
 
@@ -210,3 +528,7 @@ CLAUDE.md 里只留一条引用，细节在这。
 ⑰ **让运镜「保证发生」的三条硬路，选一条（1020 夜社区层查完）**：① **挂 Camera Motion LoRA**（社区同栈项目 `github.com/mrhz1973/ai-video-director` 的 `comfyui-harness/lib/h3-lora-catalog.mjs` 里 `camera-motion` = `camera_motion_h3_lora_v1_3000_pruned.safetensors`、`LoraLoaderModelOnly` = 与我们 210 号同一机制、SHA256 `9d7d98d7…`；他们 issue **#69** 的 20 单 close-up 矩阵建议 **0.55 只在真要运镜时挂、0.75 实测 ~1.62× 脸尺度漂**）—— 要下载权重 + 进我们 key 登记表 + 实测每步税（1019 已知挂 LoRA = 1.45×/2.0×）；② **`<Video N>` 只传机位**（官方 `ref-en.txt:82/:143/:185`：参考视频可以只供 camera movement / cuts / rhythm、标 `weak_reference`、属 `reference generation`）—— 我们适配器 `MAX_IMAGES=9` 只有图、没有视频参考 = 缺口，改动在 `comfyui-video.ts` + 桥；③ **Meridian 几何运镜**（未结⑭，BSAI `nodes_meridian.py:168`）。三条都还没动，等你定；官方 `shot-table-spec.md:23` 自己写着 **H3 强在包装词/文字/UI/motion-graphics 清晰度、Seedance 2.0 才是 cinematic camera** ⇒ H3 运镜执行弱是设计如此，光改提示词的天花板有限。
 ⑱ **Civitai 下载要登录（1021 06:0x，换权重这条卡在这）**：**Synth Pussy 2509189** = ~500 条「pussy and labia detail」合成集（素材量是 2885332 作者 10 条的 50 倍、作者明说「真阴道差异太大所以自建合成数据集」= 专治「形状画不出来」这条），匿名下载 401「The creator of this asset requires you to be logged in」，civitai.red 镜像同 401，HF 上只有 LTX 版（`nnndite/synthpussy` = `SynthPussy_01_rank32.safetensors`，不是 H3 那条）；NaughtyTimes（2836176，582MB-1.2GB）与 HMPussy 的 video-trained 半条（`hmpussy_v6_epoch30`，612MB）同样待验。⇒ 臂 21/22 已排进驱动，但文件不在盘上就一分钟一分钟后跳过、写进台账。要真验 = 你给一个 Civitai API token，或浏览器下好丢进 `E:/AI/ComfyUI/models/loras/SynthPussy_MinimaxH3_v1.safetensors`，下一趟驱动会自动收。
 ⑲ **推理侧 CFG 要不要真测（1021 11:0x 把「旋钮」这条判死了，剩下的问题是「negative 是什么」）**：`BasicGuider` 没有 scale 输入、`Guider_Basic` 只挂 positive（`nodes_custom_sampler.py:797-819`）⇒ 我们图上任何 cfg 数字都是空转（arm18 与 arm12 逐像素全同 = 实测）。要真引导 = 换 `CFGGuider`（`:823-841`，schema = model / positive / negative / cfg）或 `RandomDistributionCFG` 一类，**但这条图的 conditioning 来自 `MiniMaxH3ReferenceToVideo`（node 7 → `['7',0]` 进 guider）= 参考图裹在 conditioning 里** ⇒ negative 选谁就是设计决定：空 = 连参考一起不要（那是「无参考 vs 有参考」的引导，不是文字引导）、= positive = 零、带负向词但不带参考 = 同样丢参考。三条都不像社区说的「抬引导修 LoRA 弱」的正解（他们没给 cfg 数）。**没接，等你定**；顺带 arm19（euler+cfg）的 cfg 腿也是空 = arm17 复跑、当确定性对照。
+
+⑳ **DiT 精度要不要切回 nvfp4（1108 量完，等用户定）**：同图同参数下 nvfp4 两采比 int8 两采**更锐 −27% 的边缘损失、还快 24%**（748 s vs 922 s；int8 20.97 GB 塞不进 16 GB 要逐层搬运，nvfp4 12.53 GB 可整块常驻）。1107「都用 INT8」当时没有这张对照表。用户 1108 二次确认「不是让你用int8吗」⇒ **保持 int8，不再提议切换**；nvfp4 仅作回退档。（中途曾一次批量换成 nvfp4，用户纠正后已原样回退：49 个文件、回退后 `h3_2pass_12step_int8.json` 与 `_nvfp4.json` 逐字节相同，平台/桥无残留 nvfp4 引用。）
+
+㉑ **二采要不要换成 RelayVSR ×2（1108 实测跑通，等用户定）**：一采之后 90 s 对 1590 s，快 17×；见上面「1108 RelayVSR ×2 顶替二采」。要接的话改动点在桥的两采图（`h3_2pass_12step_int8(.hdlora).json` 把 391/393 换成 `RelayVSRConditioning`+`KSampler 1步`+`VSRDecode`，后面的 RIFE ×2 → RTX VSR 改 **×1.5**），不是改节点参数。风险 = 一采的坏手坏脸没得修、音频不再重绘 ⇒ 建议先拿一镜真拍两版对比再定。

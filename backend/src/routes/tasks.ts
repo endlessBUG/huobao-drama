@@ -51,6 +51,9 @@ function normalizeVideoRequest(body: any) {
     aspect_ratio: body.aspect_ratio ?? parameters.ratio,
     resolution: body.resolution ?? parameters.resolution,
     seed: body.seed ?? parameters.seed,
+    // 1108 单变量 A/B：显式步数覆盖 turbo 4 步（社区共识「4 步是下限、6–8 步明显更好」）。
+    // 不传 = 适配器老口径（无 LoRA 4 步 / 挂 LoRA 按 config），逐字节不变。
+    steps: body.steps ?? parameters.steps,
     prompt_extend: body.prompt_extend ?? parameters.prompt_extend,
     watermark: body.watermark ?? parameters.watermark,
     official_media: media,
@@ -224,6 +227,7 @@ app.post('/', async (c) => {
         aspectRatio: videoBody!.aspect_ratio,
         resolution: episodeResolution || videoBody!.resolution,
         seed: videoBody!.seed,
+        steps: videoBody!.steps,
         promptExtend: videoBody!.prompt_extend,
         watermark: videoBody!.watermark,
         chain: videoBody!.chain,

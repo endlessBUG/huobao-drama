@@ -52,18 +52,61 @@ const SIZE_480P = '864x480'
 // 去 LoRA 后 nvfp4 裸权重 27.5 s/步 ⇒ 20 步实测 674 s/条（test/fresh_x2432s20.mp4，账在
 // docs/comfyui-h3-configs.md「1016 定案」）。1472×832 在 20 步口径下 ≈16 min/条，超耐心预算，故画布同步收到 768p。
 const DEFAULT_SIZE = '1024x768'
+// 1108 用户「必须以目前一条龙的方式 这个是目前测试最好的情况」⇒ 画布/步数照一条龙实测的那份图：
+// `H3_R2V_0.9MP_补帧_RelayVSR_一条龙`（ResolutionSelector 0.9 MP / 16:9 / multiple 32 = **1280×736**、
+// turbo LoRA **4 步**、Veda 32 块、TE nvfp4_awq、RIFE ×2 → RelayVSR ×2 detail 0.4）。
+// 243 帧 @ 0.9 MP 已经坐在 16 GB 卡的容量线上（[LOWVRAM] min_req 16094 MB > 卡 15900 MB，靠
+// PYTORCH_CUDA_ALLOC_CONF=expandable_segments 才跑过），所以**更长的镜按同一 token 预算等比缩画布**，
+// 1108 用户「画布是 0.9」⇒ 一条龙画布一律 0.9 MP（1280×736），**不按帧数缩**。
+// 12 秒镜（294 帧）曾在这个画布上炸过 OOM（comfy/ldm/minimax/model.py:211 swiglu→fc2，
+// allocated 14.54 GiB / request 705 MiB / CUDA Free 0 bytes），根因不是画布大，而是采样期
+// 有 7.2 GB 被 TE + 两个 VAE 占着、DiT 只剩 7.9 GB 可用 ⇒ 修法在桥里：采样前插
+// `BanZhang_VRAM_Cleaner`（卸载模型=开）把那三个模型踢出显存，画布保持 0.9 MP。
+const ONE_SHOT_SIZE = '1280x736'
+/** 一条龙画布 = 0.9 MP（用户 1108 定），与帧数无关；参数留着是因为调用点按帧数取。 */
+export function oneShotSize(_frames?: number | null): string {
+  return ONE_SHOT_SIZE
+}
+/** 老生产画布（三采/两采时代的 1024×576、1020 时代的 1024×768）：不再是显式选择，跟着一条龙走。 */
+const LEGACY_CANVAS = new Set(['1024x576', '1024x768'])
 // 1018 深夜用户：「刚才的效果不好」→ 先试了仓库 4 步 turbo LoRA，仍判不好 →
 // 定案「换成1采 20步 试试 只改这个 不要lora」⇒ 走桥的 native 图（`_wf_video_native`），
 // 单采 20 步、`no_lora:true` 摘掉 4 步 turbo、也不再透传分镜 lora。
 // 1024 用户「重做 换成不要lora 1采 20步 试试」⇒ 回 1018 深夜定案：走桥的 native 图、单采 20 步、
 // no_lora:true 摘掉任何 LoRA（PDD 5 步那档判「效果不好」，撤回）。PDD 图仍在盘上（h3_refall_pdd5_gpute.json），
 // 要再加速改回 PROD_GRAPH + steps 即可。回退记录见 docs/comfyui-h3-configs.md「当前最优」。
-const PROD_GRAPH = 'native'
-// 1025 19:5x 用户看片判「可以」⇒ 不挂 LoRA 的镜走 PDD 5 步快图（task 683 = 542 s 整单 vs native 20 步 992 s，
-// 同尺 MAD 5.15 ≤ 5.82、高频 338 vs 644 更软但用户认）。**只给无 LoRA 的镜**：桥的 saved-graph 分支
-// （`__init__.py:1123-1128` 调 `_wf_saved`）只填提示词/画布/帧数/参考/首尾帧/seed/前缀，**不认 body `lora`**
-// ⇒ 解剖镜挂到这张图上会静默丢 LoRA。挂 `lora_key` 的镜照旧走 native（20 步 + LoRA，1023 定案）。
-const PROD_GRAPH_FAST = 'h3_refall_pdd5_gpute.json'
+export const PROD_GRAPH = 'native'
+// 1101 用户「切」⇒ 无 LoRA 的镜改走班长整合包三采链（12/8/8 步、分块 54/12、自带 RIFE ×2 + RTX VSR ×2）。
+// 依据：用户 1101 看片判「这次不错 作为新的基础版本」；平台实测 1024×576×124 = **1011 s / 3072×1728**，
+// 与手搓基准 998 s 同档（task 714）。**只给无 LoRA 的镜**：挂 `lora_key` 的镜照旧走 native
+// （20 步 + LoRA，1023 定案）—— 三采链没验过叠 LoRA 的画质。
+// 回退 = 把这行改回 'h3_refall_pdd5_gpute.json'（PDD 5 步快图，542 s）。
+const PROD_GRAPH_3PASS = 'h3_3pass_1031_probe3_q12.json'
+// 1107 锁音图 = 三采链 + T8 TimedAudioBedLock（一采 KSampler 的 latent_image 换成 9502 锁音输出）。
+// 1108 用户「先换回工作流看看效果」⇒ 有床的镜不再缺省走它：锁音让女角嘴部运动 −43%
+// （task 743 2.96 vs 无锁 735 5.23）。改回三采链，床走 CSGlide 媒体架当原生参考音频
+// （<Audio 1> fully_copy，task 747 满档 r=0.979 / 保嘴）。锁音图留在盘上：
+// 显式 `graph:'h3_3pass_lock.json'` 可回退（图里 LoadAudio 文件名由桥按 body `bed` 换）。
+const PROD_GRAPH_3PASS_LOCK = 'h3_3pass_lock.json'
+// 1108 用户「补帧 二采 加上 1采12步」⇒ 有床的镜改走两采图：一采 12 步 → latent 放大模型 ×1.5、
+// 8 步二采（去噪 0.5）→ RIFE ×2 → RTX VSR ×2 = 3072×1728。task 750 实测 929 s、音轨对床 r=0.999。
+// 比三采链少一遍 8 步同分辨率精修：锐度 1.909 vs 1.994（差 4%）、省 446 s；1 采 20 步（task 751）
+// 没有模型放大那一遍、锐度只有 1.659 ⇒ 用户判「对的」即这条。三采链仍是没床的缺省。
+// 精度照 1107 定案保持 int8（1108 用户「不是让你用int8吗」再确认）；nvfp4 只作回退档。
+const PROD_GRAPH_2PASS = 'h3_2pass_12step_int8.json'
+/** 缺省走哪张图：显式 graph 优先，其余一律一条龙（桥的 native 图 + RIFE ×2 + RelayVSR ×2）。 */
+// 1108 用户「现在不分块 效果也比班长的好 他的组件可以删掉了，除了补帧的」⇒ 三档（无床无 LoRA /
+// 有 LoRA / 有台词床）全部改指 native：`_wf_video_native` 多了 `fullchain` 尾段（桥 __init__.py:574-604），
+// 有床的镜走原生参考音频 `ref_audios.ref_audio_0` + `<Audio 1>` fully_copy（提示词由桥自动补）。
+// 旧的 PROD_GRAPH_2PASS/3PASS 常量留着：显式 `graph:'h3_2pass_12step_int8.json'` 仍是回退档。
+export function effectiveGraph(graph?: string | null, _lora?: string | null, _hasBed?: boolean): string {
+  return graph || PROD_GRAPH
+}
+/** native 现在也自带 RIFE 补帧 + RelayVSR ×2，自己就是全程精修 ⇒ 平台后处理（小脸二采 / VSR）必须按关处理，否则叠两遍。 */
+export function isSelfContainedGraph(graph?: string | null, lora?: string | null, hasBed?: boolean): boolean {
+  const g = effectiveGraph(graph, lora, hasBed)
+  return g === PROD_GRAPH || g === PROD_GRAPH_2PASS || g === PROD_GRAPH_3PASS || g === PROD_GRAPH_3PASS_LOCK
+}
 // 2026-10-07 加：以前 `is480` 之外全走 DEFAULT_SIZE，所以选「1080p」和选「720p」出图完全一样（空设置）。
 // 1007 实测完：1920×1080 会被吸到 **1920×1072**（1080 不是 16 的倍数，H3 VAE 空间下采 = 16）= 2.07 MP，
 // 不 OOM 但每条 **117.64 min**（vs 1.22 MP 的 9.94 min = 11.8×）、每像素信息只 1.18–1.39×（13 s 反而 0.96）
@@ -261,6 +304,11 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
 
     const inputDir = toInputDir(config)
     const images = await stageReferenceImages(parseUrlArray(record.referenceImageUrls), inputDir, MAX_IMAGES)
+    // 1107 锁音床：reference_audio 的第一条落到 ComfyUI input/，body 带 `bed` ⇒ 桥把图里
+    // LoadAudio 的文件名换成它（[huobao-1107]）。stageReferenceImages 只是「读字节 → 写 input/」，
+    // 名字带 ref 无所谓，扩展名按 url 取，音频一样用。
+    const audioUrls = parseUrlArray(record.referenceAudioUrls)
+    const bedFile = audioUrls.length ? (await stageReferenceImages([audioUrls[0]], inputDir, 1))[0] : undefined
     // 帧锚走桥的 MiniMaxH3AddGuide（不是 ref 槽）：ref_image_0~8 与 keyframe 在同一个
     // cond_video_latents 里并存（comfy/model_base.py:2188-2196），不互斥。
     const guideFile = record.guideUrl ? (await stageReferenceImages([record.guideUrl], inputDir, 1))[0] : undefined
@@ -284,6 +332,16 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
     // `resolution` 直接是画布（`1728x960`）时绕过所有档位名 —— JZL 节点自己把宽高吸到 32 网格，
     // 所以这里不校验，只透传。加这一条是为了量分辨率档位不用每次改代码（1007）。
     const rawSize = /^\d+x\d+$/.test((record.resolution || '').toLowerCase()) ? (record.resolution as string).toLowerCase() : null
+    const length = framesForDuration(record.duration)
+    // 画布：480p / 1080p 是显式档位；1024×576、1024×768 是老生产画布（不再是选择，跟着一条龙走）；
+    // 其它 `NxM` 仍是显式覆盖（探针/单变量实验用）。
+    const size = is480
+      ? SIZE_480P
+      : record.resolution === '1080p'
+        ? SIZE_1080P
+        : rawSize && !LEGACY_CANVAS.has(rawSize)
+          ? rawSize
+          : oneShotSize(length)
 
     return {
       method: 'POST',
@@ -292,8 +350,8 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
       body: {
         prompt,
         model: (record.model || config.model || 'minimax-h3-ref2v') || 'minimax-h3-ref2v',
-        size: is480 ? SIZE_480P : (rawSize || (record.resolution === '1080p' ? SIZE_1080P : DEFAULT_SIZE)),
-        length: framesForDuration(record.duration),
+        size,
+        length,
         images,
         ref_scale: 2.0,
         upscale: UPSCALE,
@@ -311,15 +369,26 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
         // 是 2885332（10-clip 测试品、底太薄）才需要的补偿；换成数据最多的 Free Pussy 后 20 步够、省 1.45× 时间。
         // 1024 用户「重做…不要lora 1采 20步」⇒ 回 native 单采 20 步、no_lora:true（PDD 撤回）。
         // steps 仍从 LoRA config 取（1023），没挂 LoRA / config 没写 = 默认 20；native 图吃 body steps。
-        steps: record.lora ? (LORA_BY_FILE[record.lora]?.config?.steps ?? 20) : 20,
-        no_lora: true,
+        // 1108 一条龙（用户「必须以目前一条龙的方式 这个是目前测试最好的情况」）：
+        // 不挂分镜 LoRA 的镜 = **turbo 4 步**（桥的节点 2 留着，no_lora 不发）；
+        // 挂分镜 LoRA 的镜沿用 1023/1024 定案：摘掉 4 步 distill（no_lora:true）、按 LoRA config 的步数跑
+        // —— 4 步 distill LoRA 跑 20 步会烂，两个配方不能混。
+        // 1108 晚定案（用户「这次不错 更新文档 接入平台」）：无 LoRA 的一条龙缺省 = **6 步**。
+        // 社区共识：4 步是蒸馏下限，6–8 步明显更好（larryvrh README / HF #20「至少 6 步」）；
+        // 同种子 10 s / 2 图实测：4 步 1187 s → 6 步 1519 s（+28%），
+        // 码率 15.8 → 11.0 Mbps（高频噪点少了），用户判「这次不错」。
+        // 显式 steps 仍最优先（A/B 仪表）；挂分镜 LoRA 的镜按 LoRA config.steps（20 步），不走这条。
+        steps: record.steps ?? (record.lora ? (LORA_BY_FILE[record.lora]?.config?.steps ?? 20) : 6),
+        no_lora: record.lora ? true : undefined,
         first_frame: firstFrameFile,
         last_frame: lastFrameFile,
         // graph:"native" 走桥的 _wf_video_native；no_lora 下模型直吃 UNETLoader，不带任何 LoRA。
         // 1025：`record.graph` 曾在 1018 定案时被写死成 PROD_GRAPH，导致 body 里显式传的 graph 全被吞
         // （和 1017 那个"漏抄 graph"是同一类病，只是这次是硬覆盖）。显式传的优先；不传时按有无 LoRA 分档：
-        // 无 LoRA = PDD 5 步快图（1025 用户「可以」，542 s），有 LoRA = native 20 步（saved 图吃不到 body lora）。
-        graph: record.graph || (record.lora ? PROD_GRAPH : PROD_GRAPH_FAST),
+        // 无 LoRA = 三采链（1101 用户「切」，1011 s / 3072×1728），有 LoRA = native 20 步。
+        graph: effectiveGraph(record.graph, record.lora, Boolean(bedFile)),
+        // 有床就走锁音图（缺省时），桥把 9501 LoadAudio 换成这个文件名
+        bed: bedFile,
         guide: guideFile,
         prev_latent: record.prevLatent || undefined,
         save_name: record.saveName || undefined,
@@ -333,11 +402,13 @@ export class ComfyUIVideoAdapter implements VideoProviderAdapter {
         // 强度：调用方显式传 > 这条 LoRA 的 config.strength（1023 登记表带配置、Free Pussy 1.0）> 1.0
         lora_strength: record.lora ? (record.loraStrength ?? LORA_BY_FILE[record.lora]?.config?.strength ?? 1.0) : undefined,
         // 不传 = 桥里那格整段不出现，图与老行为逐字节一致（和 lora 同一个口径）。
-        // 1016 夜改：`false` 要能真发出去。桥 `__init__.py:1012` 判的是 `b.get("sparse") is False`，
-        // 老写法 `record.sparse ? true : undefined` 把 false 和「没传」混成一谈 ⇒ dense 对照臂永远进不去。
-        // 今晚 18 连卡（GPU 100% @ 42 W、step 0 不动、磁盘读 0、硬缺页 0，而同进程一条 512×384 的
-        // krea2 出图 40 秒跑完 = 机器是好的）⇒ 用 body `sparse:false` 走 dense 对照。
-        sparse: record.sparse ?? undefined,
+        // 1108 用户「好的 停掉。开全注意力」⇒ 缺省拧到 dense：不传 sparse 就是 false（桥不插 Veda，
+        // 走模型原生全注意力），只有显式 `sparse: true` 才回到 Veda 32/32。判据：整幅亮度瞬时 +14%
+        // 在 6 条里 5 条有，RIFE/VSR 两条不同后处理链都有（⇒ 生成侧），且 lag 2/15/30 都没有周期性
+        // （⇒ 不是补帧/超分）；Veda 是唯一随采样步近似注意力的项。
+        // 1016 夜的教训保留：`false` 必须能真发出去（桥判 `b.get("sparse") is False`），
+        // 写法里不能再出现 `record.sparse ? ... : undefined` 那种把 false 和「没传」混成一谈的东西。
+        sparse: record.sparse ?? false,
         seed: record.seed ?? undefined,
       },
     }

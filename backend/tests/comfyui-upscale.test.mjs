@@ -93,7 +93,8 @@ test('adapter：480p 走 SelfLift 864x480（提升靠 latent lift，不叠 Flash
   // 1080p 这一档本机**还没实测过能不能吃下**（1.22 MP 是台账里这台 8G 目前最高画布）；这条断言只锁映射，不锁结论。
   assert.match(adapter, /const SIZE_1080P = '1920x1080'/)
   // 1016 首尾帧：画布不再有 firstFrameUrl 例外（首尾帧走 native 的 AddGuide 链，同一条 20 步/去 LoRA）
-  assert.match(adapter, /size: is480 \? SIZE_480P : \(rawSize \|\| \(record\.resolution === '1080p' \? SIZE_1080P : DEFAULT_SIZE\)\)/)
+  // 1108 一条龙：480p / 1080p 仍是显式档位；老画布（1024x576/1024x768）不再生效，其余落到 oneShotSize()=0.9 MP。
+  assert.match(adapter, /const size = is480\s*\?\s*SIZE_480P\s*:\s*record\.resolution === '1080p'\s*\?\s*SIZE_1080P\s*:\s*rawSize && !LEGACY_CANVAS\.has\(rawSize\)\s*\?\s*rawSize\s*:\s*oneShotSize\(length\)/)
   assert.match(adapter, /upscale: UPSCALE/)
   // 1008：SelfLift 已下掉（用户定案「720p 直采 → VOSR2 ×2 → 2K」）。回退 = 改回 `!firstFrameFile`。
   assert.match(adapter, /selflift: false,/)
@@ -114,7 +115,8 @@ test('adapter：resolution 可直接写画布；ffmpeg-merge：收尾按源高�
   assert.ok(gen.includes('/^\\d+x\\d+$/.test(value)) return value'), 'generation.ts 没让 resolution 透传画布')
   assert.ok(adapter.includes('const rawSize = /^\\d+x\\d+$/.test('), 'adapter 没读画布直写的 resolution')
   // 1016 首尾帧：画布不再有 firstFrameUrl 例外（首尾帧走 native 的 AddGuide 链，同一条 20 步/去 LoRA）
-  assert.match(adapter, /size: is480 \? SIZE_480P : \(rawSize \|\| \(record\.resolution === '1080p' \? SIZE_1080P : DEFAULT_SIZE\)\)/)
+  // 1108 一条龙：480p / 1080p 仍是显式档位；老画布（1024x576/1024x768）不再生效，其余落到 oneShotSize()=0.9 MP。
+  assert.match(adapter, /const size = is480\s*\?\s*SIZE_480P\s*:\s*record\.resolution === '1080p'\s*\?\s*SIZE_1080P\s*:\s*rawSize && !LEGACY_CANVAS\.has\(rawSize\)\s*\?\s*rawSize\s*:\s*oneShotSize\(length\)/)
   const merge = readFileSync(new URL('../src/services/ffmpeg-merge.ts', import.meta.url), 'utf8')
   assert.match(merge, /feed\.h >= 1000 \? ',gblur=sigma=0\.5,unsharp=5:5:1\.0' : ',unsharp=5:5:1\.0'/)
   // 不传 input_size = 保持源尺寸（与 1008 的行为一致）；传了才预缩 —— 这条不许被默认值偷偷改掉

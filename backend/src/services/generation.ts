@@ -11,7 +11,8 @@ import { extractVideoPoster, extractLastFrame } from '../utils/video-poster.js'
 import { getImageAdapter, getVideoAdapter } from './adapters/registry'
 import { refineVideoFace, wantsFaceRefine } from './adapters/face-refine'
 import { upscaleVideoVSR, wantsUpscale } from './adapters/vsr-upscale'
-import { framesForDuration } from './adapters/comfyui-video'
+import { deflickerVideo } from './video-deflicker'
+import { effectiveGraph, framesForDuration, isSelfContainedGraph, PROD_GRAPH } from './adapters/comfyui-video'
 import type { AIConfig } from './adapters/types'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess, logTaskWarn, redactUrl } from '../utils/task-logger.js'
 
@@ -73,6 +74,8 @@ interface GenerateVideoParams {
   aspectRatio?: string
   resolution?: string
   seed?: number
+  /** 1108 A/B 仪表：显式采样步数，覆盖无 LoRA 的 4 步 / 挂 LoRA 的 config.steps。不传 = 老口径 */
+  steps?: number
   promptExtend?: boolean
   watermark?: boolean
   configId?: number
@@ -159,6 +162,7 @@ export async function generateVideo(params: GenerateVideoParams): Promise<number
     // 统一存为项目内部格式，各适配器再转换为官方大小写与枚举。
     resolution: normalizeStoredVideoResolution(params.resolution),
     seed: params.seed,
+    steps: params.steps,   // 必须进快照：processTask 读 DB params，不进 = 这条从没传过
     promptExtend: params.promptExtend,
     watermark: params.watermark,
     // chain 必须进快照：processTask 读的是 DB 里的 params，不落盘接力就永远不触发（1003 A/B 实测 arm B 只有 3 张参考图）
@@ -305,7 +309,12 @@ async function processTask(id: number, config: AIConfig) {
       }
       // 参考视频/音频文件较大，不适合 dataURL 内联，需解析为公网可访问 URL
       const resolvedReferenceVideoUrls = resolvePublicMediaUrls(params.referenceVideoUrls, 'video')
-      const resolvedReferenceAudioUrls = resolvePublicMediaUrls(params.referenceAudioUrls, 'audio')
+      // 1107 锁音：comfyui 适配器自己会把 static/ 路径读成字节落到 input/，不需要公网地址 ——
+      // 走 resolvePublicMediaUrls 时未配 PUBLIC_BASE_URL 会直接 throw，把本地台词床整条路堵死。
+      const resolvedReferenceAudioUrls = config.provider === 'comfyui'
+        ? Array.from(new Set((Array.isArray(params.referenceAudioUrls) ? params.referenceAudioUrls : [])
+            .map((u) => String(u || '').trim()).filter(Boolean)))
+        : resolvePublicMediaUrls(params.referenceAudioUrls, 'audio')
       const resolvedReferenceFileUrl = resolvePublicMediaUrl(params.referenceFileUrl, 'file')
       const req = await adapter.buildGenerateRequest(config, {
         id: record.id,
@@ -336,6 +345,7 @@ async function processTask(id: number, config: AIConfig) {
         aspectRatio: params.aspectRatio,
         resolution: params.resolution,
         seed: params.seed,
+        steps: params.steps,
         promptExtend: params.promptExtend,
         watermark: params.watermark,
         lora: params.lora,
@@ -597,13 +607,27 @@ async function handleVideoComplete(record: SysTaskRecord, config: AIConfig, vide
   // 显式 `refine:false` 才关（见 face-refine.ts 的 wantsFaceRefine）。
   let finalPath = localPath
   const params = parseTaskParams(record.params)
-  const wantRefine = wantsFaceRefine(record.provider, params)
+  // 1101 三采链（现在的生产默认图）自带 RIFE 补帧 + RTX VSR ×2，再叠平台这两道 = 白跑两遍（小脸二采还要换载）
+  // ⇒ 走这张图时按 `upscale:false` 处理。1109 用户「加上小脸修复」：一条龙（native）的成品是固定口径
+  // 2560×1472@48（1280×736 基帧 → RIFE ×2 → RelayVSR ×2），二采图已改成「取 24fps 基帧 → 修脸 → RIFE ×2
+  // → RelayVSR ×2」自带后处理 ⇒ native 放行 refine，其它自带后处理的图（两采/三采/lock，画布 3072×1728）
+  // 二采图口径对不上，仍按关处理。
+  // 1107 有台词床时适配器缺省走锁音版三采链（同样自带补帧超分），判据要带上它。
+  const hasBed = Array.isArray(params.referenceAudioUrls) && params.referenceAudioUrls.length > 0
+  const nativeChain = effectiveGraph(params.graph, params.lora, hasBed) === PROD_GRAPH
+  const post = record.provider === 'comfyui' && isSelfContainedGraph(params.graph, params.lora, hasBed)
+    ? { ...params, refine: nativeChain ? params.refine : false, upscale: false }
+    : params
+  const wantRefine = wantsFaceRefine(record.provider, post)
   if (wantRefine && record.prompt) {
     const refined = await refineVideoFace({
       config,
       videoLocalPath: localPath,
       prompt: record.prompt,
-      length: framesForDuration(duration ?? params.duration),
+      // 1109：桥的 job JSON 不回 `length`（`_job_json` 只给 id/status/file/url），poll 的 duration 恒为
+      // DEFAULT_LENGTH/24 = 5.17 s ⇒ 用它会算出 124 帧，和一条龙基帧数（294/277…）对不上。
+      // 基帧数 = 适配器提交时的 framesForDuration(record.duration)，这里用同一口径（params.duration）。
+      length: framesForDuration(params.duration ?? duration),
       seed: params.seed ?? undefined,
     })
     if (refined) {
@@ -616,7 +640,7 @@ async function handleVideoComplete(record: SysTaskRecord, config: AIConfig, vide
   // 1025 用户「分辨率能在高点吗」：二采之后走 RTX VSR 硬件 ×2（1024×768 → 2048×1536，294 帧实测 29 s、
   // 跑 1 号卡）。合并端本来就把 1024 拉到 1920×1080（1.875× 双线性），先 ×2 再降采样才有真细节。
   // 失败保留上一版（不阻断任务）；显式 `upscale:false` 才关（同 wantsFaceRefine 的口子）。
-  if (wantsUpscale(record.provider, params)) {
+  if (wantsUpscale(record.provider, post)) {
     const up = await upscaleVideoVSR(finalPath)
     if (up) {
       finalPath = up
@@ -624,6 +648,11 @@ async function handleVideoComplete(record: SysTaskRecord, config: AIConfig, vide
     } else {
       logTaskWarn('VideoTask', 'vsr-upscale-skipped', { id: record.id, base: finalPath })
     }
+  }
+  // 1108 用户「画面有的时候会闪烁」：全局亮度跳变（实测 6 条片子 5 条有，RIFE/VSR 两条不同后处理链
+  // 都有 ⇒ 生成侧的）。交付前压一道时域亮度归一；没有跳变的片子不重编码（检测 1.4 s，重编码 18 s/12 s 片）。
+  if (record.provider === 'comfyui' && await deflickerVideo(finalPath)) {
+    logTaskSuccess('VideoTask', 'deflickered', { id: record.id, localPath: finalPath })
   }
   // 海报帧供列表/封面展示，避免前端为显示首帧缓冲整个视频
   await extractVideoPoster(finalPath)

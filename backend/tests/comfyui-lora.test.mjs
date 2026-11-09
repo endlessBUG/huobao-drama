@@ -54,9 +54,9 @@ test('adapter：body 带 lora / lora_strength，触发词按 key 的口径塞（
   assert.match(adapter, /const prompt = !tr\?\.t \|\| base\.toLowerCase\(\)\.includes\(tr\.t\.toLowerCase\(\)\) \? base : `\$\{tr\.t\} \$\{base\}`/)
   assert.match(adapter, /lora: record\.lora \|\| undefined,/)
   assert.match(adapter, /lora_strength: record\.lora \? \(record\.loraStrength \?\? LORA_BY_FILE\[record\.lora\]\?\.config\?\.strength \?\? 1\.0\) : undefined,/)
-  // 1023 用户「分镜选择 lora 时产出 lora 的配置」⇒ steps 从这条 LoRA 的 config 取；1024 重做回 native
-  // 后默认仍是 20（没挂 LoRA / config 没写 steps = 20）。
-  assert.match(adapter, /steps: record\.lora \? \(LORA_BY_FILE\[record\.lora\]\?\.config\?\.steps \?\? 20\) : 20,/)
+  // 1023 用户「分镜选择 lora 时产出 lora 的配置」⇒ steps 从这条 LoRA 的 config 取；
+  // 无 LoRA 的一条龙 1108 晚起缺省 6 步（社区共识，见 docs/comfyui-h3-configs.md），显式 steps 最优先。
+  assert.match(adapter, /steps: record\.steps \?\? \(record\.lora \? \(LORA_BY_FILE\[record\.lora\]\?\.config\?\.steps \?\? 20\) : 6\),/)
 })
 
 // 用户要求「lora 后面要写上 lora 的作用」：登记了就必须有 note，note 走接口到下拉

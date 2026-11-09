@@ -26,13 +26,15 @@ test('后端：sparse 一路传到桥的 body（routes → 快照 → processTas
   assert.match(generation, /sparse: params\.sparse,\s+\/\/ 必须进快照/)
   assert.match(generation, /loraTrigger: params\.loraTrigger,\s*\n\s*sparse: params\.sparse,\s*\n\s*\}\)/)
   assert.match(types, /sparse\?: boolean \| null/)
-  // 1016 夜改：`false` 要能真发出去 ⇒ `record.sparse ? true : undefined`（把 false 和「没传」混成一谈）
-  // 换成 `?? undefined`（`false ?? undefined` = false ⇒ 键照发；没传 = undefined ⇒ JSON.stringify 丢键）
-  assert.match(adapter, /sparse: record\.sparse \?\? undefined/)
+  // 1108 用户「开全注意力」：缺省 = dense ⇒ `?? false`（不传就真发 false，桥不插 Veda）。
+  // 显式 `sparse: true` 仍是唯一回到 Veda 的路。
+  assert.match(adapter, /sparse: record\.sparse \?\? false/)
 })
 
-test('不传 sparse 时 body 里不出现这个键（图与老行为逐字节一致）', () => {
-  // `?? undefined` —— undefined 会被 JSON.stringify 丢掉，不能写成 sparse: false（那会真发 false）
-  assert.match(adapter, /sparse: record\.sparse \?\? undefined/)
-  assert.doesNotMatch(adapter, /sparse: false/)
+test('不传 sparse 时 body 必须带 sparse:false（缺省 dense）', () => {
+  // 反着锁：把 `?? false` 改回 `?? undefined` / `? true : undefined` 都要红 —— 后者是 1016 那种
+  // 「false 和没传混成一谈」的老病，会让「开全注意力」静默失效。
+  assert.match(adapter, /sparse: record\.sparse \?\? false/)
+  assert.doesNotMatch(adapter, /sparse: record\.sparse \?\? undefined/)
+  assert.doesNotMatch(adapter, /record\.sparse \? true : undefined/)
 })

@@ -3,9 +3,9 @@
   "class_type": "VHS_LoadVideoPath",
   "inputs": {
    "video": "__VIDEO__",
-   "force_rate": 0,
-   "custom_width": 0,
-   "custom_height": 0,
+   "force_rate": 24,
+   "custom_width": 1280,
+   "custom_height": 736,
    "frame_load_cap": 0,
    "skip_first_frames": 0,
    "select_every_nth": 1
@@ -58,7 +58,11 @@
  },
  "10": {
   "class_type": "H3InjectVideoLatent",
-  "inputs": { "av_latent": ["9", 1], "images": ["2", 0], "vae": ["4", 0] }
+  "inputs": { "av_latent": ["57", 0], "images": ["2", 0], "vae": ["4", 0] }
+ },
+ "57": {
+  "class_type": "BanZhang_VRAM_Cleaner",
+  "inputs": { "卸载模型": true, "清理缓存": true, "入口": ["9", 1] }
  },
  "12": {
   "class_type": "LoraLoaderModelOnly",
@@ -95,9 +99,9 @@
  "23": {
   "class_type": "VHS_VideoCombine",
   "inputs": {
-   "images": ["22", 0],
+   "images": ["56", 0],
    "audio": ["1", 2],
-   "frame_rate": 24,
+   "frame_rate": 48,
    "loop_count": 0,
    "filename_prefix": "huobao_facerefine",
    "format": "video/h264-mp4",
@@ -123,5 +127,47 @@
   }
  },
  "108": { "class_type": "UNETLoader", "inputs": { "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors", "weight_dtype": "default" } },
- "109": { "class_type": "CLIPLoader", "inputs": { "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", "type": "minimax", "device": "default" } }
+ "109": { "class_type": "CLIPLoader", "inputs": { "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", "type": "minimax", "device": "default" } },
+
+ "60": {
+  "class_type": "CreateVideo",
+  "inputs": { "images": ["22", 0], "audio": ["1", 2], "fps": 24.0 }
+ },
+ "50": {
+  "class_type": "BanZhang_RIFE_Interpolation",
+  "inputs": {
+   "视频": ["60", 0],
+   "插帧倍数": 2,
+   "计算精度": "半精度(快,推荐)",
+   "保留原音": "关",
+   "插帧引擎": "RIFE｜快·省显存（默认）",
+   "RIFE模型版本": "v4.26｜最新·画质最佳（推荐）"
+  }
+ },
+ "51": { "class_type": "GetVideoComponents", "inputs": { "video": ["50", 0] } },
+ "52": {
+  "class_type": "UNETLoader",
+  "inputs": { "unet_name": "relayvsr_x2_lightx2v_int8_convrot.safetensors", "weight_dtype": "default" }
+ },
+ "53": { "class_type": "RelayVSRConditioning", "inputs": { "model": ["52", 0], "images": ["51", 0] } },
+ "54": {
+  "class_type": "KSampler",
+  "inputs": {
+   "model": ["52", 0],
+   "positive": ["53", 0],
+   "negative": ["53", 0],
+   "latent_image": ["53", 1],
+   "seed": 0,
+   "steps": 1,
+   "cfg": 1.0,
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "denoise": 1.0
+  }
+ },
+ "55": { "class_type": "VAELoader", "inputs": { "vae_name": "relayvsr_flash_vae_x2_fp32.safetensors" } },
+ "56": {
+  "class_type": "VSRDecode",
+  "inputs": { "vae": ["55", 0], "samples": ["54", 0], "images": ["51", 0], "detail": 0.4 }
+ }
 }

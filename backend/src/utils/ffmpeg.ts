@@ -32,7 +32,8 @@ const ffprobePath = process.env.FFPROBE_BIN || resolveStatic('ffprobe-static')
 if (ffmpegPath) ffmpeg.setFfmpegPath(ffmpegPath)
 if (ffprobePath) ffmpeg.setFfprobePath(ffprobePath)
 
-export { ffmpeg }
+// ffmpegPath 一并导出：deflicker 要直接 spawn（fluent-ffmpeg 拿不到 metadata=print 的 stdout）。
+export { ffmpeg, ffmpegPath }
 
 /** spawn 一次 -version 验证二进制真实可执行（含同步 EFTYPE 兜底） */
 function probeBinary(binPath: string | null): Promise<boolean> {

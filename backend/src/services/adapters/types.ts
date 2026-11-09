@@ -137,6 +137,8 @@ export interface VideoGenerationRecord {
   aspectRatio?: string | null
   resolution?: string | null
   seed?: number | null
+  /** 1108 A/B 仪表：显式采样步数（不传 = 无 LoRA 4 步 / 挂 LoRA 按 config） */
+  steps?: number | null
   promptExtend?: number | boolean | null
   watermark?: number | boolean | null
   // ... 其他字段

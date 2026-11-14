@@ -13,6 +13,15 @@ CLAUDE.md 里只留一条引用，细节在这。
 26:23 → 19:09。回退 = 用 `h3_pika_flex_1shot.pre1114spark.json` 覆盖回去（桥按图名读，无需重启）。
 细节与 A/B 见下面「1114 Spark」节。
 
+**1114 首尾帧修复（用户「首尾帧没生效啊」）**：Pika 图里**一个 `MiniMaxH3AddGuide` 都没有**，而桥的
+`_wf_saved` 只认图里的 AddGuide 节点（`__init__.py:772-784`）⇒ 1113 切 Pika 后，`chain` 抽出的上一镜
+末帧作为 `first_frame` 传进 body 被**静默丢弃**（不报错、图照跑）。修法：图里加 303 `LoadImage` +
+304 `MiniMaxH3AddGuide`（`positive:["136",0]` / `vae:["119",0]` / `latent:["136",1]` / `frame_idx:0`），
+302 `BanZhang_VRAM_Cleaner.入口` 从 `["136",0]` 改接 `["304",0]`。无首帧时桥会把 304/303 摘掉、302 改回
+直连 136 —— 未衔接的镜与旧图逐字节等价。回退 = `h3_pika_flex_1shot.pre1114frame.json` 覆盖回去。
+已用桥自己的 `_wf_saved` 跑过三种情况（无帧摘锚 / 有 first_frame 接上 / 仅 last_frame 摘锚）。只接首帧：
+本图只有 `frame_idx 0` 一条锚，尾帧锚没有来源（管线里 `last_frame_url` 恒空）。
+
 **1109 画布重存**：`H3_R2V_0.9MP_补帧_RelayVSR_一条龙.json` 摘掉 `VedaSparseAttention`（节点 208，开关直连
 BasicScheduler/BasicGuider）、`PrimitiveInt` 步数 4→**6**，现在与平台缺省提交图逐节点同构；旧 4 步 + Veda
 画布另存 `..._4步Veda回退.json`。双纨绔第 1 集已按这条重开（14 镜，task 793–806）。

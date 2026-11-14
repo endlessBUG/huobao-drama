@@ -94,6 +94,11 @@ const PROD_GRAPH_3PASS_LOCK = 'h3_3pass_lock.json'
 // 没有模型放大那一遍、锐度只有 1.659 ⇒ 用户判「对的」即这条。三采链仍是没床的缺省。
 // 精度照 1107 定案保持 int8（1108 用户「不是让你用int8吗」再确认）；nvfp4 只作回退档。
 const PROD_GRAPH_2PASS = 'h3_2pass_12step_int8.json'
+// 1109 用户「pika 接入平台」：Pika Flex 版一条龙（桥 workflows/h3_pika_flex_1shot.json，API 格式）。
+// 与 native 同模型/同参考/同 RIFE×2+RelayVSR×2，只把采样换成 Pika 6 步（自带 LCM sampler + sigma 点，
+// 不挂 turbo LoRA、不叠 Lightning）。**显式 body `graph` 才走**，缺省仍是 native。
+// 画布版（UI 里能打开）见 user/default/workflows/H3_PikaFlex_0.9MP_补帧_RelayVSR_一条龙.json。
+export const PIKA_GRAPH = 'h3_pika_flex_1shot.json'
 /** 缺省走哪张图：显式 graph 优先，其余一律一条龙（桥的 native 图 + RIFE ×2 + RelayVSR ×2）。 */
 // 1108 用户「现在不分块 效果也比班长的好 他的组件可以删掉了，除了补帧的」⇒ 三档（无床无 LoRA /
 // 有 LoRA / 有台词床）全部改指 native：`_wf_video_native` 多了 `fullchain` 尾段（桥 __init__.py:574-604），
@@ -106,6 +111,7 @@ export function effectiveGraph(graph?: string | null, _lora?: string | null, _ha
 export function isSelfContainedGraph(graph?: string | null, lora?: string | null, hasBed?: boolean): boolean {
   const g = effectiveGraph(graph, lora, hasBed)
   return g === PROD_GRAPH || g === PROD_GRAPH_2PASS || g === PROD_GRAPH_3PASS || g === PROD_GRAPH_3PASS_LOCK
+    || g === PIKA_GRAPH
 }
 // 2026-10-07 加：以前 `is480` 之外全走 DEFAULT_SIZE，所以选「1080p」和选「720p」出图完全一样（空设置）。
 // 1007 实测完：1920×1080 会被吸到 **1920×1072**（1080 不是 16 的倍数，H3 VAE 空间下采 = 16）= 2.07 MP，

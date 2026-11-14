@@ -15,6 +15,14 @@ ACTIVE = ('processing', 'pending', 'queued', 'running')
 # 基片结束队列为空，二采立刻开跑（约 13 分钟 ≪ 40），吞吐不变（受 30 分钟巡检节奏约束，约 1 镜/小时）。
 MAX_INFLIGHT = 1
 SLOT_AFTER_SEC = 20 * 60
+# 1109 用户「先关掉小脸修复 接pika试试」：
+#   REFINE=False ⇒ body 带 refine:false，二采整条不跑（wantsFaceRefine 只认显式 false）。
+#   GRAPH ⇒ 显式 body graph 走桥 workflows/h3_pika_flex_1shot.json（Pika 6 步）。
+#   回退：GRAPH='' 即回 native 一条龙；REFINE=True 恢复二采。
+# 1113：切 native 试过一次，用户「撤回去」⇒ 回 Pika。sb2/task 895 已在 native 上跑，留着当对账。
+# 1113 晚 用户「我是说切到 pika」⇒ 生产就用 Pika 图（DiT 本来就是 nvfp4，11.9 GB，步时 150 s）。
+GRAPH = 'h3_pika_flex_1shot.json'
+REFINE = False
 
 
 def api(method, path, body=None, timeout=1800):
@@ -197,6 +205,7 @@ def main():
                 'aspect_ratio': '16:9', 'generate_audio': True,
                 'model': 'minimax-h3-ref2v', 'config_id': 3,
                 'reference_image_urls': refs, 'chain': True,
+                'graph': GRAPH or None, 'refine': REFINE,
             }
             try:
                 r = payload(api('POST', '/tasks', body, timeout=120))

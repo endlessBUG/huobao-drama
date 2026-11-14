@@ -6,7 +6,12 @@ CLAUDE.md 里只留一条引用，细节在这。
 
 > **历史已删（1018，用户「删掉所有历史记录 保存当前版本」）**：1012–1018 的旧台账（VOSR2/SeedVR2、X2 半分辨率线、SLA/sol-attn、T8 BlockCache、1015-1017 的差分实验与段长之争等）不在文件里；要翻旧账 `git log -- docs/comfyui-h3-configs.md`。
 
-## 当前最优（2026-11-09）
+## 当前最优（2026-11-14）
+
+**1114 生产口径**：双纨绔出片图 `h3_pika_flex_1shot.json` 已挂 **Spark speed 注意力**（节点 401，
+`speed` / 预热 0 / topk 0.2）：同图 6 步采样 **898.48 → 642.68 s（-28.4%）**，ComfyUI 整条执行
+26:23 → 19:09。回退 = 用 `h3_pika_flex_1shot.pre1114spark.json` 覆盖回去（桥按图名读，无需重启）。
+细节与 A/B 见下面「1114 Spark」节。
 
 **1109 画布重存**：`H3_R2V_0.9MP_补帧_RelayVSR_一条龙.json` 摘掉 `VedaSparseAttention`（节点 208，开关直连
 BasicScheduler/BasicGuider）、`PrimitiveInt` 步数 4→**6**，现在与平台缺省提交图逐节点同构；旧 4 步 + Veda
@@ -37,6 +42,77 @@ BasicScheduler/BasicGuider）、`PrimitiveInt` 步数 4→**6**，现在与平�
 **为什么 supervisor 在飞改 1 条**：ComfyUI 是 FIFO 单队列；第二条基片在跑时二采要排 30+ min，超过
 `face-refine.ts` 的 40 分钟上限 ⇒ 白跑再丢（sb7/sb8 踩过）。队列空出来二采立刻开跑（≈24 min ≪ 40），
 GPU 本来就串行，吞吐不变。
+
+### 1112 Pika 6 步 + nvfp4「能不能常驻」= **判死**（16 GB 装不下权重 + 294 帧激活）
+
+**问**（用户「看看能不能常驻」）：`h3_pika_flex_1shot.json` 换 nvfp4 DiT
+（`minimax_h3_ref2va_pruned_nvfp4.safetensors`）+ `MiniMaxH3ActivationChunkStar7`（节点 49，
+RoPE/MLP/QKV 各 4096 token）+ `HUOBAO_MIN_W_RATIO`，能否把权重常驻在 5060 Ti 上。
+
+**结论：权重本身装得下，但装下之后没有激活空间，两个常驻档都 OOM。**
+
+| 比例 | 预算行 | 载入结果 | 死点 |
+|---|---|---|---|
+| 0.85 | `[LOWVRAM] free=15130.0 min_req=19126.7 budget=12732.8` | `loaded completely; 12732.80 MB usable, 11945.45 MB loaded, full load: True` | `model.py:584 _embed_and_pack → video_patch_proj`：已占 13.68 GiB + 请求 **827.61 MiB** vs 15.90 GiB，CUDA free 0（task 880） |
+| 0.70 | 同上，`budget=10561.6` | `loaded partially; 10561.60 MB usable, 10129.22 MB loaded, 1816.23 MB offloaded` | `comfy_kitchen/backends/cuda/__init__.py:1928 scaled_mm_nvfp4 → torch.empty(m,n)`：已占 12.17 GiB + 请求 **3.35 GiB**；回退 eager 反量化后再炸（13.22 GiB + 3.35 GiB）（task 881） |
+
+⇒ **294f / 0.9 MP 这张图的激活峰值本身 >5 GiB**（nvfp4 matmul 单次输出就要 3.35 GiB），
+16 GB 卡上「nvfp4 权重常驻 + 0.9 MP 长镜」不成立，不是比例没调好。
+
+**两个连带发现（都写进启动脚本注释）**：
+
+- 预算公式是 `max(0, free − min_req, min(free×ratio, free − min_infer))` —— **ratio 只在 `min_req > free`
+  时生效**。首载（`min_req=2355.2`，采样预留还没算）时 `free − min_req` 压过 ratio 帽，0.85 与 0.70 首载
+  完全相同（12.53 GB 常驻 / 2.43 GB 走内存条）。真要压常驻量得抬 `--reserve-vram`，不是调 ratio。
+- 采样前 ComfyUI 会按真实 `min_req=19126.7` **把刚载好的模型踢掉重载一次**（0.85 档：12.53 GB 首载 →
+  GPU 掉到 627 MiB → 重载）。这与图里的 `BanZhang_VRAM_Cleaner` 无关（把它的 `卸载模型` 关掉照样发生），
+  是 `prepare_sampling` 自己的 free_memory 行为；每条 Pika 片白付一次 DiT 载入。
+
+**当前口径**：`HUOBAO_MIN_W_RATIO` 注释回退（= ratio 0，零常驻，即 1108 签核行为），保留 Star7 分块，
+用 task 882 量零常驻下 Pika 的真实耗时，再与 int8 一条龙 294 帧 896 s 对比。
+
+**1114 复测（用户再次要求「当前的 DIT 常驻」）**：1112 之后唯一新变量是 `--use-ck-attention`，用同一图、
+同比例 0.85 复跑（task 916）：DiT 依旧全量上卡
+（`loaded completely; 12732.80 MB usable, 11945.45 MB loaded, full load: True`），随后**死在同一个点**
+`_embed_and_pack → video_patch_proj`：已占 **13.67 GiB + 请求 827.61 MiB vs 15.90 GiB**。
+int8 注意力只砍注意力那部分显存，砍不到输入 patch embedding ⇒ **常驻第三次判死**；
+除非把 patch embed 本身分块，别再复测。
+
+**1114 部分常驻探针（`--reserve-vram 0` + ratio 0.5，task 924）**：不 OOM ——
+`loaded partially; 7544.00 MB usable, 6899.81 MB loaded, 5045.64 MB offloaded, lowvram patches: 126`，
+但**步 1 = 397.41 s**（同图零常驻实测 162/96/91/91/92/150 s）⇒ 慢 3–4 倍。
+原因：126 条 lowvram patch 每步重贴 + 5 GB 权重每步搬，比全量流式（0 patch、路径已优化）还亏。
+**部分常驻也判死**；16 GB 卡上 H3 294f/0.9MP 只有零常驻一条路，别再调 ratio/reserve 试常驻。
+
+### 1114 Spark 注意力接进 Pika（生产；用户「记录这个版本 打进生产」）
+
+**改**：`h3_pika_flex_1shot.json` 插入节点 401 `MiniMaxH3SparkAttentionSM120`，接线
+145(Pika LoRA) → **401** → 49(Star7)→300(PikaFlexSetup)；与旧图 diff 只有两处：新增 401、49 的 model 改指 401，
+其余 26 节点逐字节相同。参数 = 测试通过的那份：`mode=speed`、`warmup_ratio=0`（6 步全程稀疏）、
+`topk_ratio=0.2`、`dense_layers=0`、`min_tokens=12288`、`strict=false`、`dense_backend=inherit`、
+`sparse_scope=target-video`、`producer_chunk=16384`、`chunk_path=none`；Star7 chunk 仍 4096×4。
+旧图备份 `h3_pika_flex_1shot.pre1114spark.json`。
+
+**A/B（双女 12 s，同种子 715589959，唯一变量 = 注意力）**：
+
+| 配置 | 6 步采样 | 单步 | ComfyUI 整条 | 任务 |
+|---|---|---|---|---|
+| 基线 Pika（零常驻） | 898.48 s（14:58） | 147.5–158.4 s | 26:23 | 925（ep6 sb1） |
+| Spark fidelity（20% dense 预热） | 716 s（11:56） | 148/148/107/103/103/103 | — | 913 |
+| **Spark speed（预热 0，生产）** | **642.68 s（10:43）** | **122/106/103/104/105/102** | **19:09** | **926 = `h3_c15ef806`** |
+
+- 控制变量：926/913 同提示词同种子（双女 12 s）；基线的单步时间用 Spark 图内的 dense 预热步（148/148 s）
+  交叉核对，与 925 的 147.5–158.4 s 一致。
+- 脸锐度：fidelity 5.1 vs 基线 4.9（同档）；speed 档用户看过成片后拍板「记录这个版本 打进生产」
+  （成片 `static/videos/2185379f-c7cd-4dfc-bc02-946edea63cec.mp4`）。
+- speed 无 dense 预热，构图类风险靠看片兜底；质量不行改 node 401 `mode=fidelity` + `warmup_ratio=0.2`（=913，仍 -21%）。
+
+**1114 功耗口径（回答「吃满 220 W」）**：采样期 **74–112 W / 75–100% util / 2835 MHz**（1 s 采样），
+后处理（RIFE/VSR）167–190 W；功率上限 220 W 是出厂 180 W 拉上去的，卡**没撞功率墙** ⇒ 采样是带宽/并行度受限，
+不是功率受限，常驻也救不了（上限 ~1 s/步）。chunk 16384 变体（task 928）已测：**633.80 vs 642.68 s，
+-1.4%（步 102–104 s，噪声级）⇒ 生产维持 chunk 4096**，别再往上加。
+
+**回退**：`cp h3_pika_flex_1shot.pre1114spark.json h3_pika_flex_1shot.json`。桥按图名读文件，无需重启。
 
 ### 1108 晚定案：一条龙缺省 **6 步**（用户「这次不错 更新文档 接入平台」）
 

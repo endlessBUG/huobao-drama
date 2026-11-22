@@ -6,7 +6,92 @@ CLAUDE.md 里只留一条引用，细节在这。
 
 > **历史已删（1018，用户「删掉所有历史记录 保存当前版本」）**：1012–1018 的旧台账（VOSR2/SeedVR2、X2 半分辨率线、SLA/sol-attn、T8 BlockCache、1015-1017 的差分实验与段长之争等）不在文件里；要翻旧账 `git log -- docs/comfyui-h3-configs.md`。
 
-## 当前最优（2026-11-14）
+## 当前最优（2026-11-17，Pika 1.99 + latent 直传链；native 1.99 为备选）
+
+**fl2v 首尾帧线（1123，用户「首尾帧是 fl 开头的 DiT」定案）**：图 = 桥 `workflows/h3_fl2v_1shot_solpatch.json`
+（另有去 VSR 的 `…_novsr.json` 供画质对比）。
+
+| 环节 | 值 |
+|---|---|
+| DiT | `minimax_h3_fl2va_pruned_nvfp4`（12.5 GB） |
+| 节点 | `MiniMaxH3ImageToVideo`（first_frame / last_frame 原生槽）；桥 `__init__.py` `[huobao-1123]` 补丁注入首尾帧 |
+| LoRA | `minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16` @1.0；**Pika LoRA 不能混（只训 ref2va）** |
+| 采样 | euler + simple，**4 步**（KSamplerSelect + BasicScheduler） |
+| 注意力/分块 | 保留 `MiniMaxH3MemoryEfficientSolAttentionPatch`（tau1.3/int8_qk/exact_kv）+ Star7 4096 |
+| 画布 | 1888×1056（1.99MP）/ 243 帧 / 10s；图内 RIFE ×2 → 48fps；VSR 出片后 ×2 detail 0.5 → 3776×2112（≈3.9K） |
+| 常驻 | **不可常驻**：12.5GB 权重 + ~15GB 激活 > 16GB；`ratio 0.7` 会炸 `_embed_and_pack/video_patch_proj` ⇒ 零常驻 |
+
+**实测**
+- 2581（1888×1056 / 243 帧 / 4 步 / 无 VSR）：**跑通，35m44s**（17:00:52→17:36:36Z），无 OOM
+- 2586（1920×1088 = 2.088MP，VSR ×2 → 3840×2176）探针在跑；台账 2.09MP 档此前只在 12s/294 帧判过 OOM
+- 提示词：用 `video_prompt_full_ref` 去掉 subject_definitions / retention_analysis，`<Subject N>/<Picture N>` 换成角色名，**保留 overall_soundscape + voice layer（<d> 台词）**；否则语音是乱码（2581 只喂 summary 的教训）
+
+**Pika 1.99 + latent 直传链（1117 用户「固化方案」，S2 起现役）**：图 = 桥 `workflows/h3_pika_flex_1shot_solpatch_noupscale.json`。
+
+| 环节 | 值 |
+|---|---|
+| DiT | `minimax_h3_ref2va_pruned_nvfp4`（11.67 GB） |
+| LoRA | `pika_h3_flex_ref2va_comfy_bf16` @1.0；`MiniMaxH3PikaFlexSetupEXPT8` 自带 6 步 sigma |
+| TE | `qwen3vl_32b_minimax_h3_nvfp4_awq`，CLIPLoader `device: cpu` |
+| 注意力 | `MiniMaxH3MemoryEfficientSolAttentionPatch`（tau 1.3 / int8_qk / exact_kv）；**旧 `SolAttnMiniMax` 在 1.99 退化 dense、多 ~2 GB，1196 因此 OOM** |
+| 激活分块 | Star7 `chunk_tokens=4096`；不接 `MiniMaxH3ChunkFeedForward` |
+| 画布 | **1888×1056（1.99 MP）**，243 帧 = 10 s；RIFE ×2 → 48 fps；VSR 出片后单独跑（detail 0.5） |
+| 衔接 | **latent 直传**：`prev_latent=sb<prev>` + `save_name=sb<cur>`，`BridgeSeamGuideFromLatent` window=5（见下） |
+
+**实测（1117，同图同参数）**
+
+- 1197（1.99 无锚）：**256.7 s/步**，采样 25:40，整条 38 min
+- 1201（像素锚）：292 s/步、29:14；用户判「太塑料、后面被带偏」⇒ **像素锚判死**
+- 1207（无锚 + 落 latent）：281.7 s/步、28:10，`sb310.pt` 53.9 MB
+- 1209（latent 接缝）：**306.4 s/步**、30:38（S=150335，keyframe 加长序列）；1201/1209 都 1888×1056@48 / 10.1 s
+- 1212（chunk **10240**，无锚）：**296.0 s/步**、29:35（halve 0 次、无 OOM、峰值 15.65 GiB）⇒ 对 4096 的 281.7 s/步 **慢 +5.1%**，**10240 判死，回 4096**
+- **pinned memory A/B（1118）**：去掉 `--disable-pinned-memory` + 内存优先级 1→5，1214 同 latent 接缝配置 **293.5 s/步**（29:21），对 1209 的 306.4 s/步 **快 4.2%**；系统 commit 51.9/167.9 GB 无压力。**用户决定回退**（1118）⇒ 两个启动脚本已加回 `--disable-pinned-memory`，下次重启生效。
+- **1119 进程内退化（实测，非参数）**：同一个 6006 进程（11-18 09:39 启动、参数逐字未变）11-18 全天 sb382–sb391 = **263–323 s/步**；11-19 凌晨 sb406 = 337 → sb407 = **751** → sb408 = **1179 s/步**（同图、同 S≈150k、同 seed 规则）。症状：GPU **100% util 但功率在 34–134 W 来回跳**、磁盘读写 ≈0、VRAM 15.6/16.3 GB，属 1018 记的 cudaMallocAsync 池/WDDM 同族；`DocUpdate.exe`（MasterPDF 更新器）只是叠加噪音，杀掉不回速。
+  **解法 = 重启进程，不改任何参数**：定向 `POST /interrupt {"prompt_id":…}`（只杀自己那条，裸 `/interrupt` 是全局的）+ `_restart_6006_nofd.ps1`，重启后同镜第一步 **326 s/步**（≈1118 的 293–310）。
+  **运维判据：步时 > ~400 s/步 且参数没动 ⇒ 直接重启 6006**；重启代价 ≈ 15 min 冷加载（TE cpu 编码），远小于 2.5× 步时税。
+- **pinned memory 复议（1121，48 GB 内存到位后）**：用户「内存完全足够」⇒ 去掉 `--disable-pinned-memory` 直接重启（两个启动脚本同步改）。换脸重出 6 镜实测（1888×1056 / 243 帧 / 6 步 / latent 链）：sb427 S=143.8k **240–248 s/步**（整单 32:04）、sb428 S=150.5k **275–281**、sb429 S=149.0k **266–269**、sb430 S=149.6k **272–274**；首步含冷加载 409–420。同镜 32 GB 时代 285–370 s/步。**pinned + 48 GB 保留**（1118 的「用户决定回退」作废）。
+- **1121 事故与加固**：sb426 的 VSR 在旧进程里触发 6006 硬崩（`.err` 无 traceback，autostart 23:21:57 自动拉回）⇒ 重出脚本改成「每镜 try/except + VSR 失败先重启 6006 再重试一次 + 渲染失败重试一次」；之后 6 镜全过。
+- **1121 提交 400 的坑**：分镜提示词引用 `<Picture 4>`（道具）但 `storyboard_props` 没绑 → `POST /tasks` 返回 400「提示词引用了 <Picture 4>，但只有 3 张参考图」。已绑 sb431→长刀、sb471/472→青玉扣；待发车镜头用 max(`<Picture N>`) vs 实际 refs 数量对扫一遍可提前发现。
+
+**latent 直传链（1117 接通）**
+
+- 桥节点：`BridgeSaveAVLatent`（采样后把 video+audio latent 存 `output/latents/sb<id>.pt`，约 54 MB）与 `BridgeSeamGuideFromLatent`（读上一段 .pt，尾部 window 帧作 frame 0 关键帧，零 VAE 往返）。
+- `_wf_saved` 参数：`save_name` / `prev_latent` / `seam_window`（默认 5）。给 `prev_latent` 时自动摘像素 AddGuide，**只重连 R2V 第 0 槽（CONDITIONING）**；第 1 槽是 LATENT，误接会让 PikaFlexSetup/Sampler 报 `received_type(CONDITIONING) mismatch input_type(LATENT)`（1208 实测）。
+- 剪枝：`BridgeSaveAVLatent` 必须列入 `_wf_saved` 的终端表，否则被当孤儿剪掉（1206 实测没存成）。
+- window 必须 17m+5（5/22/39）；取 5 帧时无需裁头（0.2 s 重叠）。
+- 平台：`chain:true` + `same_shot` ⇒ Pika 一条龙图**缺省**走 latent（显式 `latent_chain:false` 才回像素锚），只传 `prev_latent`（`sb<prev>`）、不抽像素帧；上一段 .pt 不存在时桥静默退回无锚（日志 `no prev latent … -> skip latent seam`），不报错。
+- 判据：latent 直传逐帧差 **3.58** vs 像素锚 **39.5**（段内正常 3.43）；像素锚把成片末帧的压缩/VAE 质感复制到整条 ⇒ 塑料。
+
+**native 满画布档（备选，用户「画布拉满」「6 步就行」）**：图 = 桥 `workflows/h3_native_1080p.json`。
+
+| 环节 | 值 |
+|---|---|
+| DiT | `minimax_h3_ref2va_pruned_nvfp4`（11.67 GB） |
+| LoRA | `minimax_h3_turbo_v4_step600_ema_noadaln` @0.6（0.58 GB），`BasicScheduler simple` **6 步** |
+| TE | `qwen3vl_32b_minimax_h3_nvfp4_awq`，**CLIPLoader `device: cpu`**（14.96 GB 在内存） |
+| 注意力 | **sol-attn** `MiniMaxH3MemoryEfficientSolAttentionPatch`（tau 1.3 / int8_qk / exact_kv / dense_blocks 空） |
+| 激活分块 | Star7 `chunk_tokens=1024`（QKV/MLP/RoPE/out_proj）；**不接** `MiniMaxH3ChunkFeedForward` |
+| 画布 | **1728×960（1.66 MP）**，243 帧 = **10 s**（链式高度 /16 偶数） |
+| 后处理 | 无图内 VSR；RIFE ×2 → **48 fps**；VSR 按需后处理（对成片，detail **0.5**） |
+| 启动 | `--reserve-vram 0`、`HUOBAO_MIN_W_RATIO=0`（零常驻）、`HUOBAO_PATCH_CHUNK` 不设 |
+
+**实测**：1181（1728×960 / 243 帧 / 6 步 / chunk 4096）**216 s/步**、采样 24 min、显存 14.4 GB，VSR 0.5 → 3456×1920@48；1180（1472×832）146 s/步、整条 28 min；1164（1088）~450 s/步；
+链式 1088 首帧正常（AddGuide）。**12s（294 帧）无论 chunk 512/256、reserve 2 都 OOM**，10s 是上限。
+
+**常驻定案（16 GB 卡）**
+
+1. 1088 **做不到常驻**：权重 11.9 GB + 激活峰值 ~15 GB > 16 GB。零常驻（ratio 0）是唯一能跑模式，日志 `min_req≈32 GB / budget=0 / 0 MB loaded / 11945 MB offloaded` 属正常。
+2. 部分常驻（ratio 0.7）实测留下 10.17 GB 权重后在 `_embed_and_pack` 的 `video_patch_proj` OOM（同 1114 ratio 0.85）——patch 投影是硬墙。
+3. 已给核心打本地补丁 `HUOBAO_PATCH_CHUNK=N`（`comfy/ldm/minimax/model.py` 按行分块投影，数学等价，不设=上游行为），但零常驻下不需要、且没能救回部分常驻；**升级 ComfyUI 要重贴**。
+4. 要真常驻只能回 **0.9 MP**（1344×768）：13.5 GB 在卡 + 1.46 GB offload。
+
+**其他坑**
+
+- 链式画布必须 **1088**：1072/16 = 67 行（奇数），AddGuide 的 patchify 切不开 → `shape … invalid for input of size 192960`。
+- Pika 线 `chunk_tokens=512` 会慢到 **838 s/步**；native 线现用 **1024**（512 时实测 ~250–300 s/步；1024 在有并发转换时 ~450 s/步）。
+- 已删除实验图：`h3_pika_regen96.json`（Open Regenerate 1.33MP，脸漂）、`h3_pika_base24.json`（小脸二采基片）、`h3_pika_1080p.json`（Pika 满画布）。保留 `h3_native_1080p.json`（现役满画布）与 `h3_pika_flex_1shot.json`（0.9MP 回退）。
+
+## 上一版（2026-11-14，Pika 6 步 / 0.9 MP）
 
 **1114 生产口径**：双纨绔出片图 `h3_pika_flex_1shot.json` 已挂 **Spark speed 注意力**（节点 401，
 `speed` / 预热 0 / topk 0.2）：同图 6 步采样 **898.48 → 642.68 s（-28.4%）**，ComfyUI 整条执行
@@ -617,3 +702,19 @@ Flash 解码器补回全部帧。倍数由权重写死（x2），不是参数。
 ⑳ **DiT 精度要不要切回 nvfp4（1108 量完，等用户定）**：同图同参数下 nvfp4 两采比 int8 两采**更锐 −27% 的边缘损失、还快 24%**（748 s vs 922 s；int8 20.97 GB 塞不进 16 GB 要逐层搬运，nvfp4 12.53 GB 可整块常驻）。1107「都用 INT8」当时没有这张对照表。用户 1108 二次确认「不是让你用int8吗」⇒ **保持 int8，不再提议切换**；nvfp4 仅作回退档。（中途曾一次批量换成 nvfp4，用户纠正后已原样回退：49 个文件、回退后 `h3_2pass_12step_int8.json` 与 `_nvfp4.json` 逐字节相同，平台/桥无残留 nvfp4 引用。）
 
 ㉑ **二采要不要换成 RelayVSR ×2（1108 实测跑通，等用户定）**：一采之后 90 s 对 1590 s，快 17×；见上面「1108 RelayVSR ×2 顶替二采」。要接的话改动点在桥的两采图（`h3_2pass_12step_int8(.hdlora).json` 把 391/393 换成 `RelayVSRConditioning`+`KSampler 1步`+`VSRDecode`，后面的 RIFE ×2 → RTX VSR 改 **×1.5**），不是改节点参数。风险 = 一采的坏手坏脸没得修、音频不再重绘 ⇒ 建议先拿一镜真拍两版对比再定。
+
+- **1121 判据修订（v2 长提示词之后）**：步时随序列长度走。实测 4 参考 + 6 千字符提示词 ⇒ S=155.8k、**395 s/步**（Strata 下载已停也如此，非干扰）；3 参考 146–150k ⇒ 240–320 s/步。注意 (S1/S2)² 超线性：155.8/146 → +14%，其余是 4 图前缀。**重启判据改为「步时 >500 s，或 100% util 且功率 34–134 W 来回跳」**；395 s 不再触发重启（1121 已因此白重启两次）。GPU 健康指标：频率 2790–2827/3090 MHz、57 °C、PCIe Gen5 ×8、页错误 0、磁盘 228 KB/s。
+
+- **1121 第二次复现（退化周期比 1119 短）**：#2 在同一进程里 388–407 s/步正常，紧接着 #3 首步 586、第 2 步 >480、功率 104–112 W（满 util）⇒ 同进程 **~1.5–2 h / 2 镜**就开始掉。处置：中断 + 重启 + **runner 改 PERSHOT=1（每镜重启）**，每次多付 ~2–3 min 冷加载，省下 +150–250 s/步 的退化税。判据：>500 s 或功率 34–134 W 抖。
+
+## 1121 首尾帧（fl2v）模式与衔接规则（用户定稿）
+
+**分镜定稿后先批量生成全片关键帧**（首帧/尾帧），整片审过再出视频（省 50+ h 瞎跑）。
+
+**衔接规则（用户 1121 拍板）**：
+- **切镜 cut**：走 fl2v 首尾帧——该镜独立生成 first_frame + last_frame，两个都传。
+- **连续镜 same_shot**：**不传 first_frame**（避免与 latent 双锚打架）；起点用 **latent 直传**（上一镜 `output/latents/sb<prev>.pt` 尾部 window=5），结尾照常生成并传 last_frame。
+
+依据（1117 实测接缝逐帧差）：单帧锚 39.5 / 像素引导 18.9 / **latent 直传 3.58**（段内正常 3.43）。
+
+**实现口径**：H3 原生 `MiniMaxH3ImageToVideo`（`first_frame`/`last_frame`，可选；按 17k+5 网格锚 0 与 frame_count-1）。fl2v 加速 = `minimax_h3_fl2v_turbo_4step_v1.0_768p` 或 `fl2v_lightx2v_turbo_4step`（Pika LoRA 仅 ref2va，是否可跨用见探针 A/B）。

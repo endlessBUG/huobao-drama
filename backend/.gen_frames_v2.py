@@ -48,7 +48,7 @@ def split_prompts(desc):
 def frame_body(sid,prompt_text,refs,frame_type):
     if FRAME_MODEL=='qwen':
         # 1122 用户「qwen 分辨率很差」：显式 1920x1080 + 抬像素预算（qwen 适配器默认缩到 1344x768）
-        return {'type':'image','storyboard_id':sid,'drama_id':7,'prompt':prompt_text,'frame_type':frame_type,'reference_images':refs,'model':'qwen-image-2.1','config_id':9}
+        return {'type':'image','storyboard_id':sid,'drama_id':7,'prompt':prompt_text,'frame_type':frame_type,'reference_images':refs,'model':'qwen-image-2.1','config_id':9,'size':'1888x1056','max_pixels':1888*1056}
     # h3-image：平台只会把参考图当附件；实际走 6008 直连由 .easy_img_runner 处理
     return {'type':'image','storyboard_id':sid,'drama_id':7,'prompt':prompt_text,'frame_type':frame_type,'reference_images':refs,'model':'h3-image','config_id':12}
 def qa_expected(sid):

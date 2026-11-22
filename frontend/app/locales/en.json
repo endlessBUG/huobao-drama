@@ -28,7 +28,10 @@
     "serviceType": {
       "text": "Text",
       "image": "Image",
-      "video": "Video"
+      "video": "Video",
+      "qa": "Keyframe QA",
+      "asset": "Assets",
+      "edit": "Image Edit"
     }
   },
   "layout": {
@@ -289,7 +292,10 @@
       "meta": {
         "text": "Text capabilities: script rewriting, asset extraction, storyboard breaking",
         "image": "Static image generation: characters, scenes and shots",
-        "video": "Direct video generation, Seedance 2.0 by default"
+        "video": "Direct video generation, Seedance 2.0 by default",
+        "qa": "LLM used to review keyframes (default DeepSeek)",
+        "asset": "人物/场景/道具素材的生成模型",
+        "edit": "图片修改（改图）模型"
       }
     },
     "styles": {
@@ -486,7 +492,8 @@
       "continue": "Continue",
       "start": "Start Production",
       "resolution": "Resolution",
-      "lora": "Video LoRA"
+      "lora": "Video LoRA",
+      "qa": "Keyframe QA"
     },
     "model": {
       "defaultWith": "Default · {model}",

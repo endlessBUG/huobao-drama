@@ -1,71 +1,145 @@
 {
   "1": {
     "class_type": "UnetLoaderGGUF",
-    "inputs": { "unet_name": "qwen_image_2.1_turbo_Q4_K_M.gguf" }
+    "inputs": {
+      "unet_name": "qwen_image_2.1_turbo_Q4_K_M.gguf"
+    }
   },
   "2": {
     "class_type": "CLIPLoader",
-    "inputs": { "clip_name": "qwen3vl_8b_int8_convrot.safetensors", "type": "qwen_image" }
+    "inputs": {
+      "clip_name": "qwen3vl_8b_int8_convrot.safetensors",
+      "type": "qwen_image"
+    }
   },
   "3": {
     "class_type": "VAELoader",
-    "inputs": { "vae_name": "qwen_image_2.1_vae_bf16.safetensors" }
+    "inputs": {
+      "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+    }
   },
   "10": {
     "class_type": "LoadImage",
-    "inputs": { "image": "" }
+    "inputs": {
+      "image": ""
+    }
   },
   "11": {
     "class_type": "QwenImage21Cache",
-    "inputs": { "model": ["1", 0], "device": "cpu", "dtype": "int8" }
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "device": "cpu",
+      "dtype": "int8"
+    }
   },
   "4": {
     "class_type": "TextEncodeQwenImage21",
     "inputs": {
-      "clip": ["2", 0],
+      "clip": [
+        "2",
+        0
+      ],
       "prompt": "",
       "negative_prompt": "",
-      "vae": ["3", 0],
+      "vae": [
+        "3",
+        0
+      ],
       "resolution": 768,
-      "images.image_1": ["10", 0]
+      "images.image_1": [
+        "10",
+        0
+      ]
     }
   },
   "6": {
     "class_type": "EmptySD3LatentImage",
-    "inputs": { "width": 1344, "height": 768, "batch_size": 1 }
+    "inputs": {
+      "width": 1344,
+      "height": 768,
+      "batch_size": 1
+    }
   },
   "12": {
     "class_type": "RandomNoise",
-    "inputs": { "noise_seed": 8888 }
+    "inputs": {
+      "noise_seed": 8888
+    }
   },
   "13": {
     "class_type": "KSamplerSelect",
-    "inputs": { "sampler_name": "euler" }
+    "inputs": {
+      "sampler_name": "euler"
+    }
   },
   "14": {
     "class_type": "ManualSigmas",
-    "inputs": { "sigmas": "1.0, 0.9375, 0.875, 0.75, 0.5, 0.25, 0.0" }
+    "inputs": {
+      "sigmas": "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0.0"
+    }
   },
   "15": {
     "class_type": "BasicGuider",
-    "inputs": { "model": ["11", 0], "conditioning": ["4", 0] }
+    "inputs": {
+      "model": [
+        "11",
+        0
+      ],
+      "conditioning": [
+        "4",
+        0
+      ]
+    }
   },
   "16": {
     "class_type": "SamplerCustomAdvanced",
     "inputs": {
-      "noise": ["12", 0],
-      "guider": ["15", 0],
-      "sampler": ["13", 0],
-      "sigmas": ["14", 0],
-      "latent_image": ["6", 0]
+      "noise": [
+        "12",
+        0
+      ],
+      "guider": [
+        "15",
+        0
+      ],
+      "sampler": [
+        "13",
+        0
+      ],
+      "sigmas": [
+        "14",
+        0
+      ],
+      "latent_image": [
+        "6",
+        0
+      ]
     }
   },
   "8": {
     "class_type": "VAEDecode",
-    "inputs": { "samples": ["16", 0], "vae": ["3", 0] }
+    "inputs": {
+      "samples": [
+        "16",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
   },
   "9": {
     "class_type": "SaveImage",
-    "inputs": { "filename_prefix": "huobao_qwen_sheet", "images": ["8", 0] }
+    "inputs": {
+      "filename_prefix": "huobao_qwen_sheet",
+      "images": [
+        "8",
+        0
+      ]
+    }
   }
 }

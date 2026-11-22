@@ -4,6 +4,7 @@ import { db, getInsertId, schema } from '../db/index.js'
 import { success, created, badRequest, now } from '../utils/response.js'
 import { toSnakeCase } from '../utils/transform.js'
 import { generateImage } from '../services/generation.js'
+import { getActiveConfigId } from '../services/ai.js'
 import { getDramaStylePrompt } from '../services/style-preset.js'
 import { characterSheetDefaultPrompt } from '../services/character-sheet.js'
 import { logTaskError, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
@@ -99,10 +100,23 @@ app.post('/:id/generate-image', async (c) => {
   // 详情页传来的 prompt 就是框里当前的字（含没保存的草稿）；空串照收 —— 空框 = 用默认（风格 + 骨架）。
   // 只有字段缺席（面板没开）才回落到库里存的
   const stylePrompt = await getDramaStylePrompt(char.dramaId)
+  // 1119 用户「平台接口要默认出三视图」：只补三视图、不动主图（存量角色回填 / 主图不想重出时用）
+  if (body.sheet_only) {
+    if (!char.imageUrl) return badRequest(c, '还没有主图，先生成或上传主图')
+    try {
+      logTaskStart('CharacterSheet', 'sheet-only', { characterId: id, episodeId: ep.id })
+      const genId = await generateImage({ characterId: id, dramaId: char.dramaId, prompt: characterSheetDefaultPrompt(stylePrompt, true), model: body.model, size: CHARACTER_IMAGE_SIZE, configId: body.config_id ?? await getActiveConfigId('asset') ?? ep.imageConfigId ?? undefined, referenceImages: [char.imageUrl], sheetPass: true })
+      logTaskSuccess('CharacterSheet', 'sheet-only', { characterId: id, generationId: genId })
+      return success(c, { image_generation_id: genId })
+    } catch (err: any) {
+      logTaskError('CharacterSheet', 'sheet-only', { characterId: id, error: err.message })
+      return badRequest(c, err.message)
+    }
+  }
   const prompt = characterImagePrompt(stylePrompt, typeof body.prompt === 'string' ? body.prompt : char.finalPrompt, char)
   try {
     logTaskStart('CharacterImage', 'generate', { characterId: id, episodeId: ep.id, dramaId: char.dramaId })
-    const genId = await generateImage({ characterId: id, dramaId: char.dramaId, prompt, model: body.model, size: CHARACTER_IMAGE_SIZE, configId: body.config_id ?? ep.imageConfigId ?? undefined, referenceImages: referenceImageFor(char) })
+    const genId = await generateImage({ characterId: id, dramaId: char.dramaId, prompt, model: body.model, size: CHARACTER_IMAGE_SIZE, configId: body.config_id ?? await getActiveConfigId('asset') ?? ep.imageConfigId ?? undefined, referenceImages: referenceImageFor(char) })
     logTaskSuccess('CharacterImage', 'generate', { characterId: id, generationId: genId })
     return success(c, { image_generation_id: genId })
   } catch (err: any) {
@@ -125,7 +139,7 @@ app.post('/batch-generate-images', async (c) => {
     if (!char) continue
     const prompt = characterImagePrompt(stylePrompt, char.finalPrompt, char)
     try {
-      const genId = await generateImage({ characterId: cid, dramaId: char.dramaId, prompt, model: body.model, size: CHARACTER_IMAGE_SIZE, configId: body.config_id ?? ep.imageConfigId ?? undefined, referenceImages: referenceImageFor(char) })
+      const genId = await generateImage({ characterId: cid, dramaId: char.dramaId, prompt, model: body.model, size: CHARACTER_IMAGE_SIZE, configId: body.config_id ?? await getActiveConfigId('asset') ?? ep.imageConfigId ?? undefined, referenceImages: referenceImageFor(char) })
       results.push(genId)
     } catch {}
   }

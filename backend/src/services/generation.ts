@@ -2,13 +2,19 @@
  * 统一生成任务服务 — 图片/视频生成共用 sys_task 表与同一条生命周期：
  * 创建(processing) → 适配器构建请求 → 同步完成或异步轮询 → 下载落盘 → 回写业务表
  */
+import fs from 'node:fs'
+import path from 'node:path'
+import sharp from 'sharp'
 import { db, getInsertId, schema } from '../db/index.js'
+import { DATA_ROOT } from '../utils/paths.js'
 import { and, eq } from 'drizzle-orm'
 import { getActiveConfig, getConfigById } from './ai.js'
 import { now } from '../utils/response.js'
 import { downloadFile, fetchImageAsCompressedDataUrl, generateImageThumb, readImageAsCompressedDataUrl, saveBase64Image } from '../utils/storage.js'
 import { extractVideoPoster, extractLastFrame } from '../utils/video-poster.js'
 import { getImageAdapter, getVideoAdapter } from './adapters/registry'
+import { getDramaStylePrompt } from './style-preset.js'
+import { characterSheetDefaultPrompt } from './character-sheet.js'
 import { refineVideoFace, wantsFaceRefine } from './adapters/face-refine'
 import { upscaleVideoVSR, wantsUpscale } from './adapters/vsr-upscale'
 import { deflickerVideo } from './video-deflicker'
@@ -33,10 +39,12 @@ const SEAM_WINDOW = 22
 const videoChains = new Map<number, Promise<void>>()
 
 const POLL_PROFILES: Record<TaskType, { attempts: number; intervalMs: number; maxDurationMs: number | null }> = {
-  image: { attempts: 360, intervalMs: 5000, maxDurationMs: null },
+  // 1119：角色三视图是级联出来的，常常排在一条 40 分钟的 H3 视频任务后面 → 30 分钟窗口不够（1252 实际判死过）
+  image: { attempts: 900, intervalMs: 5000, maxDurationMs: null },
   // 243 帧的 SelfLift 实测 47:26（含解码），300 次 × 10s = 50 分钟正好卡在边界上：
   // 任务 128 就是被「polling attempts exhausted」判失败的，而 ComfyUI 那边其实还在跑。
-  video: { attempts: 600, intervalMs: 10_000, maxDurationMs: null },
+  // 1119：内存压缩下单镜可达 90–120 分钟，100 分钟窗口不够（1289/1281 都被误判超时）
+  video: { attempts: 1800, intervalMs: 10_000, maxDurationMs: null },
 }
 
 interface GenerateImageParams {
@@ -52,6 +60,18 @@ interface GenerateImageParams {
   frameType?: string
   configId?: number
   sceneGrid?: boolean
+  /** 1119 技能（招式）资产图：产物写 techniques.image_url */
+  techniqueId?: number
+  /** 1119 三视图补跑单：产物写 sheet_image_url，不再级联下一轮 */
+  sheetPass?: boolean
+  /** 1122：本次图片请求允许的最大像素（服饰图要更大时抬，不传 = provider 默认档） */
+  maxPixels?: number
+  /** 1122 服饰候选：产物写 character_outfits.image_url */
+  outfitId?: number
+  /** 1122 饰品网格：产物写 character_outfits.accessory_image_url */
+  outfitAccessoryId?: number
+  /** 1122 角色×服饰组合三视图：产物写 character_outfits.sheet_image_url */
+  outfitSheetId?: number
 }
 
 interface GenerateVideoParams {
@@ -81,12 +101,18 @@ interface GenerateVideoParams {
   configId?: number
   /** 段间接力：把上一段成片的末帧当额外参考带进本段（见 relayLastFrame） */
   chain?: boolean
+  /** [1117] chain 的衔接方式：true = 段间 latent 直传（零 VAE 往返，图里需 BridgeSaveAVLatent）；不传 = 像素末帧锚 */
+  latentChain?: boolean
   /** 第二层 LoRA 文件名（comfyui 桥专属，空 = 不挂）+ 强度，默认 1.0；loraTrigger=false = 只要权重不碰触发词 */
   lora?: string | null
   loraStrength?: number | null
   loraTrigger?: boolean | null
   /** 桥的块稀疏注意力 sol-attn（comfyui 桥专属，见 adapters/types.ts 的注释：cu130 才有内核、挂 LoRA 出伪影） */
   sparse?: boolean | null
+  /** 1115 去 turbo LoRA（native 裸权重，20 步；用户「换成不要lora 1采20步」那档的单变量仪表） */
+  noLora?: boolean | null
+  /** 1119 技能整条流程参考视频：产物写 techniques.video_url */
+  techniqueId?: number
   /** 1024 小脸修复二采：基片生成后再跑一发 ComfyUI-H3-FaceRefine（comfyui 专属，见 adapters/face-refine.ts） */
   refine?: boolean
   /** 1025 分辨率后处理 RTX VSR ×2：默认全开，显式 false 关（见 adapters/vsr-upscale.ts 的 wantsUpscale）。
@@ -111,9 +137,15 @@ export async function generateImage(params: GenerateImageParams): Promise<number
     model: params.model || config.model,
   }, {
     size: params.size || '1920x1080',
+    maxPixels: params.maxPixels,
     frameType: params.frameType,
     referenceImages: params.referenceImages,
     sceneGrid: params.sceneGrid,
+    techniqueId: params.techniqueId,
+    sheetPass: params.sheetPass,
+    outfitId: params.outfitId,
+    outfitAccessoryId: params.outfitAccessoryId,
+    outfitSheetId: params.outfitSheetId,
   })
 
   logTaskStart('ImageTask', 'enqueue', {
@@ -154,6 +186,7 @@ export async function generateVideo(params: GenerateVideoParams): Promise<number
     referenceImageUrls: params.referenceImageUrls,
     referenceVideoUrls: params.referenceVideoUrls,
     referenceAudioUrls: params.referenceAudioUrls,
+    techniqueId: params.techniqueId,
     referenceFileUrl: params.referenceFileUrl,
     referenceLinkUrl: params.referenceLinkUrl,
     generateAudio: params.generateAudio === false ? 0 : 1,
@@ -167,10 +200,13 @@ export async function generateVideo(params: GenerateVideoParams): Promise<number
     watermark: params.watermark,
     // chain 必须进快照：processTask 读的是 DB 里的 params，不落盘接力就永远不触发（1003 A/B 实测 arm B 只有 3 张参考图）
     chain: params.chain,
+    // [1117] latent 衔接开关也要进快照（processTask 读 DB）
+    latentChain: params.latentChain,
     lora: params.lora,
     loraStrength: params.loraStrength,
     loraTrigger: params.loraTrigger,
     sparse: params.sparse,   // 必须进快照：processTask 读的是 DB 里的 params，不进就等于从没传过
+    noLora: params.noLora,   // 同上：no_lora 必须进快照，否则 processTask 读不到
     refine: params.refine,   // 小脸修复二采开关：handleVideoComplete 读 DB params.refine 决定是否跑二采
     upscale: params.upscale, // VSR ×2 开关（同上，读 DB params.upscale）
   })
@@ -272,6 +308,7 @@ async function processTask(id: number, config: AIConfig) {
         model: record.model,
         prompt: record.prompt,
         size: params.size,
+        maxPixels: params.maxPixels,
         frameType: params.frameType,
         referenceImages: resolvedReferenceImages.length ? JSON.stringify(resolvedReferenceImages) : null,
       })
@@ -292,18 +329,28 @@ async function processTask(id: number, config: AIConfig) {
       if (params.chain) {
         const ctx = await relayContext(record.storyboardId)
         if (ctx?.source && ctx.sameScene && ctx.continuity === 'same_shot') {
-          const lastFrame = await extractLastFrame(ctx.source)
-          if (lastFrame) {
-            // 老 JZL 图只认 keyframe 窗口（guide + 段间 latent）：cond 行永不降噪、每步重注入，
-            // 段首窗口是照搬的，落盘前裁掉。native / saved 图走 AddGuide 首帧，不重复窗口、不裁。
-            if (String(params.graph || '').toLowerCase() === 'jzl') {
-              guideUrl = lastFrame
-              prevLatent = `sb${ctx.prevId}`
-              trimFrames = SEAM_WINDOW
-            } else {
-              firstFrameUrl = lastFrame
+          // [1117] latent 直传：上一段 latent 尾部当 frame 0 关键帧——零 VAE 往返，不经过
+          // 成片解码/压缩，避免像素锚的塑料感。上一段的 latent 由上一条自己 BridgeSaveAVLatent 落盘。
+          // 11-17 用户「固化方案」：Pika 一条龙图缺省就走 latent（显式 latent_chain:false 才回像素锚）；
+          // 上一段没有 .pt（老产物）时桥自己退回无锚，不会报错。
+          const latentDefault = /^h3_pika_flex_1shot.*\.json$/i.test(String(params.graph || ''))
+          if ((params.latentChain ?? latentDefault) && String(params.graph || '').toLowerCase() !== 'jzl') {
+            prevLatent = `sb${ctx.prevId}`
+            prompt = `${prompt}\ncontinuity: [keyframe completion] continue seamlessly from the end of the previous shot; match lighting, colour, camera position and motion.`
+          } else {
+            const lastFrame = await extractLastFrame(ctx.source)
+            if (lastFrame) {
+              // 老 JZL 图只认 keyframe 窗口（guide + 段间 latent）：cond 行永不降噪、每步重注入，
+              // 段首窗口是照搬的，落盘前裁掉。native / saved 图走 AddGuide 首帧，不重复窗口、不裁。
+              if (String(params.graph || '').toLowerCase() === 'jzl') {
+                guideUrl = lastFrame
+                prevLatent = `sb${ctx.prevId}`
+                trimFrames = SEAM_WINDOW
+              } else {
+                firstFrameUrl = lastFrame
+              }
+              prompt = `${prompt}\ncontinuity: [keyframe completion] the first frame is taken from the end of the previous shot; match its lighting, colour and camera position.`
             }
-            prompt = `${prompt}\ncontinuity: [keyframe completion] the first frame is taken from the end of the previous shot; match its lighting, colour and camera position.`
           }
         }
       }
@@ -352,6 +399,7 @@ async function processTask(id: number, config: AIConfig) {
         loraStrength: params.loraStrength,
         loraTrigger: params.loraTrigger,
         sparse: params.sparse,
+        noLora: params.noLora,
       })
       ;({ url, method, headers, body } = req)
     }
@@ -576,6 +624,24 @@ async function handleImageCompleteBase64(record: SysTaskRecord, base64Data: stri
   await writeBackImageAssets(record, localPath)
 }
 
+/** 1119：角色主图落地后默认补一张三视图（qwen 参考图驱动；尺寸与 character-sheet 口径一致 1920x1080） */
+async function enqueueCharacterSheet(record: SysTaskRecord, portraitPath: string) {
+  const cid = record.characterId
+  if (!cid) return
+  const [char] = await db.select().from(schema.characters).where(eq(schema.characters.id, cid))
+  if (!char) return
+  const stylePrompt = await getDramaStylePrompt(char.dramaId).catch(() => '')
+  const genId = await generateImage({
+    characterId: cid,
+    dramaId: char.dramaId,
+    prompt: characterSheetDefaultPrompt(stylePrompt, true),
+    size: '1920x1080',
+    referenceImages: [portraitPath],
+    sheetPass: true,
+  })
+  logTaskStart('CharacterSheet', 'auto', { characterId: cid, generationId: genId })
+}
+
 // 图片完成后回写业务表：分镜(按 frameType)、角色、场景、道具
 async function writeBackImageAssets(record: SysTaskRecord, localPath: string) {
   const params = parseTaskParams(record.params)
@@ -587,7 +653,14 @@ async function writeBackImageAssets(record: SysTaskRecord, localPath: string) {
     await db.update(schema.storyboards).set(sbUpdate).where(eq(schema.storyboards.id, record.storyboardId))
   }
   if (record.characterId) {
-    await db.update(schema.characters).set({ imageUrl: localPath, updatedAt: now() }).where(eq(schema.characters.id, record.characterId))
+    if (params.sheetPass) {
+      // 1119 三视图补跑：只写 sheet_image_url，不再级联（否则无限套娃）
+      await db.update(schema.characters).set({ sheetImageUrl: localPath, updatedAt: now() }).where(eq(schema.characters.id, record.characterId))
+    } else {
+      await db.update(schema.characters).set({ imageUrl: localPath, updatedAt: now() }).where(eq(schema.characters.id, record.characterId))
+      // 1119 用户「平台接口要默认出三视图」：主图落地后自动补一张（参考图 = 刚出的主图；失败不影响主图）
+      await enqueueCharacterSheet(record, localPath).catch((err: any) => logTaskWarn('CharacterSheet', 'auto-skip', { id: record.id, error: String(err?.message || err).slice(0, 160) }))
+    }
   }
   if (record.sceneId) {
     await db.update(schema.scenes).set({
@@ -597,6 +670,51 @@ async function writeBackImageAssets(record: SysTaskRecord, localPath: string) {
   }
   if (record.propId) {
     await db.update(schema.props).set({ imageUrl: localPath, updatedAt: now() }).where(eq(schema.props.id, record.propId))
+  }
+  if (params.techniqueId) {
+    await db.update(schema.techniques).set({ imageUrl: localPath, status: 'ready', updatedAt: now() }).where(eq(schema.techniques.id, Number(params.techniqueId)))
+  }
+  if (params.outfitId) {
+    await db.update(schema.characterOutfits).set({ imageUrl: localPath, status: 'ready', updatedAt: now() }).where(eq(schema.characterOutfits.id, Number(params.outfitId)))
+    await composeOutfitImage(Number(params.outfitId))
+  }
+  if (params.outfitAccessoryId) {
+    await db.update(schema.characterOutfits).set({ accessoryImageUrl: localPath, updatedAt: now() }).where(eq(schema.characterOutfits.id, Number(params.outfitAccessoryId)))
+    await composeOutfitImage(Number(params.outfitAccessoryId))
+  }
+  if (params.outfitSheetId) {
+    await db.update(schema.characterOutfits).set({ sheetImageUrl: localPath, status: 'ready', updatedAt: now() }).where(eq(schema.characterOutfits.id, Number(params.outfitSheetId)))
+  }
+}
+
+/** 1122 服饰长图：上=平铺三视（image_url）、下=饰品网格（accessory_image_url），等宽拼接 → composed_image_url */
+async function composeOutfitImage(outfitId: number) {
+  try {
+    const [o] = await db.select().from(schema.characterOutfits).where(eq(schema.characterOutfits.id, outfitId))
+    if (!o?.imageUrl || !o?.accessoryImageUrl) return
+    const gAbs = path.join(DATA_ROOT, o.imageUrl)
+    const aAbs = path.join(DATA_ROOT, o.accessoryImageUrl)
+    if (!fs.existsSync(gAbs) || !fs.existsSync(aAbs)) return
+    const gMeta = await sharp(gAbs).metadata()
+    const width = gMeta.width || 1920
+    const gHeight = gMeta.height || 1080
+    const accBuf = await sharp(aAbs).resize({ width }).png().toBuffer()
+    const accMeta = await sharp(accBuf).metadata()
+    const composed = await sharp({
+      create: { width, height: gHeight + (accMeta.height || 640), channels: 3, background: '#ffffff' },
+    }).composite([
+      { input: gAbs, top: 0, left: 0 },
+      { input: accBuf, top: gHeight, left: 0 },
+    ]).png().toBuffer()
+    const rel = `static/images/outfit_${outfitId}_${Date.now()}.png`
+    const abs = path.join(DATA_ROOT, rel)
+    fs.mkdirSync(path.dirname(abs), { recursive: true })
+    fs.writeFileSync(abs, composed)
+    // 1122：拼图也要出缩略图，否则列表用 _thumb.webp 会 404（页面图片不显示）
+    await generateImageThumb(rel)
+    await db.update(schema.characterOutfits).set({ composedImageUrl: rel, updatedAt: now() }).where(eq(schema.characterOutfits.id, outfitId))
+  } catch (err: any) {
+    logTaskError('ImageTask', 'outfit-compose', { outfitId, error: String(err?.message || err).slice(0, 160) })
   }
 }
 
@@ -615,8 +733,11 @@ async function handleVideoComplete(record: SysTaskRecord, config: AIConfig, vide
   // 1107 有台词床时适配器缺省走锁音版三采链（同样自带补帧超分），判据要带上它。
   const hasBed = Array.isArray(params.referenceAudioUrls) && params.referenceAudioUrls.length > 0
   const nativeChain = effectiveGraph(params.graph, params.lora, hasBed) === PROD_GRAPH
-  const post = record.provider === 'comfyui' && isSelfContainedGraph(params.graph, params.lora, hasBed)
-    ? { ...params, refine: nativeChain ? params.refine : false, upscale: false }
+  // [1116] Pika 小脸二采：`h3_pika_base24.json` 只出 24fps 0.9MP 基片（不接 VSR/RIFE），
+  // 后续交给 face-refine 图（它自带修脸 + RIFE ×2 + RelayVSR ×2）。判据单列，避免动 native 那条。
+  const pikaBase = String(params.graph || '') === 'h3_pika_base24.json'
+  const post = record.provider === 'comfyui' && (isSelfContainedGraph(params.graph, params.lora, hasBed) || pikaBase)
+    ? { ...params, refine: (nativeChain || pikaBase) ? params.refine : false, upscale: false }
     : params
   const wantRefine = wantsFaceRefine(record.provider, post)
   if (wantRefine && record.prompt) {
@@ -662,6 +783,10 @@ async function handleVideoComplete(record: SysTaskRecord, config: AIConfig, vide
 
   logTaskSuccess('VideoTask', 'downloaded', { id: record.id, localPath: finalPath, storyboardId: record.storyboardId, duration })
 
+  if (params.techniqueId) {
+    // 1119 技能整条流程参考视频：写回 techniques.video_url
+    await db.update(schema.techniques).set({ videoUrl: finalPath, status: 'ready', updatedAt: now() }).where(eq(schema.techniques.id, Number(params.techniqueId)))
+  }
   if (record.storyboardId) {
     // 不要回写 duration：它是**创作意图**，同时是 length 的输入（comfyui-video.ts framesForDuration）。
     // 回写会自锁——生成 5.2s 就把「这条要拍 12s」改成 5.2s，下一轮按 5.2s 算 length，永久锁死 5.2s。
@@ -751,10 +876,13 @@ async function normalizeVideoReferenceUrl(value: string | null | undefined): Pro
   if (raw.startsWith('static/') || raw.startsWith('/static/')) {
     const localPath = raw.startsWith('/static/') ? raw.slice(1) : raw
     try {
+      // 1115 用户「参考图不够高清？」：以前视频参考统一压到 768×768/q68，三视图落到 input/
+      // 只有 768×439、每张脸 ~40–250 px，模型拿不到毛孔/五官细节 —— 这是近景蜡像感的硬顶。
+      // 提到 1536/92：三视图原尺寸（1328×768）不再缩，脸部像素 ×4；本机桥走 data URL，体积无碍。
       return await readImageAsCompressedDataUrl(localPath, {
-        maxWidth: 768,
-        maxHeight: 768,
-        quality: 68,
+        maxWidth: 1536,
+        maxHeight: 1536,
+        quality: 92,
       })
     } catch (err) {
       logTaskWarn('VideoTask', 'reference-read-failed', { path: localPath, error: (err as Error).message })

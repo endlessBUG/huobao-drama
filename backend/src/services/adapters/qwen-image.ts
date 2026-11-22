@@ -73,19 +73,20 @@ function requireNode(graph: Record<string, any>, classType: string): any {
   throw new Error(`qwen-workflow.json 缺 ${classType} 节点——请用 ComfyUI 的 Export (API) 重新导出覆盖`)
 }
 
-/** 入参 WxH 超预算就等比缩到 MAX_PIXELS；非法/过小回落到默认档。边长对齐 16。 */
-function fitSize(size?: string | null): { width: number; height: number } {
+/** 入参 WxH 超预算就等比缩到 maxPixels（缺省 MAX_PIXELS）；非法/过小回落到默认档。边长对齐 16。 */
+function fitSize(size?: string | null, maxPixels?: number | null): { width: number; height: number } {
   const DEFAULT = { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT }
+  const cap = maxPixels && maxPixels > 0 ? Math.floor(maxPixels) : MAX_PIXELS
   const m = /^(\d+)\s*x\s*(\d+)$/.exec((size || '').trim())
   if (!m) return DEFAULT
   const w = Number(m[1])
   const h = Number(m[2])
   if (w < MIN_SIDE || h < MIN_SIDE) return DEFAULT
-  if (w * h <= MAX_PIXELS) return { width: w, height: h }
+  if (w * h <= cap) return { width: w, height: h }
   // 三视图构图是技能钉死的，角色流恒传的 1920x1080 和默认档只差 1.6% 的宽高比零头——
-  // 没必要为这点零头另开一档，直接落回与脚本一致的 1344x768。
-  if (Math.abs(w / h - DEFAULT_WIDTH / DEFAULT_HEIGHT) < 0.05) return DEFAULT
-  const k = Math.sqrt(MAX_PIXELS / (w * h))
+  // 没必要为这点零头另开一档，直接落回与脚本一致的 1344x768（仅默认预算档）。
+  if (cap === MAX_PIXELS && Math.abs(w / h - DEFAULT_WIDTH / DEFAULT_HEIGHT) < 0.05) return DEFAULT
+  const k = Math.sqrt(cap / (w * h))
   return {
     width: Math.max(MIN_SIDE, Math.round((w * k) / 16) * 16),
     height: Math.max(MIN_SIDE, Math.round((h * k) / 16) * 16),
@@ -150,7 +151,7 @@ export class QwenImageAdapter implements ImageProviderAdapter {
     }
 
     requireNode(graph, 'TextEncodeQwenImage21').inputs.prompt = record.prompt || ''
-    const { width, height } = fitSize(record.size)
+    const { width, height } = fitSize(record.size, record.maxPixels)
     const latent = requireNode(graph, 'EmptySD3LatentImage')
     latent.inputs.width = width
     latent.inputs.height = height

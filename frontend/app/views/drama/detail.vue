@@ -231,6 +231,10 @@
                         {{ matHasImage(m) ? t('episode.asset.portraitReady') : (isPending(m) ? t('episode.asset.portraitPending') : t('episode.asset.portraitTodo')) }}
                       </span>
                     </div>
+                    <div v-if="m.sheet_image_url || m.sheetImageUrl" style="display:flex;flex-direction:column;align-items:center;gap:4px">
+                      <img :src="thumbOf(assetSrc({ image_url: m.sheet_image_url || m.sheetImageUrl }))" class="previewable-image" loading="lazy" style="width:104px;border-radius:6px;cursor:zoom-in" @click.stop="openAssetViewer({ kind: '三视图', name: m.name, image_url: m.sheet_image_url || m.sheetImageUrl })" />
+                      <span style="font-size:11px;opacity:.7">三视图</span>
+                    </div>
                     <div class="character-asset-head">
                       <div class="character-title-block">
                         <div class="character-name-row">
@@ -318,8 +322,89 @@
           </template>
         </template>
 
+        <!-- 1119 技能（招式/特效）：与角色/场景/道具并列的一组 -->
+        <template v-if="techniques.length && (assetTab === 'all' || assetTab === 'technique')">
+          <div v-if="assetTab === 'all'" class="asset-group-head">
+            <span class="group-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.6 6.3L21 9l-4.8 4.3L17.6 20 12 16.7 6.4 20l1.4-6.7L3 9l6.4-.7z"/></svg>
+            </span>
+            <span class="group-label">技能</span>
+            <span class="group-count">{{ techniques.length }}</span>
+          </div>
+          <div class="asset-grid">
+            <article v-for="tk in techniques" :key="'tech-' + tk.id" class="card asset-card">
+              <div class="asset-cover wide">
+                <img v-if="tk.image_url" :src="assetSrc({ image_url: tk.image_url })" class="previewable-image" loading="lazy"
+                     @click.stop="openAssetViewer({ kind: '技能', name: tk.name, image_url: tk.image_url })" />
+                <div v-else class="asset-cover-empty">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M12 2l2.6 6.3L21 9l-4.8 4.3L17.6 20 12 16.7 6.4 20l1.4-6.7L3 9l6.4-.7z"/></svg>
+                </div>
+                <span class="asset-cover-badge" :class="tk.image_url ? 'is-ready' : ''">{{ tk.scope === 'global' ? '全局' : '本集' }}</span>
+              </div>
+              <div class="asset-body">
+                <div class="asset-name">{{ tk.name }}</div>
+                <div class="asset-meta dim">{{ tk.kind === 'vfx' ? '特效' : '招式' }}{{ tk.grid ? ' · ' + tk.grid : '' }}</div>
+                <div class="asset-meta dim" :title="tk.summary || ''">{{ tk.summary || '' }}</div>
+              </div>
+            </article>
+          </div>
+        </template>
+
+        <!-- 1122 服饰：全剧角色的服饰（组合三视图优先展示）；生成在剧集页「出本集服饰」/角色详情「服饰柜」 -->
+        <template v-if="outfits.length && (assetTab === 'all' || assetTab === 'outfit')">
+          <div v-if="assetTab === 'all'" class="asset-group-head">
+            <span class="group-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>
+            </span>
+            <span class="group-label">服饰</span>
+            <span class="group-count">{{ outfits.length }}</span>
+          </div>
+          <div class="asset-grid">
+            <article v-for="o in outfits" :key="'outfit-' + o.id" class="card asset-card">
+              <div class="asset-cover wide">
+                <img
+                  v-if="outfitCover(o)"
+                  :src="thumbOf(assetSrc({ image_url: outfitCover(o) }))"
+                  class="previewable-image"
+                  loading="lazy"
+                  @error="thumbFallback($event, assetSrc({ image_url: outfitCover(o) }))"
+                  @click.stop="openAssetViewer({ kind: '服饰', name: o.name, image_url: outfitCover(o) })"
+                />
+                <div v-else class="asset-cover-empty">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>
+                </div>
+                <span class="asset-cover-badge" :class="outfitCover(o) ? 'is-ready' : 'is-pending'">
+                  {{ outfitCover(o) ? '服饰三视图' : o.status === 'processing' ? '出图中' : '无图' }}
+                </span>
+              </div>
+              <div class="asset-body">
+                <div class="prop-name-row">
+                  <span class="asset-name" :title="o.name">{{ o.name }}</span>
+                  <span class="tag">{{ o.char_name || o.charName }}</span>
+                </div>
+                <div class="asset-meta dim" :title="o.summary || ''">{{ o.summary || '' }}</div>
+              </div>
+              <div class="asset-foot">
+                <button class="btn btn-sm" :disabled="outfitBusy.includes(o.id) || !outfitCover(o)" @click.stop="genOutfitSheet(o)">
+                  <span v-if="outfitBusy.includes(o.id)" class="ring-spinner sm"></span>
+                  {{ outfitSheetImg(o) ? '重出组合' : '出组合三视图' }}
+                </button>
+                <button v-if="outfitSheetImg(o)" class="btn btn-ghost btn-sm" @click.stop="openAssetViewer({ kind: '组合三视图', name: o.name, image_url: outfitSheetImg(o) })">看组合</button>
+                <button class="btn btn-ghost btn-sm ml-auto" @click.stop="delOutfit(o)">删除</button>
+              </div>
+            </article>
+          </div>
+        </template>
+        <div v-if="assetTab === 'outfit' && !outfits.length" class="empty-state">
+          <div class="empty-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>
+          </div>
+          <p class="empty-title">还没有服饰</p>
+          <p class="empty-desc">到剧集页 → 素材库 →「出本集服饰」，或在角色详情 →「服饰柜」里给单个角色出候选。</p>
+        </div>
+
         <!-- 筛选某一类但该类暂无素材 -->
-        <div v-if="assetTab !== 'all' && !visibleAssets.length" class="empty-state">
+        <div v-if="assetTab !== 'all' && assetTab !== 'technique' && assetTab !== 'outfit' && !visibleAssets.length" class="empty-state">
           <div class="empty-icon">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
@@ -589,7 +674,7 @@
 import { toast } from 'vue-sonner'
 import { toastError } from '~/composables/useToast'
 import { useI18n } from 'vue-i18n'
-import { api, dramaAPI, episodeAPI, characterAPI, sceneAPI, propAPI, uploadAPI } from '~/composables/useApi'
+import { api, dramaAPI, episodeAPI, characterAPI, sceneAPI, propAPI, techniqueAPI, uploadAPI, outfitAPI, taskAPI } from '~/composables/useApi'
 import BaseSelect from '~/components/BaseSelect.vue'
 import PromptOptimizeButtons from '~/components/PromptOptimizeButtons.vue'
 
@@ -667,6 +752,8 @@ async function setEpisodeStatus(ep, status) {
 async function load() {
   try {
     drama.value = await dramaAPI.get(dramaId)
+    try { techniques.value = await techniqueAPI.list(dramaId) } catch { techniques.value = [] }
+    try { outfits.value = await outfitAPI.listByDrama(dramaId) } catch { outfits.value = [] }
   } catch (e) {
     toastError(e)
   }
@@ -718,11 +805,21 @@ const activeTab = ref('episodes')
 const assetTab = ref('all')
 const assetViewer = ref({ open: false, src: '', title: '' })
 const pendingMaterials = ref(new Set())
+// 1119 技能（招式/特效）：素材库里独立一组，全局+本集都列
+const techniques = ref([])
+// 1122 服饰：全剧角色的服饰（候选图 + 组合三视图），本页只做出三视图/删除，生成入口在剧集页
+const outfits = ref([])
+const outfitBusy = ref([])
+// 服饰资产封面 = 上平铺三视 + 下饰品网格的拼接长图（composed_image_url）；组合三视图只用于出片参考
+const outfitCover = (o) => o?.composed_image_url || o?.composedImageUrl || o?.image_url || o?.imageUrl || o?.sheet_image_url || o?.sheetImageUrl || ''
+const outfitSheetImg = (o) => o?.sheet_image_url || o?.sheetImageUrl || ''
 const assetTabs = computed(() => ([
   { label: t('index.status.all'), value: 'all' },
   { label: t('common.role'), value: 'character' },
   { label: t('common.scene'), value: 'scene' },
   { label: t('common.prop'), value: 'prop' },
+  { label: '技能', value: 'technique' },
+  { label: '服饰', value: 'outfit' },
 ]))
 const KIND_ORDER = { character: 0, scene: 1, prop: 2 }
 
@@ -810,6 +907,38 @@ async function pollMaterial(m) {
   }
   pendingMaterials.value = new Set([...pendingMaterials.value].filter(k => k !== key))
   toast.info(t('detail.mat.genTimeout', { kind: m.kind, name: m.name }))
+}
+
+// 服饰组合三视图：异步图任务，轮询 sys_task 直到落地再重载列表
+async function genOutfitSheet(o) {
+  if (!o?.id || outfitBusy.value.includes(o.id)) return
+  outfitBusy.value.push(o.id)
+  try {
+    const res = await outfitAPI.sheet(o.id)
+    toast.success('组合三视图生成中')
+    const id = res?.image_generation_id
+    for (let i = 0; id && i < 300; i++) {
+      await sleep(4000)
+      const st = await taskAPI.get(id).catch(() => null)
+      if (st?.status === 'completed') break
+      if (st?.status === 'failed') throw new Error(st.error_msg || st.errorMsg || '生成失败')
+    }
+    await load()
+  } catch (e) {
+    toastError(e)
+  } finally {
+    outfitBusy.value = outfitBusy.value.filter(x => x !== o.id)
+  }
+}
+
+async function delOutfit(o) {
+  try {
+    await outfitAPI.del(o.id)
+    await load()
+    toast.success('已删除服饰')
+  } catch (e) {
+    toastError(e)
+  }
 }
 
 function switchToAssets() {

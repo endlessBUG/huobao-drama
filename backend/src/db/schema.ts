@@ -54,6 +54,8 @@ export const characters = sqliteTable('characters', {
   finalPrompt: text('final_prompt'),
   personality: text('personality'),
   imageUrl: text('image_url'),
+  /** 1119 三视图（qwen 参考图驱动、1920x1080 白底）；出片取参考时优先用它，原始图留档 */
+  sheetImageUrl: text('sheet_image_url'),
   referenceImages: text('reference_images'),
   seedValue: text('seed_value'),
   sortOrder: integer('sort_order'),
@@ -264,6 +266,62 @@ export const props = sqliteTable('props', {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
   deletedAt: text('deleted_at'),
+})
+
+// 1119 技能（招式/特效）资产：episodeId 为空 = 全局（剧级）
+export const techniques = sqliteTable('techniques', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  dramaId: integer('drama_id').notNull(),
+  episodeId: integer('episode_id'),
+  name: text('name').notNull(),
+  kind: text('kind'),
+  summary: text('summary'),
+  prompt: text('prompt'),
+  imageUrl: text('image_url'),
+  /** 1119 分解表复杂度：2x2 简单 / 3x3 中等 / 4x4 复杂 */
+  grid: text('grid'),
+  /** 1119 技能整条流程参考视频（释放→收招），出片时当 <Video N> 参考 */
+  videoUrl: text('video_url'),
+  source: text('source'),
+  status: text('status'),
+  sourceVideoUrl: text('source_video_url'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  deletedAt: text('deleted_at'),
+})
+
+/** 1122 服饰柜：一个角色多套服饰（每套=参考图），组合三视图存 sheet_image_url */
+export const characterOutfits = sqliteTable('character_outfits', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  characterId: integer('character_id').notNull(),
+  dramaId: integer('drama_id').notNull(),
+  name: text('name').notNull(),
+  summary: text('summary'),
+  imageUrl: text('image_url'),
+  /** 1122 饰品网格原图（每行最多 3 件）；与 image_url 合成后写 composed_image_url */
+  accessoryImageUrl: text('accessory_image_url'),
+  /** 1122 服饰图 = 上（平铺三视）+ 下（饰品网格）自动拼接的长图；UI 封面读它 */
+  composedImageUrl: text('composed_image_url'),
+  sheetImageUrl: text('sheet_image_url'),
+  prompt: text('prompt'),
+  status: text('status').default('candidate'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  deletedAt: text('deleted_at'),
+})
+
+/** 1122 分镜换装点：某镜某角色用哪套（缺省=继承上一镜） */
+export const storyboardOutfits = sqliteTable('storyboard_outfits', {
+  storyboardId: integer('storyboard_id').notNull(),
+  characterId: integer('character_id').notNull(),
+  outfitId: integer('outfit_id').notNull(),
+  createdAt: text('created_at'),
+})
+
+export const storyboardTechniques = sqliteTable('storyboard_techniques', {
+  storyboardId: integer('storyboard_id').notNull(),
+  techniqueId: integer('technique_id').notNull(),
+  createdAt: text('created_at'),
 })
 
 export const assets = sqliteTable('assets', {

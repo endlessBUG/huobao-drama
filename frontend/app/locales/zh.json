@@ -28,7 +28,10 @@
     "serviceType": {
       "text": "文本",
       "image": "图片",
-      "video": "视频"
+      "video": "视频",
+      "qa": "关键帧检查",
+      "asset": "人物场景",
+      "edit": "图片修改"
     }
   },
   "layout": {
@@ -289,7 +292,10 @@
       "meta": {
         "text": "剧本改写、角色场景提取、分镜拆解等 Agent 文本能力",
         "image": "角色图、场景图与镜头图等静态图像生成",
-        "video": "镜头视频直出生成，默认 Seedance 2.0"
+        "video": "镜头视频直出生成，默认 Seedance 2.0",
+        "qa": "关键帧检查用的大模型（默认 DeepSeek；与文本模型分开配置）",
+        "asset": "人物/场景/道具素材的生成模型",
+        "edit": "图片修改（改图）模型"
       }
     },
     "styles": {
@@ -486,7 +492,8 @@
       "continue": "继续制作",
       "start": "开始制作",
       "resolution": "分辨率",
-      "lora": "视频 LoRA"
+      "lora": "视频 LoRA",
+      "qa": "关键帧检查"
     },
     "model": {
       "defaultWith": "默认 · {model}",

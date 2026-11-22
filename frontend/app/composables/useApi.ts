@@ -43,6 +43,45 @@ export const dramaAPI = {
   del: (id: number) => api.del(`/dramas/${id}`),
 }
 
+export const techniqueAPI = {
+  list: (dramaId: number, episodeId?: number) => api.get(`/techniques?drama_id=${dramaId}${episodeId ? `&episode_id=${episodeId}` : ''}`),
+  create: (data: any) => api.post('/techniques', data),
+  update: (id: number, data: any) => api.put(`/techniques/${id}`, data),
+  del: (id: number) => api.del(`/techniques/${id}`),
+  generate: (id: number) => api.post(`/techniques/${id}/generate`, {}),
+  extract: (episodeId: number) => api.post('/techniques/extract', { episode_id: episodeId }),
+  bind: (id: number, storyboardId: number) => api.post(`/techniques/${id}/bind`, { storyboard_id: storyboardId }),
+  unbind: (id: number, storyboardId: number) => api.post(`/techniques/${id}/unbind`, { storyboard_id: storyboardId }),
+}
+
+/** 视频转技能：multipart 直传（api 封装只走 JSON） */
+export async function uploadTechniqueVideo(file: File, data: { drama_id: number; episode_id?: number; name: string; kind?: string; summary?: string }) {
+  const fd = new FormData()
+  fd.append('file', file)
+  fd.append('drama_id', String(data.drama_id))
+  if (data.episode_id) fd.append('episode_id', String(data.episode_id))
+  fd.append('name', data.name)
+  if (data.kind) fd.append('kind', data.kind)
+  if (data.summary) fd.append('summary', data.summary)
+  const resp = await fetch('/api/v1/techniques/from-video', { method: 'POST', body: fd })
+  const json = await resp.json()
+  if (!resp.ok || (json.code && json.code >= 400)) throw new Error(json.message || `${resp.status}`)
+  return json.data ?? json
+}
+
+// 1122 服饰柜：角色多套服饰 + 每镜换装点（缺省继承上一镜）
+export const outfitAPI = {
+  list: (characterId: number) => api.get(`/outfits?character_id=${characterId}`),
+  listByEpisode: (episodeId: number) => api.get(`/outfits?episode_id=${episodeId}`),
+  listByDrama: (dramaId: number) => api.get(`/outfits?drama_id=${dramaId}`),
+  generate: (characterId: number, count = 3, looks?: string[]) => api.post('/outfits/generate', { character_id: characterId, count, looks }),
+  generateEpisode: (episodeId: number, count = 3) => api.post('/outfits/generate-episode', { episode_id: episodeId, count }),
+  sheet: (id: number) => api.post(`/outfits/${id}/generate-sheet`, {}),
+  bind: (storyboardId: number, characterId: number, outfitId: number | null) => api.post('/outfits/bind', { storyboard_id: storyboardId, character_id: characterId, outfit_id: outfitId }),
+  shot: (storyboardId: number) => api.get(`/outfits/shot?storyboard_id=${storyboardId}`),
+  del: (id: number) => api.del(`/outfits/${id}`),
+}
+
 export const episodeAPI = {
   create: (data: any) => api.post('/episodes', data),
   update: (id: number, data: any) => api.put(`/episodes/${id}`, data),

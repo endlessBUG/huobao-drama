@@ -91,6 +91,8 @@ export interface ImageGenerationRecord {
   model?: string | null
   prompt?: string | null
   size?: string | null
+  /** 1122：本次请求允许的最大像素（不传 = provider 默认档）；服饰图要更大时由调用方抬高 */
+  maxPixels?: number | null
   frameType?: string | null
   referenceImages?: string | null
   // ... 其他字段
@@ -132,6 +134,8 @@ export interface VideoGenerationRecord {
   // 1004 在 cu124 + 1MP/243 帧那档实测是净亏（1080s vs 961s、身份 0.379→0.332），
   // 且上游 issue #16382 = 挂 LoRA + sol-attn 出伪影 —— 我们每条都带 turbo LoRA，所以这条只能当 A/B 仪表，默认关。
   sparse?: boolean | null
+  // 1115 去 turbo LoRA（native 裸权重）。只对无 body lora 的镜生效；steps 缺省按 20。
+  noLora?: boolean | null
   generateAudio?: number | boolean | null
   duration?: number | null
   aspectRatio?: string | null

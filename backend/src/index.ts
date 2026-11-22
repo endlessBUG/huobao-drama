@@ -22,6 +22,9 @@ import agent from './routes/agent.js'
 import merge from './routes/merge.js'
 import skills from './routes/skills.js'
 import props from './routes/props.js'
+import techniques from './routes/techniques.js'
+import outfits from './routes/outfits.js'
+import frames from './routes/frames.js'
 import settings from './routes/settings.js'
 import storage from './routes/storage.js'
 import serverUpdate from './routes/serverUpdate.js'
@@ -70,6 +73,9 @@ api.route('/agent', agent)
 api.route('/merge', merge)
 api.route('/skills', skills)
 api.route('/props', props)
+api.route('/techniques', techniques)
+api.route('/outfits', outfits)
+api.route('/frames', frames)
 api.route('/storage', storage)
 api.route('/settings', settings)
 api.route('/server-update', serverUpdate)
@@ -104,3 +110,4 @@ db.update(schema.sysTask)
   .catch(err => console.error('清理中断任务失败:', err?.message))
 
 serve({ fetch: app.fetch, port })
+

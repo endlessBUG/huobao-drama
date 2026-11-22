@@ -6,7 +6,80 @@ import { generateImage, generateVideo } from '../services/generation.js'
 import { getActiveConfig, getConfigById } from '../services/ai.js'
 import { getDramaStylePrompt } from '../services/style-preset.js'
 import { LORA_REGISTRY } from '../services/adapters/comfyui-video.js'
+import { appendFaceRefs } from '../services/face-refs.js'
+import { resolveOutfitUrl } from '../services/outfits.js'
+import { ensureSingleViewRef } from '../services/outfit-ref.js'
 import { logTaskError, logTaskPayload, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
+
+/** 1122 用户「去掉出衣服和人物融合那步」：app_settings.outfit_refs_enabled='0' 时角色参考回退角色三视图/肖像 */
+async function outfitRefsEnabled(): Promise<boolean> {
+  try {
+    const [row] = await db.select().from(schema.appSettings).where(eq(schema.appSettings.key, 'outfit_refs_enabled'))
+    return String(row?.value ?? '1') !== '0'
+  } catch { return true }
+}
+
+/** 1119 技能分解表写进六段稿：subject_definitions / retention_analysis / detailed_description 各补一条 <Picture N> 绑定 */
+function bindTechniquePictures(prompt: string, bound: Array<{ pic: number; name: string }>) {
+  if (!prompt || !bound.length) return prompt
+  const defs = bound.map(b => `<Subject ${b.pic}> is the ${b.name} effect reference from <Picture ${b.pic}>, showing the full sequence of that technique's energy effect: charge array, released blade-qi / frost blade, impact reaction on ground and air, and aftermath.`).join('\n')
+  const rets = bound.map(b => `<Subject ${b.pic}> (appears in all shots): fully_preserved - the technique's effect shape, color, layering and sequence exactly as supplied by <Picture ${b.pic}>.`).join('\n')
+  const desc = bound.map(b => `Every energy effect in this shot follows the shapes, colors and layering of <Picture ${b.pic}> (${b.name}).`).join(' ')
+  let p = prompt
+  if (p.includes('summary:')) p = p.replace('summary:', defs + '\nsummary:')
+  if (p.includes('retention_analysis:')) p = p.replace('retention_analysis:', 'retention_analysis:\n' + rets)
+  const k = p.indexOf('[Shot 1]')
+  if (k >= 0) p = p.slice(0, k) + desc + '\n' + p.slice(k)
+  else p = p + '\n' + desc
+  // 画风前缀里的「no CGI」会压掉特效：有技能时改成「实拍级别的能量光效」
+  p = p.replace('no CGI, no 3D render, no illustration', 'energy effects rendered as practical in-camera light and particles, photoreal, not cartoonish')
+  return p
+}
+
+/** 1122 帧图绑定：人物→场景→道具→技能（行序），输出 refs 与 <Subject N>/<Picture N> 行。
+ *  UI 与 API 都走这里，参考顺序和 Picture 编号永远一致。 */
+async function frameBindings(storyboardId: number) {
+  const refs: string[] = []
+  const subj: string[] = []
+  const chars = await db.select({ id: schema.storyboardCharacters.characterId })
+    .from(schema.storyboardCharacters)
+    .where(eq(schema.storyboardCharacters.storyboardId, storyboardId))
+  const charNames: string[] = []
+  for (const c of chars) {
+    const [ch] = await db.select().from(schema.characters).where(eq(schema.characters.id, c.id))
+    // 1122 服饰柜：该镜解析到的「角色×服饰」组合三视图优先，否则回落角色三视图/肖像。
+    // 帧图用**单视图裁片**（四视拼版会被 qwen 当构图复制，单人镜变两张脸）。
+    const outfitUrl = (await outfitRefsEnabled()) ? await resolveOutfitUrl(c.id, storyboardId) : null
+    const url = outfitUrl ? (await ensureSingleViewRef(outfitUrl) || outfitUrl) : (ch?.sheetImageUrl || ch?.imageUrl)
+    if (ch && url) { refs.push(url); charNames.push(ch.name); subj.push(`<Subject ${refs.length}> is ${ch.name} from <Picture ${refs.length}>.`) }
+  }
+  const [sb] = await db.select().from(schema.storyboards).where(eq(schema.storyboards.id, storyboardId))
+  if (sb?.sceneId) {
+    const [sc] = await db.select().from(schema.scenes).where(eq(schema.scenes.id, sb.sceneId))
+    const url = sc?.gridImageUrl || sc?.imageUrl
+    if (sc && url) { refs.push(url); subj.push(`<Subject ${refs.length}> is the ${sc.location} scene from <Picture ${refs.length}>.`) }
+  }
+  const props = await db.select({ id: schema.storyboardProps.propId })
+    .from(schema.storyboardProps)
+    .where(eq(schema.storyboardProps.storyboardId, storyboardId))
+  for (const p of props) {
+    const [pr] = await db.select().from(schema.props).where(eq(schema.props.id, p.id))
+    if (pr?.imageUrl) { refs.push(pr.imageUrl); subj.push(`<Subject ${refs.length}> is the ${pr.name} from <Picture ${refs.length}>.`) }
+  }
+  const techs = await db.select({ id: schema.storyboardTechniques.techniqueId })
+    .from(schema.storyboardTechniques)
+    .where(eq(schema.storyboardTechniques.storyboardId, storyboardId))
+  for (const t of techs) {
+    const [tk] = await db.select().from(schema.techniques).where(eq(schema.techniques.id, t.id))
+    if (tk?.imageUrl) { refs.push(tk.imageUrl); subj.push(`<Subject ${refs.length}> is the ${tk.name} effect reference from <Picture ${refs.length}>.`) }
+  }
+  // 1122 用户「为什么有两张人脸」：角色参考是「左脸特写+右三视」的拼版，qwen 会把它当构图复制，
+  // 画面里就出现大头脸+全身/多份同人。补一句人数锚 + 禁止拼贴/多重曝光/重复人物。
+  if (charNames.length) {
+    subj.push(`画面里只有 ${charNames.length} 个人物：${charNames.join('、')}；不要拼贴、不要分屏、不要多重曝光、不要重复出现同一个人。`)
+  }
+  return { refs, subj }
+}
 
 const app = new Hono()
 
@@ -154,6 +227,58 @@ app.post('/', async (c) => {
       }
     }
 
+    // 1115 用户「这个思路集成到平台」：H3 full_ref 自动追加角色方脸特写参考（<Picture N>），
+    // 并把标签写进 subject_definitions / retention_analysis / detailed_description。
+    // 必须在 validateVideoRequest 之前做 —— 校验按最终图片数检查 <Picture N> 越界。
+    if (type === 'video' && videoBody && body.storyboard_id && String(videoBody.prompt || '').includes('subject_definitions:')) {
+      try {
+        const charRows = await db.select({ id: schema.characters.id, imageUrl: schema.characters.imageUrl, sheetImageUrl: schema.characters.sheetImageUrl })
+          .from(schema.storyboardCharacters)
+          .innerJoin(schema.characters, eq(schema.storyboardCharacters.characterId, schema.characters.id))
+          .where(eq(schema.storyboardCharacters.storyboardId, Number(body.storyboard_id)))
+          .orderBy(schema.characters.id)
+        // 1122 服饰柜：该镜解析到的「角色×服饰」组合三视图优先，否则回落角色三视图
+        const chars: Array<typeof charRows[number]> = []
+        const useOutfit = await outfitRefsEnabled()
+        for (const r of charRows) {
+          const outfitUrl = useOutfit ? await resolveOutfitUrl(r.id, Number(body.storyboard_id)) : null
+          const sheet = outfitUrl || r.sheetImageUrl
+          if ((sheet || r.imageUrl) && String(sheet || r.imageUrl).startsWith('static/')) chars.push({ ...r, sheetImageUrl: sheet })
+        }
+        if (chars.length) {
+          // 1119 用户「生成的时候用三视图」：角色那张参考图换成三视图（原始图留档，UI 照旧展示）
+          const refs = (videoBody.reference_image_urls || []).map((u: string) => {
+            const hit = chars.find((r) => r.imageUrl === u)
+            return hit?.sheetImageUrl ? hit.sheetImageUrl : u
+          })
+          videoBody.reference_image_urls = refs
+          // 1119 技能：镜头绑定的分解表进参考图，**并且必须写进提示词的 <Picture N> 绑定** ——
+          // 只在 refs 里塞图、提示词不提 = H3 完全不认（1292 实测：6 张参考、提示词只提 Picture 1-4，技能零效果）
+          try {
+            const techRows = await db.select({ name: schema.techniques.name, imageUrl: schema.techniques.imageUrl })
+              .from(schema.storyboardTechniques)
+              .innerJoin(schema.techniques, eq(schema.storyboardTechniques.techniqueId, schema.techniques.id))
+              .where(eq(schema.storyboardTechniques.storyboardId, Number(body.storyboard_id)))
+            const bound: Array<{ pic: number; name: string }> = []
+            for (const t of techRows) {
+              if (!t.imageUrl || !String(t.imageUrl).startsWith('static/')) continue
+              if (!refs.includes(t.imageUrl)) refs.push(t.imageUrl)
+              bound.push({ pic: refs.indexOf(t.imageUrl) + 1, name: String(t.name || '技能') })
+            }
+            if (bound.length) videoBody.prompt = bindTechniquePictures(videoBody.prompt || '', bound)
+          } catch (err: any) {
+            logTaskError('TaskAPI', 'technique-refs', { storyboardId: body.storyboard_id, error: String(err?.message || err).slice(0, 160) })
+          }
+          videoBody.reference_image_urls = refs
+          const withFaces = await appendFaceRefs(videoBody.prompt || '', refs, chars as any)
+          videoBody.prompt = withFaces.prompt
+          videoBody.reference_image_urls = withFaces.refs
+        }
+      } catch (err: any) {
+        logTaskError('TaskAPI', 'face-refs', { storyboardId: body.storyboard_id, error: String(err?.message || err).slice(0, 200) })
+      }
+    }
+
     if (type === 'video' && videoBody) {
       const effectiveConfig = configId
         ? (await getConfigById(configId)) ?? await getActiveConfig('video')
@@ -177,15 +302,45 @@ app.post('/', async (c) => {
       const dramaId = body.drama_id ?? storyboardDramaId ?? null
       const stylePrompt = await getDramaStylePrompt(dramaId)
       if (stylePrompt) videoPrompt = `${stylePrompt}，\n${videoPrompt}`
+      // 1119 有技能参考时，画风前缀里的「no CGI / no 3D render」会把剑气特效压没 → 换成实拍级能量光效
+      if (String(videoPrompt).includes('effect reference from <Picture')) {
+        videoPrompt = String(videoPrompt).replace('no CGI, no 3D render, no illustration', 'energy effects rendered as practical in-camera light and particles, photoreal, not cartoonish')
+      }
     }
 
     // 1017 分镜首尾帧图：带 `frame_type` 的图片任务也吃项目画风，和上面 video 那条同口径。
     // 角色三视图 / 场景九宫格**不**注入 —— 它们自己的提示词写着「纯白背景、电影质感」，叠画风会打架。
     let imagePrompt = body.prompt
+    let imageRefs: string[] | undefined = body.reference_images
     if (type === 'image' && body.frame_type && String(body.prompt || '').trim()) {
       const dramaId = body.drama_id ?? storyboardDramaId ?? null
       const stylePrompt = await getDramaStylePrompt(dramaId)
-      if (stylePrompt) imagePrompt = `${stylePrompt}，\n${body.prompt}`
+      // 1122 尾帧 = 首帧编辑（社区 FLF2V 口径）：以本镜首帧为唯一参考，
+      // 构图/人物/服装/光线保持不变，只把动作表情改到末态。不再独立文生图（错误率高）。
+      let bound = ''
+      let usedFirstEdit = false
+      if (body.frame_type === 'last_frame' && body.storyboard_id) {
+        const [sbRow] = await db.select().from(schema.storyboards).where(eq(schema.storyboards.id, Number(body.storyboard_id)))
+        if (sbRow?.firstFrameImage) {
+          imageRefs = [sbRow.firstFrameImage]
+          bound = '<Picture 1> 是本镜首帧：严格保持首帧的构图、机位、人物数量与位置、服装、发型、光线与场景不变，只在原人物身上改表情、视线与微小姿态到末态；画面上的人物数量必须与首帧完全一致，不要重复、复制或新增任何人物。'
+          usedFirstEdit = true
+        }
+      }
+      // 其余帧（cut 首帧/无首帧可编辑的尾帧）：参考顺序 = 人物→场景→道具→技能，由后端统一解析
+      if (!usedFirstEdit && body.storyboard_id) {
+        try {
+          const b = await frameBindings(Number(body.storyboard_id))
+          if (b.refs.length) {
+            imageRefs = b.refs
+            bound = b.subj.join(' ') + ' 人物外貌、服装与场景一律照参考图。'
+          }
+        } catch (err: any) {
+          logTaskError('TaskAPI', 'frame-bindings', { storyboardId: body.storyboard_id, error: String(err?.message || err).slice(0, 200) })
+        }
+      }
+      const bodyText = bound + String(body.prompt)
+      imagePrompt = stylePrompt ? `${stylePrompt}，\n${bodyText}` : bodyText
     }
 
     // 1019 用户「视频生成挂key对应的lora」：没显式传 lora、但该分镜有导演写的 lora_key ⇒ 按 key 查登记表挂。
@@ -201,7 +356,9 @@ app.post('/', async (c) => {
         prompt: imagePrompt,
         model: body.model,
         size: body.size,
-        referenceImages: body.reference_images,
+        // 1122 用户「qwen 分辨率很差」：允许调用方抬像素预算（qwen 默认会缩到 1344x768）
+        maxPixels: body.max_pixels ?? body.maxPixels,
+        referenceImages: imageRefs,
         frameType: body.frame_type,
         configId,
       })
@@ -231,10 +388,12 @@ app.post('/', async (c) => {
         promptExtend: videoBody!.prompt_extend,
         watermark: videoBody!.watermark,
         chain: videoBody!.chain,
+        latentChain: videoBody!.latent_chain ?? videoBody!.latentChain, // [1117] 段间 latent 直传
         lora: videoBody!.lora || autoLora?.file,
         loraStrength: videoBody!.lora_strength ?? videoBody!.loraStrength,
         loraTrigger: videoBody!.lora_trigger ?? videoBody!.loraTrigger ?? (autoLora?.concept ? false : undefined),
         sparse: videoBody!.sparse,   // 桥的 sol-attn 开关（A/B 仪表，默认关）
+        noLora: videoBody!.no_lora ?? videoBody!.noLora, // 1115 去 turbo LoRA（native 裸权重 20 步）
         refine: videoBody!.refine,   // 1024 小脸修复二采（comfyui 专属，body 带 refine:true 即开）
         upscale: videoBody!.upscale, // 1025 RTX VSR ×2 默认全开，body `upscale:false` 关（以前没透传 = 关不掉）
         configId,

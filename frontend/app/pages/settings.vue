@@ -834,6 +834,9 @@ const serviceTypes = computed(() => [
   { type: 'text', label: t('common.serviceType.text') },
   { type: 'image', label: t('common.serviceType.image') },
   { type: 'video', label: t('common.serviceType.video') },
+  { type: 'asset', label: t('common.serviceType.asset') },
+  { type: 'edit', label: t('common.serviceType.edit') },
+  { type: 'qa', label: t('common.serviceType.qa') },
 ])
 const providers = ['gemini', 'openai', 'volcengine', 'minimax', 'aliyun', 'comfyui', 'qwen']
 const providerSelectOptions = computed(() => providers.map(p => ({ label: p, value: p })))
@@ -841,6 +844,9 @@ const serviceMeta = computed(() => ({
   text: { label: t('common.serviceType.text'), desc: t('settings.ai.meta.text') },
   image: { label: t('common.serviceType.image'), desc: t('settings.ai.meta.image') },
   video: { label: t('common.serviceType.video'), desc: t('settings.ai.meta.video') },
+  qa: { label: t('common.serviceType.qa'), desc: t('settings.ai.meta.qa') },
+  asset: { label: t('common.serviceType.asset'), desc: t('settings.ai.meta.asset') },
+  edit: { label: t('common.serviceType.edit'), desc: t('settings.ai.meta.edit') },
 }))
 const providerPresets = {
   text: {
@@ -858,6 +864,24 @@ const providerPresets = {
     volcengine: { label: 'Seedance 2.0 官方', baseUrl: 'https://ark.cn-beijing.volces.com', models: ['doubao-seedance-2-0-mini-260615', 'doubao-seedance-2-0-fast-260128', 'doubao-seedance-2-0-260128'] },
     minimax: { label: 'MiniMax H3 官方', baseUrl: 'https://api.minimaxi.com', models: ['MiniMax-H3'] },
     comfyui: { label: '本机 ComfyUI', baseUrl: 'http://127.0.0.1:6006', models: ['minimax-h3-ref2v'] },
+  },
+  // 1122 用户「人物/场景模型 和 图片修改模型」：素材生成与改图各自独立配置
+  asset: {
+    qwen: { label: '本机 ComfyUI · Qwen-Image-2.1', baseUrl: 'http://127.0.0.1:6006', models: ['qwen-image-2.1'] },
+    comfyui: { label: '本机 ComfyUI · MOSS-Image', baseUrl: 'http://127.0.0.1:6006', models: ['moss-image'] },
+    openai: { label: 'OpenAI 官方', baseUrl: 'https://api.openai.com', models: ['gpt-image-2'] },
+    gemini: { label: 'Gemini 官方', baseUrl: 'https://generativelanguage.googleapis.com', models: ['gemini-3-pro-image', 'gemini-3.1-flash-image'] },
+  },
+  edit: {
+    qwen: { label: '本机 ComfyUI · Qwen-Image 编辑台', baseUrl: 'http://127.0.0.1:6006', models: ['qwen-image-2.1'] },
+    comfyui: { label: '本机 ComfyUI · Qwen-Image 编辑台', baseUrl: 'http://127.0.0.1:6006', models: ['qwen-image-2.1'] },
+    openai: { label: 'OpenAI 官方', baseUrl: 'https://api.openai.com', models: ['gpt-image-2'] },
+    gemini: { label: 'Gemini 官方', baseUrl: 'https://generativelanguage.googleapis.com', models: ['gemini-3-pro-image', 'gemini-3.1-flash-image'] },
+  },
+  // 1122 用户「新加一类类型 关键帧检查」：独立的 QA 模型配置，默认 DeepSeek
+  qa: {
+    openai: { label: 'DeepSeek（关键帧检查默认）', baseUrl: 'https://api.deepseek.com', models: ['deepseek-v4-pro', 'deepseek-v4-flash'] },
+    gemini: { label: 'Gemini 官方', baseUrl: 'https://generativelanguage.googleapis.com', models: ['gemini-3.8-flash', 'gemini-3.1-pro-preview'] },
   },
 }
 const huobaoQuickConfigs = [

@@ -59,6 +59,7 @@ export const sqliteSchemaStatements = [
     final_prompt TEXT,
     personality TEXT,
     image_url TEXT,
+    sheet_image_url TEXT,
     reference_images TEXT,
     seed_value TEXT,
     sort_order INTEGER,
@@ -265,6 +266,61 @@ export const sqliteSchemaStatements = [
     updated_at TEXT NOT NULL,
     deleted_at TEXT
   )`,
+
+  `CREATE TABLE IF NOT EXISTS techniques (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    drama_id INTEGER NOT NULL,
+    episode_id INTEGER,
+    name TEXT NOT NULL,
+    kind TEXT,
+    summary TEXT,
+    prompt TEXT,
+    image_url TEXT,
+    grid TEXT,
+    video_url TEXT,
+    source TEXT,
+    status TEXT,
+    source_video_url TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS character_outfits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL,
+    drama_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    summary TEXT,
+    image_url TEXT,
+    accessory_image_url TEXT,
+    composed_image_url TEXT,
+    sheet_image_url TEXT,
+    prompt TEXT,
+    status TEXT DEFAULT 'candidate',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_character_outfits_character_id ON character_outfits (character_id)`,
+
+  `CREATE TABLE IF NOT EXISTS storyboard_outfits (
+    storyboard_id INTEGER NOT NULL,
+    character_id INTEGER NOT NULL,
+    outfit_id INTEGER NOT NULL,
+    created_at TEXT,
+    PRIMARY KEY (storyboard_id, character_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS storyboard_techniques (
+    storyboard_id INTEGER NOT NULL,
+    technique_id INTEGER NOT NULL,
+    created_at TEXT,
+    PRIMARY KEY (storyboard_id, technique_id)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_storyboard_techniques_technique_id ON storyboard_techniques (technique_id)`,
 
   `CREATE TABLE IF NOT EXISTS assets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -479,6 +535,12 @@ export function initSqliteSchema(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, 'storyboards', 'continuity')
   addColumnIfMissing(sqlite, 'scenes', 'grid_prompt')
   addColumnIfMissing(sqlite, 'scenes', 'grid_image_url')
+  addColumnIfMissing(sqlite, 'characters', 'sheet_image_url')
+  addColumnIfMissing(sqlite, 'character_outfits', 'accessory_image_url')
+  addColumnIfMissing(sqlite, 'character_outfits', 'composed_image_url')
+  addColumnIfMissing(sqlite, 'storyboard_techniques', 'created_at')
+  addColumnIfMissing(sqlite, 'techniques', 'video_url')
+  addColumnIfMissing(sqlite, 'techniques', 'grid')
   const insertSeed = sqlite.prepare(SEED_SQL)
   const upgradeSeed = sqlite.prepare(UPGRADE_SQL)
   const removeSeed = sqlite.prepare(REMOVE_SQL)

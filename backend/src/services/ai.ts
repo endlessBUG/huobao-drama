@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm'
 import { logTaskProgress, logTaskWarn } from '../utils/task-logger.js'
 import { joinProviderUrl } from './adapters/url.js'
 
-export type ServiceType = 'text' | 'image' | 'video'
+export type ServiceType = 'text' | 'image' | 'video' | 'qa' | 'asset' | 'edit'
 
 export interface AIConfig {
   provider: string
@@ -32,6 +32,9 @@ export const officialProviders: Record<ServiceType, readonly string[]> = {
   text: ['openai', 'gemini', 'volcengine'],
   image: ['openai', 'gemini', 'volcengine', 'comfyui', 'qwen', 'h3-still'],
   video: ['volcengine', 'minimax', 'aliyun', 'comfyui'],
+  qa: ['openai', 'gemini'],
+  asset: ['qwen', 'comfyui', 'openai', 'gemini'],
+  edit: ['qwen', 'comfyui', 'openai', 'gemini'],
 }
 
 export function isOfficialProvider(serviceType?: string | null, provider?: string | null): boolean {

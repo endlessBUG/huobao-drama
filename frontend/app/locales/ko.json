@@ -28,7 +28,10 @@
     "serviceType": {
       "text": "텍스트",
       "image": "이미지",
-      "video": "영상"
+      "video": "영상",
+      "qa": "키프레임 검사",
+      "asset": "에셋",
+      "edit": "이미지 편집"
     }
   },
   "layout": {
@@ -289,7 +292,10 @@
       "meta": {
         "text": "대본 재작성, 캐릭터·장면 추출, 스토리보드 분해 등 Agent 텍스트 기능",
         "image": "캐릭터 이미지, 장면 이미지, 샷 이미지 등 정지 이미지 생성",
-        "video": "샷 영상 직접 생성(기본 Seedance 2.0)"
+        "video": "샷 영상 직접 생성(기본 Seedance 2.0)",
+        "qa": "키프레임 검사용 LLM (기본 DeepSeek)",
+        "asset": "人物/场景/道具素材的生成模型",
+        "edit": "图片修改（改图）模型"
       }
     },
     "styles": {
@@ -486,7 +492,8 @@
       "continue": "제작 계속",
       "start": "제작 시작",
       "resolution": "해상도",
-      "lora": "영상 LoRA"
+      "lora": "영상 LoRA",
+      "qa": "키프레임 검사"
     },
     "model": {
       "defaultWith": "기본 · {model}",

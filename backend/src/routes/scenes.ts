@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { db, getInsertId, schema } from '../db/index.js'
 import { success, created, badRequest, now } from '../utils/response.js'
 import { generateImage } from '../services/generation.js'
+import { getActiveConfigId } from '../services/ai.js'
 import { getDramaStylePrompt } from '../services/style-preset.js'
 import { ensureSceneFinalPrompt, generateSceneDescription } from '../services/final-prompt.js'
 import { logTaskError, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
@@ -87,7 +88,7 @@ app.post('/:id/generate-image', async (c) => {
   try {
     logTaskStart('SceneImage', 'generate', { sceneId: id, episodeId: ep.id, dramaId: scene.dramaId, location: scene.location })
     await db.update(schema.scenes).set({ status: 'processing', updatedAt: now() }).where(eq(schema.scenes.id, id))
-    const genId = await generateImage({ sceneId: id, dramaId: scene.dramaId, prompt, model: body.model, configId: body.config_id ?? ep.imageConfigId ?? undefined })
+    const genId = await generateImage({ sceneId: id, dramaId: scene.dramaId, prompt, model: body.model, configId: body.config_id ?? await getActiveConfigId('asset') ?? ep.imageConfigId ?? undefined })
     logTaskSuccess('SceneImage', 'generate', { sceneId: id, generationId: genId })
     return success(c, { image_generation_id: genId })
   } catch (err: any) {
@@ -154,7 +155,7 @@ app.post('/:id/generate-grid-image', async (c) => {
       sceneGrid: true,
       referenceImages: referenceImage ? [referenceImage] : undefined,
       model: body.model,
-      configId: body.config_id ?? ep.imageConfigId ?? undefined,
+      configId: body.config_id ?? await getActiveConfigId('asset') ?? ep.imageConfigId ?? undefined,
     })
     logTaskSuccess('SceneImage', 'grid-generate', { sceneId: id, generationId: genId })
     return success(c, { image_generation_id: genId })

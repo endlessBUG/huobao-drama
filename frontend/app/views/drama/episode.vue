@@ -46,6 +46,30 @@
             :show-config="videoModelMultiCfg"
           />
           <ModelSelect
+            v-if="assetModelOptions.length"
+            v-model="assetModel"
+            :label="t('common.serviceType.asset')"
+            :options="assetModelOptions"
+            :default-label="t('episode.model.defaultWith', { model: assetModelOptions[0].model })"
+            :show-config="hasMultiConfigs(assetModelOptions)"
+          />
+          <ModelSelect
+            v-if="editModelOptions.length"
+            v-model="editModel"
+            :label="t('common.serviceType.edit')"
+            :options="editModelOptions"
+            :default-label="t('episode.model.defaultWith', { model: editModelOptions[0].model })"
+            :show-config="hasMultiConfigs(editModelOptions)"
+          />
+          <ModelSelect
+            v-if="qaModelOptions.length"
+            v-model="qaModel"
+            :label="t('episode.topbar.qa')"
+            :options="qaModelOptions"
+            :default-label="t('episode.model.defaultWith', { model: qaModelOptions[0].model })"
+            :show-config="hasMultiConfigs(qaModelOptions)"
+          />
+          <ModelSelect
             v-model="episodeResolution"
             :label="t('episode.topbar.resolution')"
             :options="resolutionOptions"
@@ -309,6 +333,9 @@
             <template v-else>
             <div class="asset-section-title">
               {{ t('common.role') }}
+              <button class="asset-add-btn" :disabled="episodeOutfitsGenerating" @click="genEpisodeOutfits">
+                <Loader2 v-if="episodeOutfitsGenerating" :size="11" class="animate-spin" /> 出本集服饰
+              </button>
               <button class="asset-add-btn" @click="openAssetCreate('character')"><Plus :size="11" /> {{ t('common.add') }}</button>
             </div>
             <template v-if="visualChars.length">
@@ -340,6 +367,14 @@
                       <span class="asset-cover-badge" :class="(c.image_url || c.imageUrl) ? 'is-ready' : (isPendingCharImage(c.id) ? 'is-pending' : '')">
                         {{ (c.image_url || c.imageUrl) ? t('episode.asset.portraitReady') : (isPendingCharImage(c.id) ? t('episode.asset.portraitPending') : t('episode.asset.portraitTodo')) }}
                       </span>
+                      <img
+                        v-if="c.face_image_url"
+                        :src="assetImageSrc({ image_url: c.face_image_url })"
+                        class="character-face-thumb previewable-image"
+                        title="脸特写（自动裁自三视图，视频生成会作为参考图）"
+                        loading="lazy"
+                        @click.stop="openImageViewer(assetImageSrc({ image_url: c.face_image_url }), (c.name || '') + ' · 脸特写')"
+                      />
                     </div>
 
                     <div class="character-asset-head">
@@ -486,6 +521,84 @@
             </div>
             <div v-else class="asset-props-empty">{{ t('episode.asset.propsEmpty') }}</div>
             </template>
+
+            <!-- 技能（招式/特效）：全局 = 全剧复用；本集 = 只服务本集镜头 -->
+            <div class="asset-section-title" style="margin-top:16px">
+              技能
+              <button class="asset-add-btn" @click="extractTechniques">识别本集</button>
+            </div>
+            <div v-if="techItems.length" class="asset-grid">
+              <div v-for="tk in techItems" :key="'tech-' + tk.id" class="card asset-card">
+                <div class="asset-cover wide">
+                  <img v-if="tk.image_url" :src="thumbOf(assetImageSrc({ image_url: tk.image_url }))" class="previewable-image" loading="lazy"
+                       @click.stop="openImageViewer(assetImageSrc({ image_url: tk.image_url }), tk.name + ' · 动作分解表')" />
+                  <div v-else class="asset-cover-empty">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M12 2l2.6 6.3L21 9l-4.8 4.3L17.6 20 12 16.7 6.4 20l1.4-6.7L3 9l6.4-.7z"/></svg>
+                  </div>
+                  <span class="asset-cover-badge" :class="tk.image_url ? 'is-ready' : ''">{{ tk.scope === 'global' ? '全局' : '本集' }}</span>
+                </div>
+                <div class="asset-body">
+                  <div class="prop-name-row">
+                    <span class="asset-name" :title="tk.name">{{ tk.name }}</span>
+                    <span class="tag">{{ tk.kind === 'vfx' ? '特效' : '招式' }}</span>
+                  </div>
+                  <div class="asset-meta dim" :title="tk.summary || ''">{{ tk.summary || '（从分镜识别，待补描述）' }}</div>
+                </div>
+                <div class="asset-foot">
+                  <button class="btn btn-sm" @click.stop="genTechSheet(tk)">{{ tk.image_url ? '重出分解表' : '出动作分解表' }}</button>
+                  <label class="btn btn-sm ml-auto" style="cursor:pointer">
+                    视频转技能
+                    <input type="file" accept="video/*" style="display:none" @change="onTechVideo($event, tk)" />
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div v-else class="asset-props-empty">还没有技能。点「识别本集」从分镜里自动抽，或上传一段视频转成技能。</div>
+
+            <!-- 服饰（1122）：角色 × 服饰；候选图 → 组合三视图，分镜按角色选穿哪套 -->
+            <div class="asset-section-title" style="margin-top:16px">
+              服饰
+              <button class="asset-add-btn" :disabled="episodeOutfitsGenerating" @click="genEpisodeOutfits">
+                <Loader2 v-if="episodeOutfitsGenerating" :size="11" class="animate-spin" /> 出本集服饰
+              </button>
+              <button class="asset-add-btn" @click="loadAllOutfits">刷新</button>
+            </div>
+            <div v-if="allOutfits.length" class="asset-grid">
+              <div v-for="o in allOutfits" :key="'outfit-' + o.id" class="card asset-card">
+                <div class="asset-cover wide">
+                  <img
+                    v-if="outfitCover(o)"
+                    :src="thumbOf(assetImageSrc({ image_url: outfitCover(o) }))"
+                    class="previewable-image"
+                    loading="lazy"
+                    @error="thumbFallback($event, assetImageSrc({ image_url: outfitCover(o) }))"
+                    @click.stop="openImageViewer(assetImageSrc({ image_url: outfitCover(o) }), o.name)"
+                  />
+                  <div v-else class="asset-cover-empty">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>
+                  </div>
+                  <span class="asset-cover-badge" :class="outfitCover(o) ? 'is-ready' : 'is-pending'">
+                    {{ outfitCover(o) ? '服饰三视图' : o.status === 'processing' ? '出图中' : '无图' }}
+                  </span>
+                </div>
+                <div class="asset-body">
+                  <div class="prop-name-row">
+                    <span class="asset-name" :title="o.name">{{ o.name }}</span>
+                    <span class="tag">{{ o.char_name || o.charName }}</span>
+                  </div>
+                  <div class="asset-meta dim" :title="o.summary || ''">{{ o.summary || '' }}</div>
+                </div>
+                <div class="asset-foot">
+                  <button class="btn btn-sm" :disabled="outfitSheetBusy.includes(o.id) || !outfitCover(o)" @click.stop="genOutfitSheet(o)">
+                    <Loader2 v-if="outfitSheetBusy.includes(o.id)" :size="11" class="animate-spin" />
+                    {{ outfitSheetImg(o) ? '重出组合' : '出组合三视图' }}
+                  </button>
+                  <button v-if="outfitSheetImg(o)" class="btn btn-ghost btn-sm" @click.stop="openImageViewer(assetImageSrc({ image_url: outfitSheetImg(o) }), o.name + ' · 组合三视图')">看组合</button>
+                  <button class="btn btn-ghost btn-sm ml-auto" @click.stop="delOutfit(o)">删除</button>
+                </div>
+              </div>
+            </div>
+            <div v-else class="asset-props-empty">还没有服饰。点「出本集服饰」给本集每个角色各出 3 套候选（也可在角色详情里单角色出）。</div>
           </div>
 
           <!-- Sub: Video Production（分镜拆分 + 视频生成 合并） -->
@@ -677,6 +790,20 @@
                         </div>
                       </template>
                       <div v-if="!refBindableAssets.length" class="storyboard-ref-empty">{{ t('episode.ref.empty') }}</div>
+                    </div>
+                  </section>
+
+                  <section v-if="shotOutfitRows.length" class="video-inspector-section">
+                    <div class="video-inspector-prompt-head">
+                      <span class="video-inspector-label">服饰（本镜）</span>
+                      <span class="dim" style="font-size:11px">缺省继承上一镜；出图/出片取「角色×服饰」组合三视图</span>
+                    </div>
+                    <div v-for="row in shotOutfitRows" :key="row.character_id" style="display:flex;align-items:center;gap:8px;margin-top:4px">
+                      <span style="min-width:80px;font-size:12px">{{ row.name }}</span>
+                      <select class="input" style="flex:1" :value="row.bound_outfit_id ?? ''" @change="bindShotOutfit(row, $event.target.value)">
+                        <option value="">继承（{{ row.resolved_name || '角色三视图' }}）</option>
+                        <option v-for="o in row.outfits.filter(x => outfitSheetImg(x))" :key="o.id" :value="o.id">{{ o.name }} · 组合三视图</option>
+                      </select>
                     </div>
                   </section>
                 </div>
@@ -1548,6 +1675,45 @@
               </p>
             </section>
 
+            <!-- 1122 服饰柜：每集先出服饰，分镜按角色决定穿哪套；出图/出片取「角色×服饰」组合三视图 -->
+            <section v-if="assetDetail.type === 'character'" class="asset-detail-prompt-panel">
+              <div class="asset-detail-section-title">
+                <span>服饰柜</span>
+                <div class="asset-detail-prompt-head-actions">
+                  <button class="btn btn-sm" :disabled="outfitsGenerating" @click="genOutfits(3)">
+                    <Loader2 v-if="outfitsGenerating" :size="11" class="animate-spin" /> 出 3 套候选
+                  </button>
+                  <button class="btn btn-sm" :disabled="outfitsGenerating" @click="genOutfits(6)">出 6 套候选</button>
+                  <button class="btn btn-ghost btn-sm" @click="loadCharOutfits()">刷新</button>
+                </div>
+              </div>
+              <div v-if="charOutfits.length" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px">
+                <div v-for="o in charOutfits" :key="o.id">
+                  <button
+                    type="button"
+                    class="storyboard-ref-thumb"
+                    style="width:100%;height:120px"
+                    :disabled="!outfitCover(o)"
+                    @click="openImageViewer(assetImageSrc({ imageUrl: outfitCover(o) }), o.name)"
+                  >
+                    <img v-if="outfitCover(o)" :src="thumbOf(assetImageSrc({ imageUrl: outfitCover(o) }))" class="previewable-image" loading="lazy" @error="thumbFallback($event, assetImageSrc({ imageUrl: outfitCover(o) }))" />
+                    <span v-else>{{ o.status === 'processing' ? '生成中…' : '无图' }}</span>
+                  </button>
+                  <div class="truncate" style="font-size:11px;margin-top:2px" :title="o.name">{{ o.name }}</div>
+                  <div style="display:flex;gap:4px;margin-top:2px">
+                    <button class="btn btn-sm" :disabled="outfitSheetBusy.includes(o.id) || !outfitCover(o)" @click="genOutfitSheet(o)">
+                      {{ outfitSheetImg(o) ? '重出组合' : '出组合三视图' }}
+                    </button>
+                    <button class="btn btn-ghost btn-sm" @click="delOutfit(o)">删</button>
+                  </div>
+                  <span :class="['asset-detail-state', outfitCover(o) && 'is-ready']">
+                    {{ outfitCover(o) ? (outfitSheetImg(o) ? '组合三视图就绪' : '服饰三视图就绪·待出组合') : o.status }}
+                  </span>
+                </div>
+              </div>
+              <p v-else class="asset-detail-prompt-hint">还没有服饰。先出服饰三视图（衣服本身，画面里没有人），再用「角色 + 服饰」出组合三视图；分镜里按角色选穿哪套，缺省继承上一镜。</p>
+            </section>
+
           </div>
 
           <footer class="dialog-foot asset-detail-foot">
@@ -1747,7 +1913,7 @@ import {
   Users, FileText, FolderKanban, Clapperboard, Download, Loader2,
   Plus, X, ListTodo, CircleHelp,
 } from 'lucide-vue-next'
-import { api, dramaAPI, episodeAPI, storyboardAPI, characterAPI, sceneAPI, propAPI, taskAPI, mergeAPI, aiConfigAPI, uploadAPI, comfyuiAPI } from '~/composables/useApi'
+import { api, dramaAPI, episodeAPI, storyboardAPI, characterAPI, sceneAPI, propAPI, techniqueAPI, uploadTechniqueVideo, taskAPI, mergeAPI, aiConfigAPI, uploadAPI, comfyuiAPI, outfitAPI } from '~/composables/useApi'
 import { startTour, autoTour } from '~/composables/useTour'
 import { useAgent } from '~/composables/useAgent'
 import { toastError, mapError, MODERATION_RE } from '~/composables/useToast'
@@ -1762,7 +1928,7 @@ const route = useRoute()
 const dramaId = Number(route.params.id)
 const episodeNumber = Number(route.params.episodeNumber)
 
-const drama = ref(null), episode = ref(null), chars = ref([]), scenes = ref([]), propItems = ref([]), sbs = ref([]), mergeData = ref(null)
+const drama = ref(null), episode = ref(null), chars = ref([]), scenes = ref([]), propItems = ref([]), techItems = ref([]), sbs = ref([]), mergeData = ref(null)
 // 工作台面板位置记忆（按剧集隔离）：仅页面刷新(reload)时恢复到上次所在步骤；
 // 从列表/详情页点击进入时始终默认「剧本」面板
 const PANEL_STORE_KEY = `huobao:workbench:panel:${dramaId}:${episodeNumber}`
@@ -1875,6 +2041,9 @@ const prodTabIdx = computed({
 const imageConfigs = ref([])
 const videoConfigs = ref([])
 const textConfigs = ref([])
+const qaConfigs = ref([])
+const assetConfigs = ref([])
+const editConfigs = ref([])
 // 生成时可选模型：空串 = 跟随配置默认（models[0]）；选择持久化到 localStorage，刷新页面后保留
 const MODEL_STORE_KEYS = { chat: 'huobao:model:chat', image: 'huobao:model:image', video: 'huobao:model:video',
   lora: 'huobao:model:lora', loraStrength: 'huobao:model:lora-strength' }
@@ -2116,6 +2285,8 @@ function openAssetDetail(type, item) {
   }
   assetPromptDraft.value = item.final_prompt || item.finalPrompt || ''
   assetPromptDirty.value = false
+  if (type === 'character') loadCharOutfits()
+  else charOutfits.value = []
 }
 
 function closeAssetDetail() {
@@ -2123,6 +2294,7 @@ function closeAssetDetail() {
   assetDetailDraft.value = { appearance: '', styling: '', prompt: '', lighting: '', description: '' }
   assetPromptDraft.value = ''
   assetPromptDirty.value = false
+  charOutfits.value = []
 }
 
 // ─── 手动新增资产 ────────────────────────────────────────────
@@ -2607,6 +2779,9 @@ function hasMultiConfigs(options) {
 const textModelOptions = computed(() => collectModelOptions(textConfigs.value))
 const imageModelOptions = computed(() => collectModelOptions(imageConfigs.value))
 const videoModelOptions = computed(() => collectModelOptions(videoConfigs.value))
+const qaModelOptions = computed(() => collectModelOptions(qaConfigs.value))
+const assetModelOptions = computed(() => collectModelOptions(assetConfigs.value))
+const editModelOptions = computed(() => collectModelOptions(editConfigs.value))
 const selectedVideoConfig = computed(() => {
   const selected = videoModelOptions.value.find(option => option.key === videoModel.value)
   if (selected) return videoConfigs.value.find(config => config.id === selected.configId)
@@ -2700,6 +2875,36 @@ function pruneStaleModel(modelRef, optionsRef) {
 pruneStaleModel(chatModel, textModelOptions)
 pruneStaleModel(imageModel, imageModelOptions)
 pruneStaleModel(videoModel, videoModelOptions)
+// 人物场景 / 图片修改模型：选中即设为该类型的默认配置（后端 getActiveConfig(type) 用）
+function makeServiceDefaultWatcher(modelRef, optionsRef, configsRef, type) {
+  watch(optionsRef, opts => { if (opts.length && !opts.some(o => o.key === modelRef.value)) modelRef.value = opts[0].key }, { immediate: true })
+  watch(modelRef, async (v) => {
+    const opt = optionsRef.value.find(o => o.key === v)
+    if (!opt) return
+    const list = configsRef.value.filter(c => c.service_type === type)
+    const max = Math.max(0, ...list.map(c => c.priority || 0))
+    const cfg = list.find(c => c.id === opt.configId)
+    if (!cfg) return
+    if (cfg.is_active && (cfg.priority || 0) >= max) return
+    try { await aiConfigAPI.update(opt.configId, { priority: max + 1, is_active: true }); await loadConfigs() } catch (e) { toastError(e) }
+  })
+}
+const assetModel = ref('')
+const editModel = ref('')
+makeServiceDefaultWatcher(assetModel, assetModelOptions, assetConfigs, 'asset')
+makeServiceDefaultWatcher(editModel, editModelOptions, editConfigs, 'edit')
+// 关键帧检查模型：选中即设为默认（后端 getActiveConfig('qa') 用它）
+const qaModel = ref('')
+watch(qaModelOptions, opts => { if (opts.length && !opts.some(o => o.key === qaModel.value)) qaModel.value = opts[0].key }, { immediate: true })
+watch(qaModel, async (v) => {
+  const opt = qaModelOptions.value.find(o => o.key === v)
+  if (!opt) return
+  const max = Math.max(0, ...qaConfigs.value.filter(c => c.service_type === 'qa').map(c => c.priority || 0))
+  const cfg = qaConfigs.value.find(c => c.id === opt.configId)
+  if (!cfg) return
+  if (cfg.is_active && (cfg.priority || 0) >= max) return
+  try { await aiConfigAPI.update(opt.configId, { priority: max + 1, is_active: true }); await loadConfigs() } catch (e) { toastError(e) }
+})
 const textModelMultiCfg = computed(() => hasMultiConfigs(textModelOptions.value))
 const imageModelMultiCfg = computed(() => hasMultiConfigs(imageModelOptions.value))
 const videoModelMultiCfg = computed(() => hasMultiConfigs(videoModelOptions.value))
@@ -3169,6 +3374,8 @@ async function refresh() {
       try { chars.value = await episodeAPI.characters(ep.id) } catch { chars.value = [] }
       try { scenes.value = await episodeAPI.scenes(ep.id) } catch { scenes.value = [] }
       try { propItems.value = await episodeAPI.props(ep.id) } catch { propItems.value = [] }
+      try { techItems.value = await techniqueAPI.list(dramaId, ep.id) } catch { techItems.value = [] }
+      try { await loadAllOutfits() } catch { allOutfits.value = [] }
       sbs.value = await episodeAPI.storyboards(ep.id)
       selectedVideoSbIds.value = selectedVideoSbIds.value.filter(id => sbs.value.some(sb => sb.id === id))
       if (sbs.value.length) {
@@ -3511,6 +3718,88 @@ function batchCharImages() {
     toastError(e)
   })
 }
+// ===== 1122 服饰柜 =====
+const charOutfits = ref([])
+const outfitsGenerating = ref(false)
+const outfitSheetBusy = ref([])
+const episodeOutfitsGenerating = ref(false)
+const shotOutfitRows = ref([])
+const allOutfits = ref([])   // 素材库「服饰」区块：本集出场角色的全部服饰
+
+// /outfits 走 drizzle 直出（camelCase），库里旧脚本/直查是 snake_case —— 两套都认。
+// 1122 用户定稿：服饰资产封面 = 上平铺三视 + 下饰品网格的拼接长图（composed_image_url）；
+// 组合三视图（人穿这套）只用于出片参考。旧数据没有 composed 时回落 garment / sheet。
+const outfitCover = (o) => o?.composed_image_url || o?.composedImageUrl || o?.image_url || o?.imageUrl || o?.sheet_image_url || o?.sheetImageUrl || ''
+const outfitSheetImg = (o) => o?.sheet_image_url || o?.sheetImageUrl || ''
+
+async function loadAllOutfits() {
+  if (!epId.value) { allOutfits.value = []; return }
+  try { allOutfits.value = await outfitAPI.listByEpisode(epId.value) } catch { allOutfits.value = [] }
+}
+
+async function loadCharOutfits() {
+  const item = assetDetail.value?.type === 'character' ? assetDetail.value.item : null
+  if (!item?.id) { charOutfits.value = []; return }
+  try { charOutfits.value = await outfitAPI.list(item.id) } catch { charOutfits.value = [] }
+}
+
+async function genOutfits(count) {
+  const item = assetDetail.value?.item
+  if (!item?.id || outfitsGenerating.value) return
+  outfitsGenerating.value = true
+  try {
+    const res = await outfitAPI.generate(item.id, count)
+    toast.success(`正在出 ${res?.count || count} 套服饰候选`)
+    await loadCharOutfits()
+    const r = await waitImageTasks(res?.ids)
+    if (!r.ok) toastError(r.error, { fallback: 'episode.image.genFailed' })
+  } catch (e) { toastError(e) } finally { outfitsGenerating.value = false; loadCharOutfits(); loadAllOutfits() }
+}
+
+// 「每集先出服饰」：本集全部角色各出 3 套候选
+async function genEpisodeOutfits() {
+  if (episodeOutfitsGenerating.value) return
+  episodeOutfitsGenerating.value = true
+  try {
+    const res = await outfitAPI.generateEpisode(epId.value, 3)
+    toast.success(`本集 ${res?.characters || 0} 个角色各出 3 套服饰`)
+    await waitImageTasks(res?.ids)
+  } catch (e) { toastError(e) } finally { episodeOutfitsGenerating.value = false; loadAllOutfits() }
+}
+
+async function genOutfitSheet(o) {
+  if (!o?.id || outfitSheetBusy.value.includes(o.id)) return
+  outfitSheetBusy.value.push(o.id)
+  try {
+    const res = await outfitAPI.sheet(o.id)
+    const r = await waitImageTasks([res?.image_generation_id])
+    if (!r.ok) toastError(r.error, { fallback: 'episode.image.genFailed' })
+  } catch (e) { toastError(e) } finally {
+    outfitSheetBusy.value = outfitSheetBusy.value.filter(i => i !== o.id)
+    loadCharOutfits(); loadAllOutfits()
+  }
+}
+
+async function delOutfit(o) {
+  try { await outfitAPI.del(o.id); await loadCharOutfits(); await loadAllOutfits(); toast.success('已删除服饰') } catch (e) { toastError(e) }
+}
+
+// 本镜各角色穿哪套：显式绑定优先，缺省继承上一镜；显示解析结果
+async function loadShotOutfits() {
+  const sb = selectedSb.value
+  if (!sb?.id) { shotOutfitRows.value = []; return }
+  try { shotOutfitRows.value = await outfitAPI.shot(sb.id) } catch { shotOutfitRows.value = [] }
+}
+
+async function bindShotOutfit(row, value) {
+  try {
+    await outfitAPI.bind(selectedSb.value.id, row.character_id, value ? Number(value) : null)
+    await loadShotOutfits()
+  } catch (e) { toastError(e) }
+}
+
+watch(() => selectedSb.value?.id, () => loadShotOutfits())
+
 // ponytail: 重绘场景 = 宽图+九宫格 一起重绘（宽图用 final_prompt，九宫格用 grid_prompt，无则后端 fallback）
 async function genSceneImg(id) {
   try {
@@ -3587,6 +3876,40 @@ async function genSceneGridImg(id) {
 function isPendingPropImage(id) {
   return pendingPropImageIds.value.includes(id)
 }
+// 1119 技能（招式/特效）：从本集分镜识别
+async function extractTechniques() {
+  try {
+    if (!epId.value) return
+    const r = await techniqueAPI.extract(epId.value)
+    const n = (r?.created?.length || 0) + (r?.matched?.length || 0)
+    toast.success(`识别完成：新增 ${r?.created?.length || 0} 个、命中已有 ${r?.matched?.length || 0} 个`)
+    if (n) await refresh()
+  } catch (e) { toastError(e) }
+}
+
+// 出动作分解参考表（异步任务，落地后 refresh 拿到 image_url）
+async function genTechSheet(tk) {
+  try {
+    tk.__pending = true
+    await techniqueAPI.generate(tk.id)
+    toast.success('动作分解表生成中（约 1–3 分钟）')
+    setTimeout(() => refresh().catch(() => {}), 20000)
+    setTimeout(() => refresh().catch(() => {}), 60000)
+  } catch (e) { toastError(e) } finally { tk.__pending = false }
+}
+
+// 视频转技能：抽 16 帧拼 4×4 表
+async function onTechVideo(ev, tk) {
+  const input = ev.target
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    await uploadTechniqueVideo(file, { drama_id: dramaId.value, episode_id: epId.value || undefined, name: tk.name, kind: tk.kind || 'move', summary: tk.summary || undefined })
+    toast.success('已生成动作分解表')
+    await refresh()
+  } catch (e) { toastError(e) } finally { input.value = '' }
+}
+
 async function genPropImg(id) {
   try {
     if (!isPendingPropImage(id)) pendingPropImageIds.value.push(id)
@@ -3718,18 +4041,15 @@ async function genFrameImage(sb, frameType) {
   if (!prompt) { toast.error(t('episode.vid.needRefOrPrompt')); return }
   frameGeneratingIds.value = [...frameGeneratingIds.value, sb.id]
   try {
-    // 1018 用户定案「需要首帧图的时候用 fl2va 的 NVFP 版本」⇒ 首帧走 6006 的 h3-still 配置；
-    // 尾帧仍走默认图片配置（qwen/6007）。fl2va 的 ImageToVideo 没有参考图通道，所以首帧不传 refs。
-    const isH3Still = frameType === 'first_frame'
-    const frameCfg = (isH3Still
-      ? imageConfigs.value.find(c => String(c.provider || '').toLowerCase() === 'h3-still')
-      : null) || imageConfigs.value[0]
-    const useH3Still = String(frameCfg?.provider || '').toLowerCase() === 'h3-still'
+    // 1122：首/尾帧都走带参考图的出图模型（qwen）。旧的 h3-still 首帧没有参考图通道，
+    // 出的是随机脸（1122 实测：三视图/首帧变成另一个人）⇒ 弃用。参考顺序由后端统一解析
+    // （人物→场景→道具→技能，routes/tasks.ts frameBindings），前端只发画面描述。
+    const frameCfg = imageConfigs.value[0]
     const task = await taskAPI.generate({
       type: 'image', storyboard_id: sb.id, drama_id: dramaId,
-      config_id: frameCfg?.id, size: '1024x768',
+      config_id: frameCfg?.id, size: '1920x1080', max_pixels: 1920 * 1080,
       frame_type: frameType, prompt,
-      reference_images: useH3Still ? [] : getShotReferenceImages(sb),
+      reference_images: getShotReferenceImages(sb),
     })
     const id = task?.id ?? task?.data?.id
     // 图片任务同步等完再刷页面，不然缩略图要手点才出来。qwen/6007 = 35-70 秒；
@@ -4086,14 +4406,20 @@ async function doMerge(ids) {
 }
 async function loadConfigs() {
   try {
-    const [imgCfgs, vidCfgs, txtCfgs] = await Promise.all([
+    const [imgCfgs, vidCfgs, txtCfgs, qaCfgs, assetCfgs, editCfgs] = await Promise.all([
       aiConfigAPI.list('image'),
       aiConfigAPI.list('video'),
       aiConfigAPI.list('text'),
+      aiConfigAPI.list('qa'),
+      aiConfigAPI.list('asset'),
+      aiConfigAPI.list('edit'),
     ])
     imageConfigs.value = imgCfgs || []
     videoConfigs.value = vidCfgs || []
     textConfigs.value = txtCfgs || []
+    qaConfigs.value = qaCfgs || []
+    assetConfigs.value = assetCfgs || []
+    editConfigs.value = editCfgs || []
     loadComfyuiLoras()   // 配置到手才知道当前是不是 comfyui：那个 LoRA 下拉的清单跟着走
   } catch (e) { console.error('Failed to load AI configs', e) }
 }
@@ -5077,6 +5403,22 @@ onMounted(() => setTimeout(() => autoTour('episode', EPISODE_TOUR, t), 900))
   border-radius: var(--radius);
   background: var(--bg-2);
   overflow: hidden;
+}
+/* 脸特写缩略图：选择器要压过 .character-portrait img（它把 width/height 都写成 100%） */
+.character-portrait img.character-face-thumb {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 26%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  background: #000;
+  cursor: zoom-in;
+  z-index: 2;
 }
 .character-portrait img {
   width: 100%;
